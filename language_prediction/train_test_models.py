@@ -8,6 +8,7 @@ from allennlp.modules.elmo import Elmo
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
 from language_prediction.dataset_readers import TextExpDataSetReader
+from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
 from language_prediction.utils import *
@@ -27,6 +28,7 @@ from sklearn.linear_model import Perceptron, SGDClassifier, PassiveAggressiveCla
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
 import joblib
+import copy
 
 
 # define directories
@@ -333,7 +335,8 @@ def train_valid_base_text_decision_results_ep_model(model_name: str, single_roun
 
 def train_valid_base_text_decision_results_ep_fix_text_features_model(
         model_name: str, single_round_label: bool, use_only_prev_round: bool, train_data_file_name: str,
-        validation_data_file_name: str, no_history: bool = False, func_batch_size: int = 9):
+        validation_data_file_name: str, no_history: bool = False, func_batch_size: int = 9,
+        numbers_columns: list = None):
     """
     This function train and validate model that use fix texts features and numbers.
     :param: model_name: the full model name
@@ -344,12 +347,13 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
     :param no_history: if we don't want to use any history data
     :param func_batch_size: the batch size to use
     :param model_name: the name of the model we run
+    :param numbers_columns: the names of the columns to use for the numeric data
     :return:
     """
 
     reader = TextExpDataSetReader(add_numeric_data=True, use_only_prev_round=use_only_prev_round,
                                   single_round_label=single_round_label, three_losses=True, fix_text_features=True,
-                                  no_history=no_history)
+                                  no_history=no_history, numbers_columns_name=numbers_columns)
     train_data_file_inner_path = os.path.join(data_directory, train_data_file_name)
     validation_data_file_inner_path = os.path.join(data_directory, validation_data_file_name)
     train_instances = reader.read(train_data_file_inner_path)
@@ -364,17 +368,17 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
     iterator.index_with(vocab)
 
     # the shape of the flatten data rep
-    feed_forward_input_dim = reader.max_seq_len*(reader.max_tokens_len + reader.number_length)
     if 'bert' in train_data_file_path:  # fix features are BERT vector
-        text_feedtorward = FeedForward(input_dim=reader.max_tokens_len, num_layers=1, hidden_dims=[10],
-                                       activations=ReLU())
-        reader.max_tokens_len = 10
+        text_feedtorward = FeedForward(input_dim=reader.max_tokens_len, num_layers=2, hidden_dims=[300, 50],
+                                       activations=ReLU(), dropout=[0.3, 0.3])
+        reader.max_tokens_len = 50
     else:
         text_feedtorward = None
-    feed_forward_classification = FeedForward(input_dim=feed_forward_input_dim, num_layers=1, hidden_dims=[2],
-                                              activations=ReLU(), dropout=[0.0])
-    feed_forward_regression = FeedForward(input_dim=feed_forward_input_dim, num_layers=1, hidden_dims=[1],
-                                          activations=ReLU(), dropout=[0.0])
+    feed_forward_input_dim = reader.max_seq_len*(reader.max_tokens_len + reader.number_length)
+    feed_forward_classification = FeedForward(input_dim=feed_forward_input_dim, num_layers=2, hidden_dims=[10, 2],
+                                              activations=ReLU(), dropout=[0.3, 0.3])
+    feed_forward_regression = FeedForward(input_dim=feed_forward_input_dim, num_layers=2, hidden_dims=[10, 1],
+                                          activations=ReLU(), dropout=[0.3, 0.3])
     criterion_classification = nn.BCEWithLogitsLoss()
     criterion_regression = nn.MSELoss()
 
@@ -394,10 +398,11 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
         add_numbers=True,
         max_tokens_len=reader.max_tokens_len,
         text_feedforward=text_feedtorward,
+        regularizer=RegularizerApplicator([("", L1Regularizer(0.2))]),
     )
 
     optimizer = optim.Adam(model.parameters(), lr=0.1)
-    num_epochs = 20
+    num_epochs = 40
 
     run_log_directory = utils.set_folder(
         datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_%d_%m_%Y_%H_%M_%S'), 'logs')
@@ -456,11 +461,12 @@ def train_predict_simple_baseline_model(model_name: str, binary_classification: 
         print(f'{name}: {metric_calc*100}')
 
 
-def train_test_simple_features_model(model_name: str, features_data_file_path: str):
+def train_test_simple_features_model(model_name: str, features_data_file_path: str, backward_search: bool = False):
     """
     This function train and test some simple ML models that use text manual features to predict decisions
     :param features_data_file_path: hte path to the features file
     :param model_name: the full model name
+    :param backward_search: use backward_search to find the best features
     :return:
     """
     experiment_path = utils.set_folder(datetime.now().strftime(f'{model_name}_%d_%m_%Y_%H_%M'), 'logs')
@@ -512,9 +518,17 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     data = data.drop(['k_size', 'sample_id'], axis=1)
     model_dict_to_use = {label: model_dict[label][0]}
     features = [item for item in data.columns.tolist() if item not in [label, 'pair_id']]
-    execute_evaluate.evaluate_grid_search(data=data, base_features=features, add_feature_list=[''], window_size_list=[0],
-                                          label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,
-                                          classifier_results_dir=experiment_path, appendix='', personal_features=[],
-                                          model_type=model_dict[label][1], col_to_group='pair_id')
+    candidates_features = copy.deepcopy(features)
+    if backward_search:
+        execute_evaluate.evaluate_backward_search(data=data, base_features=features, window_size_list=[0],
+                                                  label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,
+                                                  classifier_results_dir=experiment_path, appendix='',
+                                                  personal_features=[], model_type=model_dict[label][1],
+                                                  col_to_group='pair_id', candidates_features=candidates_features)
+    else:
+        execute_evaluate.evaluate_grid_search(data=data, base_features=features, add_feature_list=[''], window_size_list=[0],
+                                              label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,
+                                              classifier_results_dir=experiment_path, appendix='', personal_features=[],
+                                              model_type=model_dict[label][1], col_to_group='pair_id')
 
     logging.info('Done!')

@@ -36,7 +36,8 @@ class TextExpDataSetReader(DatasetReader):
                  single_round_label: bool = False,
                  three_losses: bool = False,
                  fix_text_features: bool = False,
-                 no_history: bool = False) -> None:
+                 no_history: bool = False,
+                 numbers_columns_name: list = None) -> None:
         super().__init__(lazy)
         self._tokenizer = tokenizer or SpacyWordSplitter()
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
@@ -50,6 +51,7 @@ class TextExpDataSetReader(DatasetReader):
         self.number_length = 0
         self._fix_text_features = fix_text_features
         self._no_history = no_history
+        self.numbers_columns_name = numbers_columns_name
 
     @overrides
     def _read(self, file_path: str) -> Iterator[Instance]:
@@ -82,7 +84,7 @@ class TextExpDataSetReader(DatasetReader):
                 rounds = [row.k_size-1]
                 self.max_seq_len = 1
             else:
-                rounds = list(range(self.max_seq_len))
+                rounds = list(range(1, self.max_seq_len+1))  # rounds 2-10
             for round_num in rounds:
                 # use only available rounds
                 if row[f'text_{round_num}'] is not np.nan and not\
@@ -93,10 +95,7 @@ class TextExpDataSetReader(DatasetReader):
                         text_list.append([Token(x) for x in self._tokenizer(row[f'text_{round_num}'].lower())])
                     # these are the numbers of the previous round so we can use the current round number as well
                     if self._add_numeric_data and round_num > 0:  # for the first round we don't have previous round
-                        append_list = [row[f'prev_payoff_{round_num}'], row[f'prev_result_low_{round_num}'],
-                                       row[f'prev_result_med1_{round_num}'], row[f'prev_result_high_{round_num}'],
-                                       row[f'prev_expected_dm_payoff_high_{round_num}'],
-                                       row[f'prev_expected_dm_payoff_low_{round_num}']]
+                        append_list = [row[f'{column}_{round_num}'] for column in self.numbers_columns_name]
                         numbers_list.append(append_list)
                         self.number_length = len(append_list)
                     elif self._add_numeric_data and round_num == 0:

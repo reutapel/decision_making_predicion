@@ -422,6 +422,7 @@ class BasicFixTextFeaturesDecisionResultModel(Model):
                  add_numbers: bool = False,
                  max_tokens_len: int = None,
                  text_feedforward: FeedForward = None,
+                 regularizer: RegularizerApplicator = None,
                  initializer: InitializerApplicator = InitializerApplicator()):
         """
         :param vocab: the vocabulary to use
@@ -435,9 +436,10 @@ class BasicFixTextFeaturesDecisionResultModel(Model):
         :param add_numbers: whether to add numbers (trial payoff and trail lottery result)
         :param metrics_dict: dict with the metrics to measure
         :param max_tokens_len: the max number of tokens in a review - for padding
+        :param regularizer: regularizer to use
         :param initializer:
         """
-        super(BasicFixTextFeaturesDecisionResultModel, self).__init__(vocab)
+        super(BasicFixTextFeaturesDecisionResultModel, self).__init__(vocab, regularizer)
         self.classifier_feedforward_decision = classifier_feedforward_classification
         self.classifier_feedforward_lottery = classifier_feedforward_regression
         self.classifier_feedforward_expected_payoff = classifier_feedforward_regression
@@ -448,7 +450,7 @@ class BasicFixTextFeaturesDecisionResultModel(Model):
         self.loss_lottery = criterion_regression
         self.loss_expected_payoff = criterion_regression
         self._add_numbers = add_numbers
-        self._loss_weights = [1 / 3, 1 / 3, 1 / 3]
+        self._loss_weights = [1/3, 1 / 3, 1 / 3]
         self._max_tokens_len = max_tokens_len
         self.predictions = pd.DataFrame()
         self._epoch = 0

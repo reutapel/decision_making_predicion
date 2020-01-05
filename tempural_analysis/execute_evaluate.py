@@ -17,7 +17,8 @@ import operator
 
 def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates_features: list, window_size_list: list,
                              label_dict: dict, num_folds: int, model_dict: dict, classifier_results_dir: str,
-                             appendix: str, personal_features: list, col_to_group: str='participant_code'):
+                             appendix: str, personal_features: list, model_type: str=None,
+                             col_to_group: str='participant_code'):
     """
     Evaluate the model with a list of features, labels and window size
     :param data: the data to use
@@ -31,6 +32,7 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
     :param appendix: the appendix of the columns (group/player)
     :param personal_features: list of personal features such as age and gender --> use them only in t=0
     :param col_to_group: the column to split the samples by (participant_code or pair)
+    :param model_type: if we do classification or regression
     :return:
     """
 
@@ -38,13 +40,13 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                   engine='xlsxwriter')
     running_meta_data = pd.DataFrame(
         columns=['model_name', 'model', 'features list', 'number of features', 'candidate feature', 'features_removed',
-                 'use first round', 'folds per participants', 'label', 'window size', 'accuracy', 'AUC', 'f1_score_pos',
-                 'f1_score_neg' 'MSE'])
+                 'use first round', 'folds per participants', 'label', 'window size', 'accuracy', 'F1-score_pos',
+                 'F1-score_neg', 'AUC', 'MSE'])
 
     run_id = 0
 
     # start running the experiments
-    for folds_per_participants in [False]:  #, False]:  # split participants between folds or not
+    for folds_per_participants in [True]:  # , False]:  # split participants between folds or not
         if folds_per_participants:
             # get the folds at the beginning before running any model
             if num_folds > 1:
@@ -62,9 +64,11 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
 
         for curr_label, label_options in label_dict.items():
             for curr_window_size in window_size_list:
-                for use_first_round in [True]:
+                for use_first_round in [False]:
                     remaining_features = copy.deepcopy(candidates_features)
+                    remaining_features.append('all')
                     selected_features = copy.deepcopy(base_features)
+                    selected_features.append('all')
                     features_removed = list()
                     subsession_round_number_removed = False
                     current_accuracy, best_accuracy = 0.0, 0.0
@@ -74,10 +78,20 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                         score_with_candidates = list()
                         for candidate in remaining_features:
                             curr_features = copy.deepcopy(selected_features)
-                            if candidate != 'subsession_round_number':  # if it is subsession_round_number: remove later
-                                curr_features.remove(candidate)  # remove the candidate, also if it is None
-                            if candidate is not None and None in curr_features:  # if it is not None- remove the None
+                            if candidate != 'all' and 'all' in curr_features:
+                                curr_features.remove('all')
+                            # if it is subsession_round_number: remove later
+                            if candidate != 'subsession_round_number':
+                                curr_features.remove(candidate)
+                            # remove the candidate, also if it is None
+                            if candidate is not None and None in curr_features:
                                 curr_features.remove(None)
+
+                            # check if there are still features to check
+                            if len(curr_features) == 0:
+                                logging.info(f'No features remained, the best accuracy is:{current_accuracy}')
+                                remain_number_of_candidate = 0
+                                continue
                             curr_personal_features = [feature for feature in personal_features if feature in
                                                       curr_features]
                             x, y, personal_features_data =\
@@ -106,7 +120,7 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                     logging.exception(f'Exception while running Run ID {run_id}: {e}')
                                     continue
 
-                                if curr_label == appendix + '_receiver_choice':  # classification
+                                if curr_label == appendix + '_receiver_choice' or model_type == 'classification':
                                     accuracy, auc, f1_score_pos, f1_score_neg =\
                                         get_classification_final_results(simulator, classifier_results_dir,
                                                                          label_options, table_writer, run_id)
@@ -118,7 +132,8 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                         [type(curr_model).__name__, str(curr_model), features_to_save,
                                          len(features_to_save), candidate, copy.deepcopy(features_removed),
                                          use_first_round, folds_per_participants, curr_label, curr_window_size,
-                                         round(100*accuracy, 2), round(100*auc, 2), f1_score_pos, f1_score_neg, '-']
+                                         round(100*accuracy, 2), round(100*f1_score_pos, 2), round(100*f1_score_neg, 2),
+                                         round(100*auc, 2), '-']
                                     score_with_candidates.append((accuracy, candidate))
                                     logging.info(
                                         f'Finish Run ID {run_id}: accuracy is {accuracy} and auc is {auc}')
@@ -133,7 +148,7 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                         [type(curr_model).__name__, str(curr_model), features_to_save,
                                          len(features_to_save), candidate, copy.deepcopy(features_removed),
                                          use_first_round, folds_per_participants, curr_label, curr_window_size,
-                                         '-', '-', round(100*mse_score, 2)]
+                                         '-', '-', '-', round(100*mse_score, 2)]
                                     score_with_candidates.append((mse_score, candidate))
 
                         score_with_candidates.sort(key=operator.itemgetter(0))
