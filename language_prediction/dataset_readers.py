@@ -7,7 +7,7 @@ import tqdm
 from overrides import overrides
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.fields import LabelField, TextField, MetadataField, ListField, ArrayField
-from language_prediction.float_label_field import FloatLabelField
+from float_label_field import FloatLabelField
 from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Tokenizer, WordTokenizer, Token
 from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
@@ -69,6 +69,8 @@ class TextExpDataSetReader(DatasetReader):
             self.max_seq_len = 9
         # get the reviews and label columns -> no metadata, and metadata columns
         metadata_columns = ['k_size', 'pair_id', 'sample_id']
+
+        # df = df.loc[df.k_size == 5]
 
         # if we use numbers and single round label- the first round is not relevant- only if we use history data
         if self._add_numeric_data and self._single_round_label and not self._no_history:
@@ -152,6 +154,8 @@ class TextExpDataSetReader(DatasetReader):
                 numbers_listfield_list.append(ArrayField(np.array(row)))
             numbers_field = ListField(numbers_listfield_list)
             fields['numbers'] = numbers_field
+        elif not self._add_numeric_data:
+            no_num = True
         else:
             fields['numbers'] = ListField([ArrayField(np.nan)])
 
@@ -166,11 +170,14 @@ class TextExpDataSetReader(DatasetReader):
 
             if numbers_label is not None:
                 lottery_ep_label_field = ArrayField(numbers_label)
+                fields['lottery_ep_label_field'] = lottery_ep_label_field
+            elif not self._add_numeric_data:
+                no_num = True
             else:
                 lottery_ep_label_field = ArrayField(np.nan)
+                fields['lottery_ep_label_field'] = lottery_ep_label_field
 
             fields['label'] = label_field
-            fields['lottery_ep_label_field'] = lottery_ep_label_field
 
         if metadata is not None:
             fields['metadata'] = MetadataField(metadata)

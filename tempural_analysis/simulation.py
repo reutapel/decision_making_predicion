@@ -103,6 +103,8 @@ class Simulator:
                                                 window_size=self.window_size, appendix=appendix, label=self.label, k=1,
                                                 use_first_round=use_first_round, candidate=self.candidate,
                                                 col_to_group=self.col_to_group)
+            test_x = test_x.astype(float)
+            train_x = train_x.astype(float)
         except ValueError as e:
             logging.info(f'ValueError when split to train and test with error {e}')
         else:
@@ -117,6 +119,7 @@ class Simulator:
         :param folds: the fold number for each participant
         :return:
         """
+        x = x.astype(float)
         for k in folds.fold_number.unique():
             logging.info(f'Starting fold {k}')
             train_x = x.loc[folds.fold_number != k]
@@ -149,6 +152,8 @@ class Simulator:
                                                 use_first_round=use_first_round, candidate=self.candidate,
                                                 subsession_round_number_removed=self.subsession_round_number_removed,
                                                 col_to_group=self.col_to_group)
+            train_x = train_x.astype(float)
+            test_x = test_x.astype(float)
             self.execute_single_experiment(k, train_x, train_y, test_x, test_y, test_folds)
 
         return

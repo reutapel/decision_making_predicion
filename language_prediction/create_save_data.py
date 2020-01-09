@@ -12,7 +12,8 @@ from language_prediction.train_test_models import *
 
 
 base_directory = os.path.abspath(os.curdir)
-data_directory = os.path.join(base_directory, 'data')
+condition = 'numeric'
+data_directory = os.path.join(base_directory, 'data', condition)
 logs_directory = os.path.join(base_directory, 'logs')
 
 log_file_name = os.path.join(logs_directory, datetime.now().strftime('LogFile_create_save_data_%d_%m_%Y_%H_%M_%S.log'))
@@ -24,6 +25,7 @@ logging.basicConfig(filename=log_file_name,
 random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
+# if alpha == 0: use average
 alpha_text = 0.8
 alpha_global = 0.9
 
@@ -35,7 +37,7 @@ class CreateSaveData:
     def __init__(self, load_file_name: str, total_payoff_label: bool=True, label: str='total_payoff',
                  use_seq: bool=True, use_prev_round: bool=False, use_manual_features: bool=False, features_file: str='',
                  features_file_type: str='', use_all_history: bool = False, use_all_history_text: bool = False,
-                 no_text: bool=False):
+                 no_text: bool=False, num_condition: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -46,6 +48,7 @@ class CreateSaveData:
         :param features_file: if using fix features- the name of the features file
         :param features_file_type: the type of file for the fix features
         :param no_text: if not using text as features
+        :param num_condition: if this data from the numeric condition
         """
         print(f'Start create and save data for file: {load_file_name}')
         logging.info('Start create and save data for file: {}'.format(load_file_name))
@@ -65,16 +68,17 @@ class CreateSaveData:
         print(f'Number of rows in data: {self.data.shape[0]} after drop duplicates')
 
         # get manual text features
-        print(f'Load features from: {features_file}')
-        if features_file_type == 'pkl':
-            self.reviews_features = joblib.load(os.path.join(data_directory, f'{features_file}.{features_file_type}'))
-        elif features_file_type == 'xlsx':
-            self.reviews_features = pd.read_excel(os.path.join(data_directory, f'{features_file}.{features_file_type}'))
-        else:
-            print('Features file type is has to be pkl or xlsx')
-            return
-        # get manual text features
-        self.reviews_features = self.reviews_features.drop('review', axis=1)
+        if use_manual_features:
+            print(f'Load features from: {features_file}')
+            if features_file_type == 'pkl':
+                self.reviews_features = joblib.load(os.path.join(data_directory, f'{features_file}.{features_file_type}'))
+            elif features_file_type == 'xlsx':
+                self.reviews_features = pd.read_excel(os.path.join(data_directory, f'{features_file}.{features_file_type}'))
+            else:
+                print('Features file type is has to be pkl or xlsx')
+                return
+            # get manual text features
+            self.reviews_features = self.reviews_features.drop('review', axis=1)
 
         # calculate expert total payoff --> the label
         self.data['exp_payoff'] = self.data.group_receiver_choice.map({1: 0, 0: 1})
@@ -85,10 +89,12 @@ class CreateSaveData:
                                'exp_payoff', 'group_lottery_result', 'review_id', 'previous_round_lottery_result',
                                'previous_round_decision', 'previous_review_id', 'group_average_score',
                                'lottery_result_low', 'lottery_result_med1', 'previous_round_lottery_result_low',
-                               'previous_round_lottery_result_high', 'previous_group_average_score_low',
-                               'previous_group_average_score_high', 'previous_round_lottery_result_med1',
-                               'time_spent_low', 'time_spent_high', 'group_sender_payoff', 'lottery_result_high',
-                               'chose_lose', 'chose_earn', 'not_chose_lose', 'not_chose_earn', '10_result']]
+                               'previous_round_lottery_result_high', 'previous_average_score_low',
+                               'previous_average_score_high', 'previous_round_lottery_result_med1',
+                               'group_sender_payoff', 'lottery_result_high',
+                               'chose_lose', 'chose_earn', 'not_chose_lose', 'not_chose_earn', '10_result',
+                               'previous_score', 'group_sender_answer_scores']]
+        # 'time_spent_low', 'time_spent_high',
         self.final_data = pd.DataFrame()
         self.pairs = pd.Series(self.data.pair_id.unique())
         self.total_payoff_label = total_payoff_label
@@ -102,6 +108,7 @@ class CreateSaveData:
         self.use_all_history = use_all_history
         self.use_all_history_text = use_all_history_text
         self.no_text = no_text
+        self.num_condition = num_condition
         print(f'Number of pairs in data: {self.pairs.shape}')
 
         if self.use_all_history:
@@ -113,8 +120,9 @@ class CreateSaveData:
                                'prev_round_' if self.use_prev_round else '',
                                f'global_alpha_{alpha_global}_' if self.use_all_history else '',
                                f'all_history_text_alpha_{alpha_text}_' if self.use_all_history_text else '',
-                               'no_text' if self.no_text else '',
-                               self.features_file if self.use_manual_features and not self.no_text else '']
+                               'no_text_' if self.no_text else '',
+                               f'{self.features_file}_' if self.use_manual_features and not self.no_text else '',
+                               f'{condition}_data']
         self.base_file_name = ''.join(file_name_component)
         print(f'Create data for: {self.base_file_name}')
         return
@@ -151,7 +159,7 @@ class CreateSaveData:
                 weights = pow(alpha_global, round_num - history.subsession_round_number)
                 for column in rename_columns:
                     if column == 'lottery_result':
-                        j = 2
+                        j = 1
                     else:
                         j = 1
                     if alpha_global == 0:  # if alpha == 0: use average
@@ -194,6 +202,11 @@ class CreateSaveData:
             columns_to_use.remove('review_id')
             if 'previous_review_id' in columns_to_use:
                 columns_to_use.remove('previous_review_id')
+
+        if self.num_condition:
+            columns_to_use.append('group_sender_answer_scores')
+        if self.use_prev_round and condition == 'numeric':
+            columns_to_use.append('previous_score')
 
         for pair in self.pairs:
             data = self.data.loc[self.data.pair_id == pair][columns_to_use]
@@ -253,7 +266,7 @@ class CreateSaveData:
                 already_save_column_names = True
 
             # change column names to be range of numbers
-            data.columns = list(range(len(data.columns)))
+            # data.columns = list(range(len(data.columns)))
 
             # add metadata
             # k_size
@@ -290,12 +303,23 @@ class CreateSaveData:
 
         # create the 10 samples for each pair
         meta_data_columns = ['k_size', 'pair_id', 'sample_id']
-        data_columns = ['review_features', 'previous_round_decision', 'previous_round_lottery_result_low',
-                        'previous_round_lottery_result_high', 'previous_group_average_score_low',
-                        'previous_round_lottery_result_med1', 'previous_group_average_score_high',
-                        'history_lottery_result', 'history_decisions', 'history_lottery_result_high',
-                        'history_chose_lose', 'history_chose_earn', 'history_not_chose_lose', 'time_spent_low',
-                        'time_spent_high']
+        if self.use_prev_round:
+            columns_to_use = ['review_features', 'previous_round_decision', 'previous_round_lottery_result_low',
+                              'previous_round_lottery_result_med1', 'previous_round_lottery_result_high',
+                              'previous_average_score_low', 'previous_round_lottery_result_med1',
+                              'previous_average_score_high']
+        else:
+            columns_to_use = ['review_features']
+
+        if self.use_all_history:
+            columns_to_use = columns_to_use + ['history_lottery_result', 'history_decisions', 'time_spent_high',
+                                               'history_lottery_result_high', 'history_chose_lose',
+                                               'history_chose_earn', 'history_not_chose_lose', 'time_spent_low']
+
+        if self.no_text:
+            columns_to_use.remove('review_features')
+            if 'previous_review_id' in columns_to_use:
+                columns_to_use.remove('previous_review_id')
 
         if self.reviews_features.shape[1] > 2:  # if the review_features is in one column - no need to create it
             # create features as one column with no.array for NN models
@@ -313,7 +337,7 @@ class CreateSaveData:
             # self.use_seq: sample use all rounds data
             print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
             data_column = dict()
-            for column in data_columns:
+            for column in columns_to_use:
                 data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair][['subsession_round_number', column]].\
                     transpose()
                 # define the first row as the header
@@ -363,7 +387,7 @@ class CreateSaveData:
         # rename columns for convenient:
         data_columns = ['text', 'prev_payoff', 'prev_result_low',
                         'prev_result_med1', 'prev_result_high',
-                        'prev_expected_dm_payoff_low', 'prev_expected_dm_payoff_high',
+                        'prev_expected_dm_payoff_low', 'prev_expected_dm_payoff_med1', 'prev_expected_dm_payoff_high',
                         'history_lottery_result', 'history_decisions', 'history_lottery_result_high',
                         'history_chose_lose', 'history_chose_earn', 'history_not_chose_lose', 'time_spent_low',
                         'time_spent_high']
@@ -410,8 +434,8 @@ class CreateSaveData:
         # create the 10 samples for each pair
         meta_data_columns = ['k_size', 'pair_id', 'sample_id']
         data_columns = ['group_sender_answer_reviews', 'previous_round_decision', 'previous_round_lottery_result_low',
-                        'previous_round_lottery_result_high', 'previous_group_average_score_low',
-                        'previous_group_average_score_high', 'previous_round_lottery_result_med1']
+                        'previous_round_lottery_result_high', 'previous_average_score_low',
+                        'previous_average_score_high', 'previous_round_lottery_result_med1']
 
         for pair in self.pairs:
             # get a row with the subsession_round_number and one with the group_sender_answer_reviews
@@ -558,14 +582,16 @@ def main():
         'manual_binary_features': 'xlsx',
         'manual_features': 'xlsx',
         'bert_embedding': 'pkl',
+        'manual_binary_features_minus_1': 'xlsx',
+        'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'bert_embedding'
+    features_to_use = 'manual_features'
     use_seq = False
     create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=False, label='single_round',
-                                          use_seq=use_seq, use_prev_round=True, use_manual_features=True,
+                                          use_seq=use_seq, use_prev_round=True, use_manual_features=False,
                                           features_file_type=features_files[features_to_use],
-                                          features_file=features_to_use, use_all_history=False,
-                                          use_all_history_text=True, no_text=False)
+                                          features_file=features_to_use, use_all_history=True,
+                                          use_all_history_text=False, no_text=True, num_condition=True)
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if create_save_data_obj.use_seq:
@@ -573,7 +599,10 @@ def main():
         else:
             create_save_data_obj.create_manual_features_data()
     else:
-        create_save_data_obj.create_seq_data()
+        if use_seq:
+            create_save_data_obj.create_seq_data()
+        else:
+            create_save_data_obj.create_manual_features_data()
 
     if use_seq:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()

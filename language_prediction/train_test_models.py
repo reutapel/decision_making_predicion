@@ -7,15 +7,15 @@ from allennlp.modules.token_embedders import ElmoTokenEmbedder
 from allennlp.modules.elmo import Elmo
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
-from language_prediction.dataset_readers import TextExpDataSetReader
+from dataset_readers import TextExpDataSetReader
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
-from language_prediction.utils import *
+import tempural_analysis.utils
 import torch.optim as optim
-import language_prediction.models as models
-import language_prediction.baselines as baselines
-from torch.nn.modules.activation import ReLU
+import models as models
+import baselines as baselines
+from torch.nn.modules.activation import ReLU, LeakyReLU
 from allennlp.training.metrics import *
 from datetime import datetime
 from allennlp.data.vocabulary import Vocabulary
@@ -26,14 +26,18 @@ import logging
 from sklearn.linear_model import Perceptron, SGDClassifier, PassiveAggressiveClassifier, LogisticRegression,\
     PassiveAggressiveRegressor, SGDRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from keras_models import KerasModel
 from sklearn.svm import SVC, SVR
 import joblib
 import copy
+import pandas as pd
+from xgboost import XGBClassifier
 
 
 # define directories
 base_directory = os.path.abspath(os.curdir)
-data_directory = os.path.join(base_directory, 'data')
+condition = 'numeric'
+data_directory = os.path.join(base_directory, 'data', condition)
 
 train_data_file_path = os.path.join(data_directory, 'train_data_1_10_single_round_label.pkl')  # test_text_num_data
 validation_data_file_path = os.path.join(data_directory, 'validation_data_1_10_single_round_label.pkl')
@@ -336,7 +340,7 @@ def train_valid_base_text_decision_results_ep_model(model_name: str, single_roun
 def train_valid_base_text_decision_results_ep_fix_text_features_model(
         model_name: str, single_round_label: bool, use_only_prev_round: bool, train_data_file_name: str,
         validation_data_file_name: str, no_history: bool = False, func_batch_size: int = 9,
-        numbers_columns: list = None):
+        numbers_columns: list = None, add_numeric_data: bool=True):
     """
     This function train and validate model that use fix texts features and numbers.
     :param: model_name: the full model name
@@ -348,10 +352,11 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
     :param func_batch_size: the batch size to use
     :param model_name: the name of the model we run
     :param numbers_columns: the names of the columns to use for the numeric data
+    :param add_numeric_data: if we want to add numbers data
     :return:
     """
 
-    reader = TextExpDataSetReader(add_numeric_data=True, use_only_prev_round=use_only_prev_round,
+    reader = TextExpDataSetReader(add_numeric_data=add_numeric_data, use_only_prev_round=use_only_prev_round,
                                   single_round_label=single_round_label, three_losses=True, fix_text_features=True,
                                   no_history=no_history, numbers_columns_name=numbers_columns)
     train_data_file_inner_path = os.path.join(data_directory, train_data_file_name)
@@ -368,22 +373,24 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
     iterator.index_with(vocab)
 
     # the shape of the flatten data rep
-    if 'bert' in train_data_file_path:  # fix features are BERT vector
+    if 'bert' in train_data_file_name:  # fix features are BERT vector
         text_feedtorward = FeedForward(input_dim=reader.max_tokens_len, num_layers=2, hidden_dims=[300, 50],
-                                       activations=ReLU(), dropout=[0.3, 0.3])
+                                       activations=ReLU(), dropout=[0.0, 0.0])
         reader.max_tokens_len = 50
     else:
         text_feedtorward = None
     feed_forward_input_dim = reader.max_seq_len*(reader.max_tokens_len + reader.number_length)
     feed_forward_classification = FeedForward(input_dim=feed_forward_input_dim, num_layers=2, hidden_dims=[10, 2],
-                                              activations=ReLU(), dropout=[0.3, 0.3])
+                                              activations=LeakyReLU(),
+                                              dropout=[0.3, 0.3])
     feed_forward_regression = FeedForward(input_dim=feed_forward_input_dim, num_layers=2, hidden_dims=[10, 1],
-                                          activations=ReLU(), dropout=[0.3, 0.3])
+                                          activations=LeakyReLU(),
+                                          dropout=[0.3, 0.3])
     criterion_classification = nn.BCEWithLogitsLoss()
     criterion_regression = nn.MSELoss()
 
     metrics_dict = {
-        "accuracy": CategoricalAccuracy(),
+        'Accuracy': CategoricalAccuracy()  # BooleanAccuracy(),
         # 'auc': Auc(),
         # 'F1measure': F1Measure(positive_label=1),
     }
@@ -398,11 +405,106 @@ def train_valid_base_text_decision_results_ep_fix_text_features_model(
         add_numbers=True,
         max_tokens_len=reader.max_tokens_len,
         text_feedforward=text_feedtorward,
-        regularizer=RegularizerApplicator([("", L1Regularizer(0.2))]),
+        # regularizer=RegularizerApplicator([("", L1Regularizer(0.2))]),
     )
 
     optimizer = optim.Adam(model.parameters(), lr=0.1)
     num_epochs = 40
+
+    run_log_directory = utils.set_folder(
+        datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_%d_%m_%Y_%H_%M_%S'), 'logs')
+
+    trainer = Trainer(
+        model=model,
+        optimizer=optimizer,
+        iterator=iterator,
+        train_dataset=train_instances,
+        validation_dataset=validation_instances,
+        num_epochs=num_epochs,
+        shuffle=False,
+        serialization_dir=run_log_directory,
+        patience=10,
+        histogram_interval=10,
+    )
+
+    model_dict = trainer.train()
+
+    print(f'{model_name}: evaluation measures are:')
+    for key, value in model_dict.items():
+        if 'accuracy' in key:
+            value = value*100
+        print(f'{key}: {value}')
+
+    # save the model predictions
+    model.predictions.to_csv(os.path.join(run_log_directory, 'predictions.csv'))
+
+
+def train_valid_base_text_decision_fix_text_features_model(
+        model_name: str, single_round_label: bool, use_only_prev_round: bool, train_data_file_name: str,
+        validation_data_file_name: str, no_history: bool = False, func_batch_size: int = 9,
+        numbers_columns: list = None, add_numeric_data: bool=True):
+    """
+    This function train and validate model that use fix texts features only.
+    :param: model_name: the full model name
+    :param single_round_label: the label to use: single round of total payoff
+    :param use_only_prev_round: if to use all the history or only the previous round
+    :param train_data_file_name: the name of the train_data to use
+    :param validation_data_file_name: the name of the validation_data to use
+    :param no_history: if we don't want to use any history data
+    :param func_batch_size: the batch size to use
+    :param model_name: the name of the model we run
+    :param numbers_columns: the names of the columns to use for the numeric data
+    :param add_numeric_data: if we want to add numbers data
+    :return:
+    """
+
+    reader = TextExpDataSetReader(add_numeric_data=add_numeric_data, use_only_prev_round=use_only_prev_round,
+                                  single_round_label=single_round_label, three_losses=True, fix_text_features=True,
+                                  no_history=no_history, numbers_columns_name=numbers_columns)
+    train_data_file_inner_path = os.path.join(data_directory, train_data_file_name)
+    validation_data_file_inner_path = os.path.join(data_directory, validation_data_file_name)
+    train_instances = reader.read(train_data_file_inner_path)
+    validation_instances = reader.read(validation_data_file_inner_path)
+    vocab = Vocabulary()
+
+    # TODO: change this if necessary
+    # batch_size should be: 10 or 9 depends on the input
+    # and not shuffle so all the data of the same pair will be in the same batch
+    iterator = BasicIterator(batch_size=func_batch_size)  # , instances_per_epoch=10)
+    #  sorting_keys=[('sequence_review', 'list_num_tokens')])
+    iterator.index_with(vocab)
+
+    # the shape of the flatten data rep
+    if 'bert' in train_data_file_name:  # fix features are BERT vector
+        text_feedtorward = FeedForward(input_dim=reader.max_tokens_len, num_layers=2, hidden_dims=[300, 50],
+                                       activations=ReLU(), dropout=[0.0, 0.0])
+        reader.max_tokens_len = 50
+    else:
+        text_feedtorward = None
+    feed_forward_input_dim = reader.max_seq_len*(reader.max_tokens_len + reader.number_length)
+    feed_forward_classification = FeedForward(input_dim=feed_forward_input_dim, num_layers=1, hidden_dims=[2],
+                                              activations=LeakyReLU(),
+                                              dropout=[0.3])
+    criterion_classification = nn.BCEWithLogitsLoss()
+
+    metrics_dict = {
+        'Accuracy': CategoricalAccuracy()  # BooleanAccuracy(),
+        # 'auc': Auc(),
+        # 'F1measure': F1Measure(positive_label=1),
+    }
+
+    model = models.BasicFixTextFeaturesDecisionModel(
+        vocab=vocab,
+        classifier_feedforward_classification=feed_forward_classification,
+        criterion_classification=criterion_classification,
+        metrics_dict=metrics_dict,
+        max_tokens_len=reader.max_tokens_len,
+        text_feedforward=text_feedtorward,
+        regularizer=RegularizerApplicator([("", L1Regularizer())]),
+    )
+
+    optimizer = optim.Adam(model.parameters(), lr=0.1)
+    num_epochs = 100
 
     run_log_directory = utils.set_folder(
         datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_%d_%m_%Y_%H_%M_%S'), 'logs')
@@ -490,21 +592,10 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
 
     ##################################################################################################
 
+    print(f'Start running train_test_simple_features_model on file: {features_data_file_path}')
+    logging.info(f'Start running train_test_simple_features_model on file {features_data_file_path}')
+
     folds = 5  # if folds = 1, run train-test, else - run cross-validation with relevant number of folds
-    model_dict = {'label':  # classification models:
-                  [[
-                      # XGBClassifier(max_depth=5),
-                      SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
-                      SGDClassifier(), PassiveAggressiveClassifier(),
-                      ],
-                   'classification'],
-                  'total_payoff':  # regression models
-                  [[RandomForestRegressor(), Perceptron(), SGDRegressor(), PassiveAggressiveRegressor(), SVR(),
-                    ], 'regression'],
-
-                   # XGBRegressor()],
-                  }
-
     # load the features data
     if 'pkl' in features_data_file_path:
         data = joblib.load(os.path.join(data_directory, features_data_file_path))
@@ -516,9 +607,27 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     }
     label = list(label_dict.keys())[0]
     data = data.drop(['k_size', 'sample_id'], axis=1)
-    model_dict_to_use = {label: model_dict[label][0]}
     features = [item for item in data.columns.tolist() if item not in [label, 'pair_id']]
+    inner_batch_size = 9 if 'history' in features_data_file_path or 'prev' in features_data_file_path else 10
+    print(f'batch size is: {inner_batch_size}')
     candidates_features = copy.deepcopy(features)
+    model_dict = {'label':  # classification models:
+                  [[
+                      XGBClassifier(max_depth=5),
+                      KerasModel(input_dim=len(features), batch_size=inner_batch_size),
+                      SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
+                      SGDClassifier(), PassiveAggressiveClassifier(),
+                      ],
+                   'classification'],
+                  'total_payoff':  # regression models
+                  [[RandomForestRegressor(), Perceptron(), SGDRegressor(), PassiveAggressiveRegressor(), SVR(),
+                    ], 'regression'],
+
+                   # XGBRegressor()],
+                  }
+
+    model_dict_to_use = {label: model_dict[label][0]}
+
     if backward_search:
         execute_evaluate.evaluate_backward_search(data=data, base_features=features, window_size_list=[0],
                                                   label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,

@@ -202,15 +202,20 @@ class BertTransformer:
 def main():
     base_directory = os.path.abspath(os.curdir)
     data_directory = os.path.join(base_directory, 'data')
-    reviews = pd.read_excel(os.path.join(data_directory, 'manual_features.xlsx'), usecols=['review_id', 'review'])
+    # reviews = pd.read_excel(os.path.join(data_directory, 'manual_features.xlsx'), usecols=['review_id', 'review'])
+    reviews = pd.read_csv('labeledTrainData.csv')
     bert_model = BertTransformer()
     reviews = reviews.assign(review_features='')
     for index, row in reviews.iterrows():
         print(f'Start create BERT embedding to review ID: {row.review_id}')
         reviews.at[index, 'review_features'] = bert_model.get_text_average_pooler_split_bert(row.review, max_size=450)
 
-    reviews.to_excel(os.path.join(data_directory, 'bert_embedding.xlsx'))
-    joblib.dump(reviews, (os.path.join(data_directory, 'bert_embedding.pkl')))
+    # reviews.to_excel(os.path.join(data_directory, 'bert_embedding.xlsx'))
+    # joblib.dump(reviews, (os.path.join(data_directory, 'bert_embedding.pkl')))
+
+    print(type(reviews))
+    joblib.dump(reviews, 'labeledTrainData_bert_embedding.pkl')
+    reviews.to_csv('labeledTrainData_bert_embedding.csv')
 
 
 if __name__ == '__main__':

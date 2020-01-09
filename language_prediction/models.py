@@ -138,7 +138,9 @@ def calculate_loss(logits, label, criterion):
     """
 
     # if class_logits.shape != label.squeeze(-1).shape:
+    # loss = criterion(logits.squeeze(-1), torch.max(label, -1)[1].float())
     loss = criterion(logits.squeeze(-1), label.squeeze(-1).float())
+
     return loss
 
 
@@ -407,10 +409,10 @@ class BasicTextDecisionResultModel(Model):
 class BasicFixTextFeaturesDecisionResultModel(Model):
     """
     This model is the first model:
-    1. represent the text of each review in the sequence using embedding model (e.g average of ELMO's vectors)
-    2. average (or weight average) the reviews' representations
-    3. projection layer
-    4. classify the sequence (loss)
+    1. Represent the text of each review in the sequence using the fix features
+    2. Concat the text and the numbers features
+    3. Use 3 FF layers for the lottery results, decision and the DM expected payoff
+    4. calculte the average loss
     """
     def __init__(self,
                  vocab: Vocabulary,
@@ -486,17 +488,16 @@ class BasicFixTextFeaturesDecisionResultModel(Model):
             sequence_reviews_representation = self.text_feedforward(sequence_review)
         # concat texts representation and numbers
         if numbers is not None:
-            texts_numbers = list()
-            for i in range(numbers.shape[0]):
-                texts_numbers.append(torch.flatten(torch.cat((sequence_reviews_representation[i], numbers[i]), dim=1)))
-            texts_numbers = torch.stack(texts_numbers)
+            texts_numbers = torch.cat((sequence_reviews_representation, numbers), axis=-1)
+            texts_numbers = texts_numbers.view(len(texts_numbers), -1)
         else:
             texts_numbers = sequence_reviews_representation
 
         # get predictions
         output_dict['decision_logits'] = self.classifier_feedforward_decision(texts_numbers)
-        output_dict['lottery_logits'] = self.classifier_feedforward_lottery(texts_numbers)
-        output_dict['expected_payoff_logits'] = self.classifier_feedforward_expected_payoff(texts_numbers)
+        if numbers is not None:
+            output_dict['lottery_logits'] = self.classifier_feedforward_lottery(texts_numbers)
+            output_dict['expected_payoff_logits'] = self.classifier_feedforward_expected_payoff(texts_numbers)
 
         # class_probabilities = self.softmax(class_logits, dim=1)
 
@@ -517,16 +518,113 @@ class BasicFixTextFeaturesDecisionResultModel(Model):
                 final_loss = sum(final_loss)
                 output_dict['loss'] = final_loss
 
+                predictions = (output_dict['decision_logits'].squeeze() > 0.5).type(label.dtype)
                 for metric_name, metric in self.metrics.items():
-                    metric(output_dict['decision_logits'], label.view(label.shape[0], -1).argmax(1))
-            else:  # TODO: debug this
-                class_probabilities = self.softmax(output_dict['decision_logits'], dim=1)
-                output_dict = calculate_loss_metrics(output_dict['decision_logits'], class_probabilities, label,
-                                                     self.loss, self.metrics)
+                    metric(predictions, label.view(label.shape[0], -1).argmax(1))
+            else:
+                decision_loss = calculate_loss(output_dict['decision_logits'], label, self.loss_decision)
+                output_dict['loss'] = decision_loss
+                predictions = (output_dict['decision_logits'].squeeze() > 0.5).type(label.dtype)
+                for metric_name, metric in self.metrics.items():
+                    metric(predictions, label.view(label.shape[0], -1).argmax(1))
 
         self.predictions = save_predictions(prediction_df=self.predictions, predictions=output_dict['decision_logits'],
                                             gold_labels=label, metadata=metadata, epoch=self._epoch,
                                             is_train=self.training)
+
+        return output_dict
+
+    def get_metrics(self, train=True, reset: bool = False) -> Dict[str, float]:
+        return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
+
+    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        predictions = output_dict['class_probabilities'].cpu().data.numpy()
+        argmax_indices = np.argmax(predictions, axis=-1)
+        labels = torch.tensor([self.vocab.get_token_from_index(x, namespace="labels") for x in argmax_indices])
+        output_dict['label'] = labels
+        return output_dict
+
+
+class BasicFixTextFeaturesDecisionModel(Model):
+    """
+    This model is the first model:
+    1. Represent the text of each review in the sequence using the fix features
+    2. Classify the DM decision and calculate the loss (classification task)
+    """
+    def __init__(self,
+                 vocab: Vocabulary,
+                 classifier_feedforward_classification: FeedForward,
+                 criterion_classification,
+                 metrics_dict: dict,
+                 max_tokens_len: int = None,
+                 text_feedforward: FeedForward = None,
+                 regularizer: RegularizerApplicator = None,
+                 initializer: InitializerApplicator = InitializerApplicator()):
+        """
+        :param vocab: the vocabulary to use
+        :param text_feedforward: if the text representation is too big- add this layer
+        :param classifier_feedforward_classification: a feedforward layer with input_dim=130
+                and output_dim=(2 - number of classes)
+        :param criterion_classification: the loss to use for classification loss
+        :param metrics_dict: dict with the metrics to measure
+        :param max_tokens_len: the max number of tokens in a review - for padding
+        :param regularizer: regularizer to use
+        :param initializer:
+        """
+        super(BasicFixTextFeaturesDecisionModel, self).__init__(vocab, regularizer)
+        self.classifier_feedforward_decision = classifier_feedforward_classification
+        self.text_feedforward = text_feedforward
+        self.softmax = F.softmax
+        self.metrics = metrics_dict
+        self.loss_decision = criterion_classification
+        self._max_tokens_len = max_tokens_len
+        self.predictions = pd.DataFrame()
+        self._epoch = 0
+        self._first_pair = None
+        initializer(self)
+
+    def forward(self,
+                sequence_review: torch.FloatTensor,
+                metadata,
+                label: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+        """
+        :param sequence_review: dict with one key: 'tokens': this is a tensor with shape:
+        [batch_size, max_seq_length (in this batch), 114, 50]
+        :param metadata: list of dicts, each dict is the metadata of a single sequence of reviews
+        :param label: tensor of size [batch_size] with the label for each sequence
+        :return: output_dict with loss, class_logits and class_probabilities
+        """
+
+        if self._first_pair is not None:
+            if self._first_pair == metadata[0]['pair_id']:
+                self._epoch += 1
+        else:
+            self._first_pair = metadata[0]['pair_id']
+
+        output_dict = dict()
+        if self.text_feedforward is None:
+            sequence_reviews_representation = sequence_review
+        else:
+            sequence_reviews_representation = self.text_feedforward(sequence_review)
+        # concat texts representation and numbers
+
+        # get predictions
+        output_dict['decision_logits'] = self.classifier_feedforward_decision(sequence_reviews_representation)
+        output_dict['decision_logits'] = output_dict['decision_logits'].squeeze(1)
+
+        # class_probabilities = self.softmax(class_logits, dim=1)
+
+        # calculate loss and metrics
+        if label is not None:
+            decision_loss = calculate_loss(output_dict['decision_logits'], label, self.loss_decision)
+            output_dict['loss'] = decision_loss
+            predictions = (output_dict['decision_logits'].squeeze() > 0.5).type(label.dtype)
+            for metric_name, metric in self.metrics.items():
+                metric(predictions, label.view(label.shape[0], -1).argmax(1))
+
+        # self.predictions = save_predictions(prediction_df=self.predictions, predictions=output_dict['decision_logits'],
+        #                                     gold_labels=label, metadata=metadata, epoch=self._epoch,
+        #                                     is_train=self.training)
 
         return output_dict
 
