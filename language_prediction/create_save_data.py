@@ -12,7 +12,7 @@ from language_prediction.train_test_models import *
 
 
 base_directory = os.path.abspath(os.curdir)
-condition = 'numeric'
+condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition)
 logs_directory = os.path.join(base_directory, 'logs')
 
@@ -585,13 +585,13 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_features'
+    features_to_use = 'manual_binary_features'
     use_seq = False
     create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=False, label='single_round',
-                                          use_seq=use_seq, use_prev_round=True, use_manual_features=False,
+                                          use_seq=use_seq, use_prev_round=True, use_manual_features=True,
                                           features_file_type=features_files[features_to_use],
                                           features_file=features_to_use, use_all_history=True,
-                                          use_all_history_text=False, no_text=True, num_condition=True)
+                                          use_all_history_text=True, no_text=False, num_condition=False)
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if create_save_data_obj.use_seq:

@@ -26,7 +26,7 @@ import logging
 from sklearn.linear_model import Perceptron, SGDClassifier, PassiveAggressiveClassifier, LogisticRegression,\
     PassiveAggressiveRegressor, SGDRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from keras_models import KerasModel
+from keras_models import LinearKerasModel
 from sklearn.svm import SVC, SVR
 import joblib
 import copy
@@ -36,7 +36,7 @@ from xgboost import XGBClassifier
 
 # define directories
 base_directory = os.path.abspath(os.curdir)
-condition = 'numeric'
+condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition)
 
 train_data_file_path = os.path.join(data_directory, 'train_data_1_10_single_round_label.pkl')  # test_text_num_data
@@ -614,7 +614,7 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     model_dict = {'label':  # classification models:
                   [[
                       XGBClassifier(max_depth=5),
-                      KerasModel(input_dim=len(features), batch_size=inner_batch_size),
+                      LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
                       SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
                       SGDClassifier(), PassiveAggressiveClassifier(),
                       ],

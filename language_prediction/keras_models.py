@@ -1,12 +1,13 @@
 from keras.models import Sequential
 from keras.layers import Dense
+from keras.layers import Softmax
 import pandas as pd
 import numpy as np
 import joblib
 import os
 
 
-class KerasModel:
+class LinearKerasModel:
     """
     This is a simple keras model to predict the DM decision at each step using a given features set
     """
@@ -16,8 +17,8 @@ class KerasModel:
         """
         # define the keras model
         self.model = Sequential()
-        self.model.add(Dense(300, input_dim=input_dim, activation='relu'))
-        self.model.add(Dense(50, activation='relu'))
+        self.model.add(Dense(50, input_dim=input_dim, activation='relu'))
+        # self.model.add(Dense(50, activation='relu'))
         self.model.add(Dense(8, activation='relu'))
         self.model.add(Dense(1, activation='sigmoid'))
         # compile the keras model
@@ -43,7 +44,7 @@ def main():
     data = joblib.load(os.path.join(data_directory, 'labeledTrainData_bert_embedding.pkl'))
     x = pd.DataFrame.from_records(data.text_0.values, index=data.text_0.index)
     y = data.single_label
-    model = KerasModel(input_dim=x.shape[1])
+    model = LinearKerasModel(input_dim=x.shape[1])
     model.fit(x, y)
     prediction = model.predict(x)
     _, accuracy = model.model.evaluate(x, y)
