@@ -1,5 +1,5 @@
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten
 from keras.layers import Softmax
 import pandas as pd
 import numpy as np
@@ -17,16 +17,56 @@ class LinearKerasModel:
         """
         # define the keras model
         self.model = Sequential()
-        self.model.add(Dense(50, input_dim=input_dim, activation='relu'))
+        self.model.add(Dense(100, input_dim=input_dim, activation='relu'))
         # self.model.add(Dense(50, activation='relu'))
-        self.model.add(Dense(8, activation='relu'))
+        # self.model.add(Dense(8, activation='relu'))
         self.model.add(Dense(1, activation='sigmoid'))
         # compile the keras model
         self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
         self.batch_size = batch_size
+        self.epochs = 150
+        print(f'Model summary:\n {self.model.summary()}.\n'
+              f'Run with {self.epochs} epochs and {self.batch_size} batch size')
 
     def fit(self, x: pd.DataFrame, y: pd.Series):
-        self.model.fit(x, y, epochs=300, batch_size=self.batch_size, shuffle=False)
+        self.model.fit(x, y, epochs=self.epochs, batch_size=self.batch_size, shuffle=False)
+
+        return self
+
+    def predict(self, x: pd.DataFrame):
+        predict = self.model.predict(x, batch_size=self.batch_size)
+        predict = np.where(predict == 0, -1, 1).astype(int).astype(int)
+        # _, accuracy = self.model.evaluate(x, y)
+        return np.squeeze(predict)
+
+
+class ConvolutionalKerasModel:
+    """
+    This is a simple keras model to predict the DM decision at each step using a given features set
+    """
+    def __init__(self, num_features: int, input_len: int, batch_size: int=10):
+        """
+        :param num_features: the number of features
+        """
+        # define the keras model
+        self.model = Sequential()
+        self.model.add(Conv2D(32, (1, num_features), activation='relu', input_shape=(1, input_len, 1),
+                              strides=num_features, padding='valid'))
+        # self.model.add(MaxPooling2D((2, 2)))
+        self.model.add(Conv2D(32, (1, 3), activation='relu', strides=1))
+        # self.model.add(MaxPooling2D((2, 2)))
+        self.model.add(Flatten())
+        self.model.add(Dense(1, activation='softmax'))
+        # compile the keras model
+        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+        self.batch_size = batch_size
+        self.epochs = 150
+        print(f'Model summary:\n {self.model.summary()}.\n'
+              f'Run with {self.epochs} epochs and {self.batch_size} batch size')
+
+    def fit(self, x: pd.DataFrame, y: pd.Series):
+        # TODO reshape to match network
+        self.model.fit(x, y, epochs=self.epochs, batch_size=self.batch_size, shuffle=False)
 
         return self
 

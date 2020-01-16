@@ -1,4 +1,4 @@
-from train_test_models import *
+from language_prediction.train_test_models import *
 
 
 def main():
@@ -133,10 +133,18 @@ def main():
         #     train_test_simple_features_model('SimpleFeaturesModelNoTextPrevRoundBackward',
         #                                      'all_data_single_round_label_prev_round_no_text.pkl',
         #                                      backward_search=True),
-        'SimpleFeaturesModelNumericConditionPrevRoundAllHistoryFeatures':
-            train_test_simple_features_model('SimpleFeaturesModelNumericConditionPrevRoundAllHistoryFeatures',
-                                             'all_data_single_round_label_prev_round_global_alpha_0.9_all_history_text_'
-                                             'alpha_0.8_no_text.pkl', backward_search=False),
+        # 'SimpleFeaturesModelNumericConditionPrevRoundAllHistoryFeatures':
+        #     train_test_simple_features_model('SimpleFeaturesModelNumericConditionPrevRoundAllHistoryFeatures',
+        #                                      'all_data_single_round_label_prev_round_global_alpha_0.9_all_history_text_'
+        #                                      'alpha_0.8_no_text.pkl', backward_search=False),
+        # 'SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndText':
+        #     train_test_simple_features_model('SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndText',
+        #                                      'all_data_single_round_label_all_history_features_all_history_text_manual_'
+        #                                      'features_verbal_data.pkl', backward_search=False),
+        'SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndTextSingleRound':
+            train_test_simple_features_model('SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndTextSingleRound',
+                                             'all_data_single_round_label_all_history_features_all_history_text_manual_'
+                                             'features_verbal_data.pkl', backward_search=False),
         # 'BasicModelSentimentAnalysis':
         #     train_valid_base_text_decision_fix_text_features_model(
         #         model_name='BasicModelSentimentAnalysis',

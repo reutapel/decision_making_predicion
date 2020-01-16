@@ -7,14 +7,14 @@ from allennlp.modules.token_embedders import ElmoTokenEmbedder
 from allennlp.modules.elmo import Elmo
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
-from dataset_readers import TextExpDataSetReader
+from language_prediction.dataset_readers import TextExpDataSetReader
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
 import tempural_analysis.utils
 import torch.optim as optim
-import models as models
-import baselines as baselines
+import language_prediction.models as models
+import language_prediction.baselines as baselines
 from torch.nn.modules.activation import ReLU, LeakyReLU
 from allennlp.training.metrics import *
 from datetime import datetime
@@ -26,12 +26,15 @@ import logging
 from sklearn.linear_model import Perceptron, SGDClassifier, PassiveAggressiveClassifier, LogisticRegression,\
     PassiveAggressiveRegressor, SGDRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from keras_models import LinearKerasModel
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.dummy import DummyClassifier, DummyRegressor
+from language_prediction.keras_models import LinearKerasModel, ConvolutionalKerasModel
 from sklearn.svm import SVC, SVR
 import joblib
 import copy
 import pandas as pd
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier, XGBRegressor
+from tempural_analysis.predict_last_decision import PredictLastDecision
 
 
 # define directories
@@ -563,12 +566,14 @@ def train_predict_simple_baseline_model(model_name: str, binary_classification: 
         print(f'{name}: {metric_calc*100}')
 
 
-def train_test_simple_features_model(model_name: str, features_data_file_path: str, backward_search: bool = False):
+def train_test_simple_features_model(model_name: str, features_data_file_path: str, backward_search: bool = False,
+                                     inner_data_directory: str=data_directory):
     """
     This function train and test some simple ML models that use text manual features to predict decisions
     :param features_data_file_path: hte path to the features file
     :param model_name: the full model name
     :param backward_search: use backward_search to find the best features
+    :param inner_data_directory: the data directory to use
     :return:
     """
     experiment_path = utils.set_folder(datetime.now().strftime(f'{model_name}_%d_%m_%Y_%H_%M'), 'logs')
@@ -598,14 +603,17 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     folds = 5  # if folds = 1, run train-test, else - run cross-validation with relevant number of folds
     # load the features data
     if 'pkl' in features_data_file_path:
-        data = joblib.load(os.path.join(data_directory, features_data_file_path))
+        data = joblib.load(os.path.join(inner_data_directory, features_data_file_path))
     else:
-        data = pd.read_csv(os.path.join(data_directory, features_data_file_path))
+        data = pd.read_csv(os.path.join(inner_data_directory, features_data_file_path))
+
+    data.index = data.sample_id
     # The label we want to predict
     label_dict = {
         'label': ['DM chose stay home', 'DM chose hotel'],
+        'total_payoff': [],
     }
-    label = list(label_dict.keys())[0]
+    label = 'label'
     data = data.drop(['k_size', 'sample_id'], axis=1)
     features = [item for item in data.columns.tolist() if item not in [label, 'pair_id']]
     inner_batch_size = 9 if 'history' in features_data_file_path or 'prev' in features_data_file_path else 10
@@ -613,31 +621,38 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     candidates_features = copy.deepcopy(features)
     model_dict = {'label':  # classification models:
                   [[
-                      XGBClassifier(max_depth=5),
-                      LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
+                      PredictLastDecision(),
+                      DummyClassifier(strategy='stratified'), DummyClassifier(strategy='most_frequent'),
+                      XGBClassifier(max_depth=5), DecisionTreeClassifier(),
+                      # LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
                       SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
-                      SGDClassifier(), PassiveAggressiveClassifier(),
+                      # SGDClassifier(), PassiveAggressiveClassifier(),
+                      # ConvolutionalKerasModel(num_features=len([feature for feature in features if '_1' in feature]),
+                      #                         input_len=len(features))
                       ],
                    'classification'],
                   'total_payoff':  # regression models
-                  [[RandomForestRegressor(), Perceptron(), SGDRegressor(), PassiveAggressiveRegressor(), SVR(),
-                    ], 'regression'],
-
-                   # XGBRegressor()],
+                  [[RandomForestRegressor(), SGDRegressor(), PassiveAggressiveRegressor(),
+                    SVR(), SVR(kernel='linear'),
+                    DecisionTreeRegressor(), XGBRegressor(),
+                    # Perceptron(),
+                    DummyRegressor(strategy='median'), DummyRegressor(strategy='mean')], 'regression'],
                   }
 
     model_dict_to_use = {label: model_dict[label][0]}
+    label_dict_to_use = {label: label_dict[label]}
 
     if backward_search:
         execute_evaluate.evaluate_backward_search(data=data, base_features=features, window_size_list=[0],
-                                                  label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,
-                                                  classifier_results_dir=experiment_path, appendix='',
-                                                  personal_features=[], model_type=model_dict[label][1],
+                                                  label_dict=label_dict_to_use, num_folds=folds,
+                                                  model_dict=model_dict_to_use, classifier_results_dir=experiment_path,
+                                                  appendix='', personal_features=[], model_type=model_dict[label][1],
                                                   col_to_group='pair_id', candidates_features=candidates_features)
     else:
-        execute_evaluate.evaluate_grid_search(data=data, base_features=features, add_feature_list=[''], window_size_list=[0],
-                                              label_dict=label_dict, num_folds=folds, model_dict=model_dict_to_use,
-                                              classifier_results_dir=experiment_path, appendix='', personal_features=[],
-                                              model_type=model_dict[label][1], col_to_group='pair_id')
+        execute_evaluate.evaluate_grid_search(data=data, base_features=features, add_feature_list=[''],
+                                              window_size_list=[0], label_dict=label_dict_to_use, num_folds=folds,
+                                              model_dict=model_dict_to_use, classifier_results_dir=experiment_path,
+                                              appendix='', personal_features=[], model_type=model_dict[label][1],
+                                              col_to_group='pair_id')
 
     logging.info('Done!')

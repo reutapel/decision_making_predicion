@@ -113,7 +113,6 @@ def get_data_label_window(x: pd.DataFrame, y: pd.Series, label: str, window_size
     :return:
     """
 
-    # TODO: check if I need to drop participant_code
     if window_size == 0:  # return the data as is
         return x, y
 

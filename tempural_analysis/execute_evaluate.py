@@ -279,7 +279,7 @@ def evaluate_grid_search(data: pd.DataFrame, base_features: list, add_feature_li
                                 running_meta_data.loc[run_id] = [type(curr_model).__name__, str(curr_model),
                                                                  copy.deepcopy(curr_base_features), feature_to_add,
                                                                  use_first_round, folds_per_participants, curr_label,
-                                                                 curr_window_size, '-', '-', '-',
+                                                                 curr_window_size, '-', '-', '-', '-',
                                                                  round(100*mse_score, 2)]
 
     running_meta_data.index.name = 'run_id'
@@ -290,7 +290,7 @@ def evaluate_grid_search(data: pd.DataFrame, base_features: list, add_feature_li
     return
 
 
-def get_regression_final_results(simulator: simulation, run_id: int, table_writer: pd.ExcelWriter) -> int:
+def get_regression_final_results(simulator: simulation, run_id: int, table_writer: pd.ExcelWriter) -> float:
     """
     create results DF for regressions model
     :param simulator: the simulator object of this run
@@ -326,12 +326,6 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
     all_predictions = pd.concat(simulator.predictions_per_fold.values(), axis=0)
     all_predictions.index.name = 'participant_id_trial_num'
     model_name = type(simulator.model).__name__
-    # plot confusion matrix
-    fig = plt.figure()
-    title = f'Confusion matrix {run_id}'
-    plot_confusion_matrix(simulator.total_conf_mtx, classes=label_options, title=title)
-    fig_to_save = fig
-    fig_to_save.savefig(os.path.join(classifier_results_dir, title + '.png'), bbox_inches='tight')
 
     precision, recall, fbeta_score, support =\
         metrics.precision_recall_fscore_support(all_predictions.label, all_predictions.predictions)
@@ -366,6 +360,16 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
         table_writer, str(run_id) + '_predictions',
         headers=[f'Classifier all predictions for {simulator.label} and model {model_name} and run ID {run_id}'],
         data=all_predictions)
+
+    logging.info(f'Classifier measures for {simulator.label} and model {model_name} and run ID {run_id} are:')
+    logging.info(f'f1_score_neg: {round(100*f1_score_neg, 2)}, f1_score_pos: {round(100*f1_score_pos, 2)},'
+                 f'accuracy: {round(100*accuracy, 2)}, AUC: {round(100*auc, 2)}')
+    # plot confusion matrix
+    fig = plt.figure()
+    title = f'Confusion matrix {run_id}'
+    plot_confusion_matrix(simulator.total_conf_mtx, classes=label_options, title=title)
+    fig_to_save = fig
+    fig_to_save.savefig(os.path.join(classifier_results_dir, title + '.png'), bbox_inches='tight')
 
     return accuracy, auc, f1_score_pos, f1_score_neg
 
