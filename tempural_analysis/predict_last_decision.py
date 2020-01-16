@@ -27,7 +27,8 @@ class PredictLastDecision:
             check.columns = ['prediction']
             prediction = prediction.append(check)
         x = x.merge(prediction, right_index=True, left_index=True)
-        return x.predictions
+        x.prediction = np.where(x.prediction == 0, -1, 1)
+        return x.prediction
 
 
 # def main():

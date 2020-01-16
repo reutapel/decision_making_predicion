@@ -363,7 +363,12 @@ class CreateSaveData:
             data[meta_data_columns[2]] = data[meta_data_columns[1]] + '_' + data[meta_data_columns[0]].map(str)
             if self.label == 'single_round':
                 # the label is the exp_payoff of the current round - 1 or -1
-                data['label'] = self.data.loc[self.data.pair_id == pair]['exp_payoff'].reset_index(drop=True)
+                if 1 not in data.subsession_round_number.values:
+                    data['label'] =\
+                        self.data.loc[(self.data.pair_id == pair) & (self.data.subsession_round_number > 1)][
+                            'exp_payoff'].reset_index(drop=True)
+                else:
+                    data['label'] = self.data.loc[(self.data.pair_id == pair)]['exp_payoff'].reset_index(drop=True)
                 data.label = np.where(data.label == 1, 1, -1)
                 label_column_name = 'label'
 
@@ -701,10 +706,10 @@ def main():
                    'use_all_history_average': False,
                    'use_all_history': True,
                    'use_all_history_text_average': False,
-                   'use_all_history_text': True,
+                   'use_all_history_text': False,
                    'no_text': False,
                    'use_score': False,
-                   'predict_first_round': False,
+                   'predict_first_round': True,
                    'label': 'single_round'},
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,

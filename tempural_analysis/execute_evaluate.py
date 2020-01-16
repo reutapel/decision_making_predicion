@@ -362,7 +362,7 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
         data=all_predictions)
 
     logging.info(f'Classifier measures for {simulator.label} and model {model_name} and run ID {run_id} are:')
-    logging.info(f'f1_score_neg: {round(100*f1_score_neg, 2)}, f1_score_pos: {round(100*f1_score_pos, 2)},'
+    logging.info(f'f1_score_neg: {round(100*f1_score_neg, 2)}, f1_score_pos: {round(100*f1_score_pos, 2)}, '
                  f'accuracy: {round(100*accuracy, 2)}, AUC: {round(100*auc, 2)}')
     # plot confusion matrix
     fig = plt.figure()
