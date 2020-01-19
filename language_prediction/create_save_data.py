@@ -54,8 +54,10 @@ def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list
         # and not use use if first_round_to_use=1
         data_to_flat.iloc[list(range(round_num - first_round_to_use, last_round_to_use))] = -1
         data_to_flat.index = data_to_flat.index.astype(str)
+        # data_to_flat.columns = data_to_flat.columns.astype(str)
         data_to_flat = data_to_flat.unstack().to_frame().sort_index(level=1).T
-        data_to_flat.columns = data_to_flat.columns.map('_'.join)
+        data_to_flat.columns = [f'{str(col)}_{i}' for col, i in zip(data_to_flat.columns.get_level_values(0),
+                                                                    data_to_flat.columns.get_level_values(1))]
         # concat the review_id of the current round
         data_to_flat = data_to_flat.assign(review_id=id_curr_round.values)
         all_history = pd.concat([all_history, data_to_flat], axis=0, ignore_index=True, sort=False)
@@ -121,8 +123,19 @@ class CreateSaveData:
                 print('Features file type is has to be pkl or xlsx')
                 return
             # get manual text features
-            self.reviews_features = self.reviews_features.drop('review', axis=1)
-            self.reviews_features = self.reviews_features.drop('score', axis=1)
+            if 'review' in self.reviews_features:
+                self.reviews_features = self.reviews_features.drop('review', axis=1)
+            if 'score' in self.reviews_features:
+                self.reviews_features = self.reviews_features.drop('score', axis=1)
+
+            if self.reviews_features.shape[1] == 2 and not use_seq:  # Bert features -> flat the vectors
+                reviews = pd.DataFrame()
+                for i in self.reviews_features.index:
+                    temp = pd.DataFrame(self.reviews_features.at[i, 'review_features']).append(
+                        pd.DataFrame([self.reviews_features.at[i, 'review_id']], index=['review_id']))
+                    reviews = pd.concat([reviews, temp], axis=1, ignore_index=True)
+
+                self.reviews_features = reviews
 
         # calculate expert total payoff --> the label
         self.data['exp_payoff'] = self.data.group_receiver_choice.map({1: 0, 0: 1})
@@ -272,7 +285,7 @@ class CreateSaveData:
         for pair in self.pairs:
             data = self.data.loc[self.data.pair_id == pair][columns_to_use]
             # don't use first round if use_prev_round or all_history unless we want to predict it
-            if self.use_prev_round or self.use_all_history and not self.predict_first_round:
+            if not self.predict_first_round:
                 data = data.loc[data.subsession_round_number > 1]
                 rounds = list(range(2, 11))
             else:
@@ -300,13 +313,18 @@ class CreateSaveData:
 
             # first merge for the review_id for the current round
             if not self.no_text:  # use test features
-                if self.reviews_features.shape[1] == 2:  # Bert features
-                    reviews = pd.DataFrame()
-                    for i in self.reviews_features.index:
-                        temp = pd.DataFrame(self.reviews_features.at[i, 'review_features']).append(
-                            pd.DataFrame([self.reviews_features.at[i, 'review_id']], index=['review_id']))
-                        reviews = pd.concat([reviews, temp], axis=1, ignore_index=True)
-                    data = data.merge(reviews.T, left_on='review_id', right_on='review_id', how='left')
+                if self.features_file == 'bert_embedding':  # Bert features
+                    data_to_flat = data[['review_id', 'subsession_round_number']].copy()
+                    data_to_flat = data_to_flat.merge(self.reviews_features.T, left_on='review_id',
+                                                      right_on='review_id', how='left')
+                    if self.use_all_history_text:
+                        history_reviews = flat_reviews_numbers(
+                            data_to_flat, rounds, columns_to_drop=['review_id', 'subsession_round_number'],
+                            last_round_to_use=10, first_round_to_use=0)
+                        data = data.merge(history_reviews, left_on='review_id', right_on='review_id', how='left')
+                    else:
+                        # TODO: change to add current, previous and average text
+                        reut = 1
                 else:  # manual features
                     if self.use_all_history_text_average or self.use_all_history_text:
                         history_reviews = pd.DataFrame()
@@ -344,7 +362,8 @@ class CreateSaveData:
                 # first merge for the review_id for the previous round
                 if self.use_prev_round_text:
                     if self.reviews_features.shape[1] == 2:  # Bert features
-                        data = data.merge(reviews.T, left_on='previous_review_id', right_on='review_id', how='left')
+                        data = data.merge(self.reviews_features.T, left_on='previous_review_id', right_on='review_id',
+                                          how='left')
                     else:
                         data = data.merge(self.reviews_features, left_on='previous_review_id', right_on='review_id',
                                           how='left')
@@ -388,13 +407,14 @@ class CreateSaveData:
         file_name = f'all_data_{self.base_file_name}'
         self.final_data = self.final_data.drop('subsession_round_number', axis=1)
         # sort columns according to the round number
-        columns_to_sort = list(self.final_data.columns)
-        columns_not_to_sort = ['sample_id', 'pair_id', 'k_size', label_column_name]
-        for column in columns_not_to_sort:
-            columns_to_sort.remove(column)
-        columns_to_sort = sorted(columns_to_sort, key=lambda x: int(x[-1]))
-        columns_to_sort += columns_not_to_sort
-        self.final_data = self.final_data[columns_to_sort]
+        if self.use_all_history_text or self.use_all_history:
+            columns_to_sort = list(self.final_data.columns)
+            columns_not_to_sort = ['sample_id', 'pair_id', 'k_size', label_column_name]
+            for column in columns_not_to_sort:
+                columns_to_sort.remove(column)
+            columns_to_sort = sorted(columns_to_sort, key=lambda x: int(x[-1]))
+            columns_to_sort += columns_not_to_sort
+            self.final_data = self.final_data[columns_to_sort]
 
         # save final data
         self.final_data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
@@ -697,19 +717,19 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_features'
+    features_to_use = 'bert_embedding'
     # label can be single_round or total_payoff
     conditions_dict = {
-        'verbal': {'use_prev_round': False,
+        'verbal': {'use_prev_round': True,
                    'use_prev_round_text': False,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
-                   'use_all_history': True,
-                   'use_all_history_text_average': False,
+                   'use_all_history_average': True,
+                   'use_all_history': False,
+                   'use_all_history_text_average': True,
                    'use_all_history_text': False,
                    'no_text': False,
                    'use_score': False,
-                   'predict_first_round': True,
+                   'predict_first_round': False,
                    'label': 'single_round'},
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
