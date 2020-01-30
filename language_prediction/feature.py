@@ -77,14 +77,14 @@ class FeatureSet():
             for t in range(len(x)):
                 # Gets a label id
                 try:
-                    y = self.label_dic[y[t]]
+                    len_y = self.label_dic[y[t]]
                 except KeyError:
-                    y = len(self.label_dic)
-                    self.label_dic[y[t]] = y
+                    len_y = len(self.label_dic)
+                    self.label_dic[y[t]] = len_y
                     self.label_array.append(y[t])
                 # Adds features
-                self._add(prev_y, y, x, t)
-                prev_y = y
+                self._add(prev_y, len_y, x, t)
+                prev_y = len_y
 
     def load(self, feature_dic, num_features, label_array):
         self.num_features = num_features

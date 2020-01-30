@@ -17,14 +17,14 @@ class LinearKerasModel:
         """
         # define the keras model
         self.model = Sequential()
-        self.model.add(Dense(100, input_dim=input_dim, activation='relu'))
-        # self.model.add(Dense(50, activation='relu'))
+        self.model.add(Dense(50, input_dim=input_dim, activation='relu'))
+        # self.model.add(Dense(25, activation='relu'))
         # self.model.add(Dense(8, activation='relu'))
         self.model.add(Dense(1, activation='sigmoid'))
         # compile the keras model
         self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
         self.batch_size = batch_size
-        self.epochs = 150
+        self.epochs = 10
         print(f'Model summary:\n {self.model.summary()}.\n'
               f'Run with {self.epochs} epochs and {self.batch_size} batch size')
 

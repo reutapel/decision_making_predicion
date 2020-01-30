@@ -12,6 +12,7 @@ from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Reg
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
 import tempural_analysis.utils
+import language_prediction.utils as lan_utils
 import torch.optim as optim
 import language_prediction.models as models
 import language_prediction.baselines as baselines
@@ -35,6 +36,8 @@ import copy
 import pandas as pd
 from xgboost import XGBClassifier, XGBRegressor
 from tempural_analysis.predict_last_decision import PredictLastDecision
+from sklearn.ensemble import AdaBoostClassifier
+from tempural_analysis.ensemble_classifier import EnsembleClassifier
 
 
 # define directories
@@ -555,8 +558,8 @@ def train_predict_simple_baseline_model(model_name: str, binary_classification: 
                                            label_col_name, use_first_round)
     model.fit()
     model.predict()
-    train_metric_dict, validation_metric_dict = calculate_measures(model.train_data, model.validation_data, metric_list,
-                                                                   label_col_name=label_col_name)
+    train_metric_dict, validation_metric_dict =\
+        lan_utils.calculate_measures(model.train_data, model.validation_data, metric_list, label_col_name=label_col_name)
 
     print(f'{model_name} evaluation measures are:\nTrain data:')
     for name, metric_calc in train_metric_dict.items():
@@ -621,11 +624,12 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     candidates_features = copy.deepcopy(features)
     model_dict = {'label':  # classification models:
                   [[
-                      PredictLastDecision(),
-                      DummyClassifier(strategy='stratified'), DummyClassifier(strategy='most_frequent'),
-                      XGBClassifier(max_depth=5), DecisionTreeClassifier(),
-                      # LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
-                      SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
+                      # EnsembleClassifier(XGBClassifier(max_depth=10), SVC(), LogisticRegression()),
+                      # PredictLastDecision(),
+                      # DummyClassifier(strategy='stratified'), DummyClassifier(strategy='most_frequent'),
+                      # XGBClassifier(max_depth=10), DecisionTreeClassifier(), AdaBoostClassifier(n_estimators=100),
+                      LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
+                      # SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
                       # SGDClassifier(), PassiveAggressiveClassifier(),
                       # ConvolutionalKerasModel(num_features=len([feature for feature in features if '_1' in feature]),
                       #                         input_len=len(features))

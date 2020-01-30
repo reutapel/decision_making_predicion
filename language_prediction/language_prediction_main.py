@@ -143,8 +143,9 @@ def main():
         #                                      'features_verbal_data.pkl', backward_search=False),
         'SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndTextSingleRound':
             train_test_simple_features_model('SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndTextSingleRound',
-                                             'all_data_single_round_label_all_history_features_all_history_text_manual_'
-                                             'features_verbal_data.pkl', backward_search=False),
+                                             'all_data_single_round_label_prev_round_prev_round_text_global_alpha_0.9_'
+                                             'all_history_text_average_with_alpha_0.8_manual_features_verbal_data.pkl',
+                                             backward_search=False),
         # 'BasicModelSentimentAnalysis':
         #     train_valid_base_text_decision_fix_text_features_model(
         #         model_name='BasicModelSentimentAnalysis',

@@ -361,7 +361,7 @@ class CreateSaveData:
                 data = data.drop('review_id', axis=1)
                 # first merge for the review_id for the previous round
                 if self.use_prev_round_text:
-                    if self.reviews_features.shape[1] == 2:  # Bert features
+                    if self.features_file == 'bert_embedding':  # Bert features
                         data = data.merge(self.reviews_features.T, left_on='previous_review_id', right_on='review_id',
                                           how='left')
                     else:
@@ -376,7 +376,7 @@ class CreateSaveData:
 
             # add metadata
             # k_size
-            data[meta_data_columns[0]] = data['subsession_round_number'].reset_index(drop=True)
+            data[meta_data_columns[0]] = data['subsession_round_number']
             # add sample ID column
             data[meta_data_columns[1]] = pair
             data[meta_data_columns[2]] = data[meta_data_columns[1]] + '_' + data[meta_data_columns[0]].map(str)
@@ -721,7 +721,7 @@ def main():
     # label can be single_round or total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': True,
-                   'use_prev_round_text': False,
+                   'use_prev_round_text': True,
                    'use_manual_features': True,
                    'use_all_history_average': True,
                    'use_all_history': False,
