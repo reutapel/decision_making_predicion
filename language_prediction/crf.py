@@ -23,6 +23,9 @@ from scipy.optimize import fmin_l_bfgs_b
 import time
 import json
 import datetime
+import joblib
+
+from .feature import vector_representation_input
 
 from collections import Counter
 
@@ -272,7 +275,13 @@ class LinearChainCRF():
 
         # Read the training corpus
         print("* Reading training data ... ", end="")
-        self.training_data = self._read_corpus(corpus_filename)
+        if 'txt' in corpus_filename:
+            self.training_data = self._read_corpus(corpus_filename)
+        elif 'pkl' in corpus_filename:
+            self.training_data = joblib.load(corpus_filename)
+        else:
+            print('Data format is not txt or pkl')
+            return
         print("Done")
 
         # Generate feature set from the corpus

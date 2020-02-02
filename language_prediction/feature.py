@@ -10,6 +10,17 @@ STARTING_LABEL = '*'        # Label of t=-1
 STARTING_LABEL_INDEX = 0
 
 
+def vector_representation_input(x, t):
+    """
+    Return a list of features as given in the input
+    :param x: An observation vector
+    :param t: time
+    :return: A list of feature strings
+    """
+
+    return [x[t]]
+
+
 def default_feature_func(_, x, t):
     """
     Returns a list of feature strings.
