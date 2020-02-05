@@ -10,15 +10,22 @@ STARTING_LABEL = '*'        # Label of t=-1
 STARTING_LABEL_INDEX = 0
 
 
-def vector_representation_input(x, t):
-    """
-    Return a list of features as given in the input
-    :param x: An observation vector
-    :param t: time
-    :return: A list of feature strings
-    """
+class VectorRepresentationInput:
+    def __init__(self, features_names):
+        self.features_names = features_names
 
-    return [x[t]]
+    def __call__(self, x, t):
+        """
+        Return a list of features as given in the input
+        :param x: An observation vector
+        :param t: time
+        :return: A list of feature strings
+        """
+        features = list()
+        for i, feature in enumerate(x[t]):
+            if feature == 1:  # the feature exists in this sample
+                features.append(self.features_names[i])
+        return features
 
 
 def default_feature_func(_, x, t):
@@ -71,10 +78,10 @@ class FeatureSet():
 
     feature_func = default_feature_func
 
-    def __init__(self, feature_func=None):
+    def __init__(self, feature_func=None, features_names=None):
         # Sets a custom feature function.
         if feature_func is not None:
-            self.feature_func = feature_func
+            self.feature_func = feature_func(features_names)
 
     def scan(self, data):
         """
@@ -82,6 +89,7 @@ class FeatureSet():
             and a counter of empirical counts of each feature from the input data.
         :param data: A list of (x, Y) pairs. (x: observation vector , Y: label vector)
         """
+
         # Constructs a feature set, and counts empirical counts.
         for x, y in data:
             prev_y = STARTING_LABEL_INDEX

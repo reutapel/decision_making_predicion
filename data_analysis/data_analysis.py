@@ -96,7 +96,7 @@ def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel
 
     if add_text_label:
         rects = ax.patches
-        autolabel(rects, ax, rotation=label_rotation, max_height=max_height, convert_to_int=convert_to_int)
+        autolabel(rects, ax, rotation=label_rotation, max_height=max_height, convert_to_int=convert_to_int, fontsize=6)
 
     plt.title(title)
     plt.xlabel(xlabel)

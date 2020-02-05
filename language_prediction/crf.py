@@ -13,7 +13,7 @@ Copyright (c) 2015 Seong-Jin Kim
 """
 
 
-from language_prediction.read_corpus import read_conll_corpus
+from language_prediction.read_corpus import read_conll_corpus, read_verbal_exp_data
 from language_prediction.feature import FeatureSet, STARTING_LABEL_INDEX
 
 from math import exp, log
@@ -24,8 +24,9 @@ import time
 import json
 import datetime
 import joblib
+import os
 
-from .feature import vector_representation_input
+from .feature import VectorRepresentationInput
 
 from collections import Counter
 
@@ -44,6 +45,7 @@ def _callback(params):
     ITERATION_NUM += 1
     TOTAL_SUB_ITERATIONS += SUB_ITERATION_NUM
     SUB_ITERATION_NUM = 0
+
 
 def _generate_potential_table(params, num_labels, feature_set, X, inference=True):
     """
@@ -72,8 +74,8 @@ def _generate_potential_table(params, num_labels, feature_set, X, inference=True
         if t == 0:
             table[STARTING_LABEL_INDEX+1:] = 0
         else:
-            table[:,STARTING_LABEL_INDEX] = 0
-            table[STARTING_LABEL_INDEX,:] = 0
+            table[:, STARTING_LABEL_INDEX] = 0
+            table[STARTING_LABEL_INDEX, :] = 0
         tables.append(table)
 
     return tables
@@ -183,7 +185,7 @@ def _log_likelihood(params, *args):
                     expected_counts[fid] += prob
 
     likelihood = np.dot(empirical_counts, params) - total_logZ - \
-                 np.sum(np.dot(params,params))/(squared_sigma*2)
+                 np.sum(np.dot(params, params))/(squared_sigma*2)
 
     gradients = empirical_counts - expected_counts - params/squared_sigma
     global GRADIENT
@@ -202,6 +204,13 @@ def _log_likelihood(params, *args):
 
 def _gradient(params, *args):
     return GRADIENT * -1
+
+
+def read_corpus(filename, features_filename=None):
+    if 'txt' in filename:
+        return read_conll_corpus(filename), None
+    else:
+        return read_verbal_exp_data(filename, features_filename)
 
 
 class LinearChainCRF():
@@ -223,9 +232,6 @@ class LinearChainCRF():
 
     def __init__(self):
         pass
-
-    def _read_corpus(self, filename):
-        return read_conll_corpus(filename)
 
     def _get_training_feature_data(self):
         return [[self.feature_set.get_feature_list(X, t) for t in range(len(X))]
@@ -266,7 +272,7 @@ class LinearChainCRF():
                 print('* Reason: %s' % (information['task']))
         print('* Likelihood: %s' % str(log_likelihood))
 
-    def train(self, corpus_filename, model_filename):
+    def train(self, corpus_filename, features_filename, model_filename):
         """
         Estimates parameters using conjugate gradient methods.(L-BFGS-B used)
         """
@@ -275,17 +281,11 @@ class LinearChainCRF():
 
         # Read the training corpus
         print("* Reading training data ... ", end="")
-        if 'txt' in corpus_filename:
-            self.training_data = self._read_corpus(corpus_filename)
-        elif 'pkl' in corpus_filename:
-            self.training_data = joblib.load(corpus_filename)
-        else:
-            print('Data format is not txt or pkl')
-            return
+        self.training_data, features_names = read_corpus(corpus_filename, features_filename)
         print("Done")
 
         # Generate feature set from the corpus
-        self.feature_set = FeatureSet()
+        self.feature_set = FeatureSet(VectorRepresentationInput, features_names)
         self.feature_set.scan(self.training_data)
         self.label_dic, self.label_array = self.feature_set.get_labels()
         self.num_labels = len(self.label_array)
@@ -305,7 +305,7 @@ class LinearChainCRF():
         if self.params is None:
             raise BaseException("You should load a model first!")
 
-        test_data = self._read_corpus(test_corpus_filename)
+        test_data, _ = read_corpus(test_corpus_filename)
 
         total_count = 0
         correct_count = 0
@@ -321,7 +321,7 @@ class LinearChainCRF():
         print('Performance: %f' % (correct_count/total_count))
 
     def print_test_result(self, test_corpus_filename):
-        test_data = self._read_corpus(test_corpus_filename)
+        test_data, _ = read_corpus(test_corpus_filename)
 
         for X, Y in test_data:
             Yprime = self.inference(X)
@@ -374,16 +374,18 @@ class LinearChainCRF():
                  "num_features": self.feature_set.num_features,
                  "labels": self.feature_set.label_array,
                  "params": list(self.params)}
-        f = open(model_filename, 'w')
-        json.dump(model, f, ensure_ascii=False, indent=2, separators=(',', ':'))
-        f.close()
-        import os
+        joblib.dump(model, model_filename)
+        # f = open(model_filename, 'w')
+        # json.dump(model, f, ensure_ascii=False, indent=2, separators=(',', ':'))
+        # f.close()
         print('* Trained CRF Model has been saved at "%s/%s"' % (os.getcwd(), model_filename))
 
     def load(self, model_filename):
-        f = open(model_filename)
-        model = json.load(f)
-        f.close()
+        # f = open(model_filename)
+        # model = json.load(f)
+        # f.close()
+
+        model = joblib.load(model_filename)
 
         self.feature_set = FeatureSet()
         self.feature_set.load(model['feature_dic'], model['num_features'], model['labels'])

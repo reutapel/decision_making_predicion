@@ -74,7 +74,7 @@ class CreateSaveData:
                  features_file_type: str='', use_all_history: bool = False, use_all_history_text_average: bool = False,
                  no_text: bool=False, use_score: bool=False, use_prev_round_text: bool=True,
                  use_all_history_text: bool=False, use_all_history_average: bool = False,
-                 predict_first_round: bool=False):
+                 predict_first_round: bool=False, use_crf: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -93,6 +93,7 @@ class CreateSaveData:
         :param use_all_history_text: if to use all the history text features
         :param use_all_history_text_average: if to use the history text as average over all the history
         :param predict_first_round: if we want to predict the data of the first round
+        :param use_crf: if we create data for crf model
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -158,6 +159,7 @@ class CreateSaveData:
         self.total_payoff_label = total_payoff_label
         self.label = label
         self.use_seq = use_seq
+        self.use_crf = use_crf
         self.use_prev_round = use_prev_round
         self.use_manual_features = use_manual_features
         self.number_of_rounds = 10  # if self.use_seq else 1
@@ -182,6 +184,7 @@ class CreateSaveData:
         # create file names:
         file_name_component = [f'{self.label}_label_',
                                'seq_' if self.use_seq else '',
+                               'crf_' if self.use_crf else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
                                f'all_history_features_' if self.use_all_history else '',
@@ -554,6 +557,98 @@ class CreateSaveData:
 
         return
 
+    def create_manual_features_crf_data(self):
+        """
+        This function create 10 samples with different length from each pair data raw for crf model
+        :return:
+        """
+
+        print(f'Start creating sequences with different lengths and concat for crf')
+        logging.info('Start creating sequences with different lengths and concat for crf')
+
+        columns_to_use = ['previous_round_lottery_result_low', 'previous_round_lottery_result_med1',
+                          'previous_round_lottery_result_high', 'previous_average_score_low',
+                          'previous_round_lottery_result_med1', 'previous_average_score_high']
+
+        all_columns = self.reviews_features.columns.to_list() + columns_to_use
+        all_columns.remove('review_id')
+        file_name = f'features_{self.base_file_name}'
+        pd.DataFrame(all_columns).to_excel(os.path.join(data_directory, f'{file_name}.xlsx'), index=True)
+
+        if self.reviews_features.shape[1] > 2:  # if the review_features is in one column - no need to create it
+            # create features as one column with no.array for NN models
+            temp_features = self.reviews_features.copy().drop('review_id', axis=1)
+            self.reviews_features = self.reviews_features.assign(review_features='')
+            for i in self.reviews_features.index:
+                self.reviews_features.at[i, 'review_features'] = np.array(temp_features.values)[i]
+        self.reviews_features = self.reviews_features[['review_id', 'review_features']]
+        # first merge for the review_id for the current round
+        data_for_pairs = self.data.merge(self.reviews_features, left_on='review_id', right_on='review_id', how='left')
+        data_for_pairs = data_for_pairs.drop('review_id', axis=1)
+
+        for pair in self.pairs:
+            # get a row with the subsession_round_number and one with the group_sender_answer_reviews
+            # self.use_seq: sample use all rounds data
+            print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
+            data_column = dict()
+            data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair]
+            pair_id = data_for_pairs.loc[data_for_pairs.pair_id == pair].pair_id.reset_index(drop=True)
+            all_features_pair = list()
+            for index, row in data_pair.iterrows():
+                all_features_pair.append(list(np.append(row.review_features, row[columns_to_use])))
+            # create df with list of vectors in each cell
+            data_pair_df = pd.DataFrame(pd.Series(all_features_pair)).transpose()
+            data_pair_df.columns = list(range(10))
+            # duplicate the values to create seq
+            for col in data_pair_df.columns:
+                data_column[f'features_{col+1}'] =\
+                    np.concatenate([np.repeat(data_pair_df[col].values, self.number_of_rounds-col),
+                                    np.repeat(np.nan, col)])
+            data = pd.DataFrame(data_column)
+
+            # TODO: continue from here
+            # add labels column
+            if self.total_payoff_label:  # TODO: change it
+                # Create label that will be the expert's total payoff over the 10 trails for all the pair's data
+                # (with different seq lengths)
+                data['label'] = self.data.loc[self.data.pair_id == pair]['total_exp_payoff'].unique()[0]
+            else:
+                if self.label == 'single_round':
+                    # the label is the exp_payoff of the current round - 1 or -1
+                    single_label = pd.Series(np.where(data_pair.exp_payoff == 1, 1, -1))
+                    labels = pd.DataFrame(pd.Series(
+                        [single_label.iloc[:self.number_of_rounds - i].values.tolist() for i in range(10)]),
+                        columns=['labels'])
+                    data = data.merge(labels, right_index=True, left_index=True)
+
+                else:  # the label is the total payoff
+                    # TODO: change it
+                    columns = [f'exp_payoff_{i}' for i in range(self.number_of_rounds)]
+                    data['label'] = (self.data.loc[self.data.pair_id == pair]['total_exp_payoff'].unique()[0] - data[
+                        columns].sum(axis=1)) / (self.number_of_rounds - data['k_size'])
+
+            if self.label == 'next_percent':
+                # TODO: change it
+                data['label'] = data['label']*100
+
+            # add pair id
+            data = data.merge(pair_id, right_index=True, left_index=True)
+            # concat to all data
+            self.final_data = pd.concat([self.final_data, data], axis=0, ignore_index=True)
+
+        file_name = f'all_data_{self.base_file_name}'
+        print(f'{time.asctime(time.localtime(time.time()))}: Save all data')
+        save_data = self.final_data.drop(['pair_id'], axis=1)
+        save_data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
+        joblib.dump(save_data, os.path.join(data_directory, f'{file_name}.pkl'))
+
+        print(f'{time.asctime(time.localtime(time.time()))}:'
+              f'Finish creating sequences with different lengths and concat with manual features for the text')
+        logging.info(f'{time.asctime(time.localtime(time.time()))}:'
+                     f'Finish creating sequences with different lengths and concat features for the text')
+
+        return
+
     def create_seq_data(self):
         """
         This function create 10 samples with different length from each pair data raw
@@ -690,6 +785,8 @@ class CreateSaveData:
             # save 10 sequences per pair
 
             file_name = f'{data_name}_data_1_{self.number_of_rounds}_{self.base_file_name}'
+            if self.use_crf:
+                data = data.drop(['pair_id'], axis=1)
             data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
             joblib.dump(data, os.path.join(data_directory, f'{file_name}.pkl'))
             # save 9 sequences per pair
@@ -717,15 +814,15 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'bert_embedding'
+    features_to_use = 'manual_binary_features'
     # label can be single_round or total_payoff
     conditions_dict = {
-        'verbal': {'use_prev_round': True,
-                   'use_prev_round_text': True,
+        'verbal': {'use_prev_round': False,
+                   'use_prev_round_text': False,
                    'use_manual_features': True,
-                   'use_all_history_average': True,
+                   'use_all_history_average': False,
                    'use_all_history': False,
-                   'use_all_history_text_average': True,
+                   'use_all_history_text_average': False,
                    'use_all_history_text': False,
                    'no_text': False,
                    'use_score': False,
@@ -744,12 +841,13 @@ def main():
                     'label': 'future_total_payoff'}
     }
     use_seq = False
+    use_crf = True
     create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=False,
                                           label=conditions_dict[condition]['label'],
                                           use_seq=use_seq, use_prev_round=conditions_dict[condition]['use_prev_round'],
                                           use_manual_features=conditions_dict[condition]['use_manual_features'],
                                           features_file_type=features_files[features_to_use],
-                                          features_file=features_to_use,
+                                          features_file=features_to_use, use_crf=use_crf,
                                           use_all_history=conditions_dict[condition]['use_all_history'],
                                           use_all_history_average=conditions_dict[condition]['use_all_history_average'],
                                           use_all_history_text_average=conditions_dict[condition]
@@ -761,8 +859,10 @@ def main():
                                           predict_first_round=conditions_dict[condition]['predict_first_round'],)
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
-        if create_save_data_obj.use_seq:
+        if use_seq:
             create_save_data_obj.create_manual_features_seq_data()
+        elif use_crf:
+            create_save_data_obj.create_manual_features_crf_data()
         else:
             create_save_data_obj.create_manual_features_data()
     else:
@@ -771,7 +871,7 @@ def main():
         else:
             create_save_data_obj.create_manual_features_data()
 
-    if use_seq:  # for not NN models - no need train and test --> use cross validation
+    if use_seq or use_crf:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()
     else:
         train_test_simple_features_model(create_save_data_obj.base_file_name,

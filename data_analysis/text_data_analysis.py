@@ -9,15 +9,14 @@ from typing import *
 import logging
 from matplotlib.font_manager import FontProperties
 import math
-from data_analysis.data_analysis import create_chart_bars, create_statistics, create_point_plot, create_histogram,\
-    create_bar_from_df
+from data_analysis import create_chart_bars, create_statistics, create_point_plot, create_histogram, create_bar_from_df
 
 
 base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'numeric'
+condition_directory = 'verbal'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -253,8 +252,22 @@ class DataAnalysis:
                      (self.results_payments.chose_most_average_close == 0), 1, 0)
 
         self.results_payments.to_csv(os.path.join(data_analysis_directory, 'results_payments_status.csv'))
+        hotels_numerical_values = self.results_payments.groupby(by='hotel_id').agg(
+            {'not_chose_closer_average_or_median': 'sum', 'chose_most_average_close': 'sum',
+             'chose_median_score': 'sum', 'group_sender_answer_scores': 'mean', 'group_average_score': 'mean',
+             'group_median_score': 'mean'})
+        hotels_numerical_values.group_sender_answer_scores = hotels_numerical_values.group_sender_answer_scores.round(2)
+        hotels_numerical_values.columns = ['number of experts did not choose median or average',
+                                           'number of experts chose the score closest to the average',
+                                           'number of experts chose the median score', 'experts average advice',
+                                           'hotel average score', 'hotel median score']
+        hotels_numerical_values['advice bias from average'] = hotels_numerical_values['experts average advice'] -\
+                                                              hotels_numerical_values['hotel average score']
+        hotels_numerical_values['advice bias from median'] = hotels_numerical_values['experts average advice'] -\
+                                                              hotels_numerical_values['hotel median score']
+        hotels_numerical_values.to_csv(os.path.join(data_analysis_directory, 'hotels_numerical_values.csv'))
 
-        return 
+        return
 
     def set_player_partner_timeout_answer(self):
         """
@@ -289,11 +302,11 @@ class DataAnalysis:
         self.results_payments = self.results_payments.sort_values(by=['pair_id', 'subsession_round_number'])
         self.results_payments['previous_round_lottery_result'] = self.results_payments.group_lottery_result.shift(2)
         self.results_payments['previous_round_lottery_result_low'] =\
-            np.where(self.results_payments.previous_round_lottery_result < 3, 1, -1)
+            np.where(self.results_payments.previous_round_lottery_result < 3, 1, 0)
         self.results_payments['previous_round_lottery_result_med1'] = \
-            np.where(self.results_payments.previous_round_lottery_result.between(3, 5), 1, -1)
+            np.where(self.results_payments.previous_round_lottery_result.between(3, 5), 1, 0)
         self.results_payments['previous_round_lottery_result_high'] =\
-            np.where(self.results_payments.previous_round_lottery_result >= 8, 1, -1)
+            np.where(self.results_payments.previous_round_lottery_result >= 8, 1, 0)
         self.results_payments.loc[
             self.results_payments.subsession_round_number == 1, 'previous_round_lottery_result'] = np.nan
         self.results_payments.loc[
@@ -309,11 +322,11 @@ class DataAnalysis:
         # set the average score from the previous round
         self.results_payments['previous_average_score'] = self.results_payments.group_average_score.shift(2)
         self.results_payments['previous_average_score_low'] = \
-            np.where(self.results_payments.previous_average_score < 3, 1, -1)
+            np.where(self.results_payments.previous_average_score < 3, 1, 0)
         self.results_payments['previous_average_score_med1'] = \
-            np.where(self.results_payments.previous_average_score.between(3, 5), 1, -1)
+            np.where(self.results_payments.previous_average_score.between(3, 5), 1, 0)
         self.results_payments['previous_average_score_high'] = \
-            np.where(self.results_payments.previous_average_score >= 8, 1, -1)
+            np.where(self.results_payments.previous_average_score >= 8, 1, 0)
         self.results_payments.loc[
             self.results_payments.subsession_round_number == 1, 'previous_average_score_low'] = np.nan
         self.results_payments.loc[
@@ -323,9 +336,9 @@ class DataAnalysis:
 
         # set the score from the previous round
         self.results_payments['previous_score'] = self.results_payments.group_sender_answer_scores.shift(2)
-        self.results_payments['previous_score_low'] = np.where(self.results_payments.previous_score < 3, 1, -1)
-        self.results_payments['previous_score_med1'] = np.where(self.results_payments.previous_score.between(3, 5), 1, -1)
-        self.results_payments['previous_score_high'] = np.where(self.results_payments.previous_score >= 8, 1, -1)
+        self.results_payments['previous_score_low'] = np.where(self.results_payments.previous_score < 3, 1, 0)
+        self.results_payments['previous_score_med1'] = np.where(self.results_payments.previous_score.between(3, 5), 1, 0)
+        self.results_payments['previous_score_high'] = np.where(self.results_payments.previous_score >= 8, 1, 0)
         self.results_payments.loc[
             self.results_payments.subsession_round_number == 1, 'previous_score_low'] = np.nan
         self.results_payments.loc[
@@ -357,13 +370,13 @@ class DataAnalysis:
         :return:
         """
         # create bins for the group_lottery_result and group_average_score
-        self.results_payments['lottery_result_low'] = np.where(self.results_payments.group_lottery_result < 3, 1, -1)
+        self.results_payments['lottery_result_low'] = np.where(self.results_payments.group_lottery_result < 3, 1, 0)
         self.results_payments['lottery_result_med1'] =\
-            np.where(self.results_payments.group_lottery_result.between(3, 5), 1, -1)
-        self.results_payments['lottery_result_high'] = np.where(self.results_payments.group_lottery_result >= 8, 1, -1)
-        self.results_payments['lottery_result_lose'] = np.where(self.results_payments.group_lottery_result < 8, 1, -1)
-        self.results_payments['average_score_low'] = np.where(self.results_payments.group_average_score < 5, 1, -1)
-        self.results_payments['average_score_high'] = np.where(self.results_payments.group_average_score >= 8, 1, -1)
+            np.where(self.results_payments.group_lottery_result.between(3, 5), 1, 0)
+        self.results_payments['lottery_result_high'] = np.where(self.results_payments.group_lottery_result >= 8, 1, 0)
+        self.results_payments['lottery_result_lose'] = np.where(self.results_payments.group_lottery_result < 8, 1, 0)
+        self.results_payments['average_score_low'] = np.where(self.results_payments.group_average_score < 5, 1, 0)
+        self.results_payments['average_score_high'] = np.where(self.results_payments.group_average_score >= 8, 1, 0)
 
         return
 
@@ -373,7 +386,7 @@ class DataAnalysis:
         :return:
         """
 
-        self.results_payments['10_result'] = np.where(self.results_payments.group_lottery_result == 10, 1, -1)
+        self.results_payments['10_result'] = np.where(self.results_payments.group_lottery_result == 10, 1, 0)
         columns_to_calc = ['group_lottery_result', 'group_sender_payoff', 'lottery_result_high', 'chose_lose',
                            'chose_earn', 'not_chose_lose', 'not_chose_earn', '10_result']
         rename_columns = ['lottery_result', 'decisions', 'lottery_result_high', 'chose_lose', 'chose_earn',
@@ -503,9 +516,9 @@ class DataAnalysis:
             self.results_payments.merge(time_spent_to_merge[['participant_code', 'seconds_on_page',
                                                              'subsession_round_number']],
                                         on=['participant_code', 'subsession_round_number'], how='left')
-        self.results_payments['time_spent_low'] = np.where(self.results_payments.seconds_on_page < 15, 1, -1)
-        self.results_payments['time_spent_med'] = np.where(self.results_payments.seconds_on_page.between(15, 29), 1, -1)
-        self.results_payments['time_spent_high'] = np.where(self.results_payments.seconds_on_page >= 30, 1, -1)
+        self.results_payments['time_spent_low'] = np.where(self.results_payments.seconds_on_page < 15, 1, 0)
+        self.results_payments['time_spent_med'] = np.where(self.results_payments.seconds_on_page.between(15, 29), 1, 0)
+        self.results_payments['time_spent_high'] = np.where(self.results_payments.seconds_on_page >= 30, 1, 0)
 
         return
 
@@ -938,7 +951,7 @@ class DataAnalysis:
                                                                           'subsession_round_number': 'count'})
         experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_use_average'] = experts_sum.use_average / experts_sum.subsession_round_number
-        experts_sum['use_average_prob_status'] = np.where(experts_sum.pct_use_average >= 0.6, 1, -1)
+        experts_sum['use_average_prob_status'] = np.where(experts_sum.pct_use_average >= 0.6, 1, 0)
         use_average_participants = experts_sum.loc[experts_sum.use_average_prob_status == 1].index.tolist()
         self.results_payments.loc[self.results_payments.participant_code.isin(use_average_participants), 'prob_status']\
             += 'use_average'
@@ -1366,7 +1379,8 @@ class DataAnalysis:
                         'hotel_id', 'subsession_round_number', 'group_average_score', 'group_median_score',
                         'all_review_len', 'positive_review_len', 'negative_review_len',
                         'positive_negative_review_len_prop', 'previous_round_lottery_result', 'previous_round_decision',
-                        'review_id']
+                        'review_id', 'previous_chose_lose', 'previous_chose_earn', 'previous_not_chose_lose',
+                        'previous_not_chose_earn']
         review_id_data = pd.DataFrame()
         round_number_lists = [[i] for i in range(1, 11)]
         round_number_lists.append(list(range(1, 11)))
@@ -1415,7 +1429,8 @@ class DataAnalysis:
                                        title=f'% DM entered per {column} for condition {self.condition} and gender '
                                              f'{self.gender} and rounds {round_number}',
                                        curr_date_directory=data_analysis_directory, add_text_label=True)
-                elif column in ['review_id', 'positive_review_len', 'negative_review_len', 'all_review_len'] or\
+                elif column in ['review_id', 'positive_review_len', 'negative_review_len', 'all_review_len',
+                                'previous_round_lottery_result', 'positive_negative_review_len_prop'] or\
                         'history' in column:
                     data = pd.DataFrame(data_groupby['pct participant'])
                     print(f'column is: {column}')
@@ -1740,15 +1755,54 @@ class DataAnalysis:
                            max_height=median_vs_average.max().max(), label_rotation='horizontal')
         print(f'Bias of experts answer from the average score in all rounds is: '
               f'{expert_data.bias_from_most_close_avg.mean().round(2)}')
-        expert_choices = expert_data.groupby(by='subsession_round_number').bias_from_most_close_avg.mean()
-        expert_choices = expert_choices.round(2)
 
-        create_bar_from_df(data=expert_choices, xlabel='Round Number', ylabel='Average Bias',
-                           add_table=False, rot=False, convert_to_int=False,
-                           title=f'Bias of experts answer from the average score vs round number for '
-                                 f'{self.condition} condition and {self.gender}',
-                           curr_date_directory=data_analysis_directory, add_text_label=True,
-                           max_height=expert_choices.max(), label_rotation='horizontal')
+        for column in ['subsession_round_number', 'hotel_id']:
+            expert_choices = expert_data.groupby(by=column).bias_from_most_close_avg.mean()
+            expert_choices = expert_choices.round(2)
+
+            create_bar_from_df(data=expert_choices, xlabel=column, ylabel='Average Bias',
+                               add_table=False, rot=False, convert_to_int=False,
+                               title=f'Bias of experts answer from the average score vs {column} for '
+                                     f'{self.condition} condition and {self.gender}',
+                               curr_date_directory=data_analysis_directory, add_text_label=True,
+                               max_height=expert_choices.max(), label_rotation='horizontal')
+
+    def dm_entered_per_review_features(self):
+        """
+        This function compare the % of decision makers that chose the hotel option per feature from the
+        text features I extracted from the reviws
+        :return:
+        """
+        manual_features = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
+                                        'language_prediction/data/verbal/manual_binary_features.xlsx')
+        data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
+                                                (self.results_payments.player_id_in_group == 2) &
+                                                (self.results_payments.status == 'play')][
+            ['subsession_round_number', 'review_id', 'group_sender_payoff']]
+        data_to_use.review_id = data_to_use.review_id.astype(int)
+        data_to_use = data_to_use.merge(manual_features, how='left', on='review_id')
+        columns_to_compare = list(manual_features.columns)
+        columns_to_compare.remove('review_id')
+        columns_to_compare.remove('review')
+
+        round_number_lists = list()  # [[i] for i in range(1, 11)]
+        round_number_lists.append(list(range(1, 11)))
+        data_dict = dict()
+        for column in columns_to_compare:
+            for round_number in round_number_lists:
+                curr_data_to_use = data_to_use.loc[data_to_use.subsession_round_number.isin(round_number)]
+                curr_data_to_use = curr_data_to_use.groupby(by=column).group_sender_payoff.mean()
+                curr_data_to_use = curr_data_to_use.round(2)
+                create_bar_from_df(data=curr_data_to_use, xlabel=column, ylabel='% of participants',
+                                   add_table=False, rot=False, max_height=curr_data_to_use.max(),
+                                   title=f'% DM entered based on {column} for condition {self.condition} and gender '
+                                         f'{self.gender} and rounds {round_number}', label_rotation='horizontal',
+                                   curr_date_directory=data_analysis_directory, add_text_label=True)
+                data_dict[column] = curr_data_to_use
+        data_df = pd.DataFrame(data_dict, index=[0, 1])
+        data_df.to_csv(os.path.join(data_analysis_directory,
+                                    f'% DM entered based on review features for condition {self.condition} and gender '
+                                    f'{self.gender}.csv'))
 
 
 def main(main_gender='all genders', main_condition='all_condition'):
@@ -1758,6 +1812,7 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
     data_analysis_obj.average_most_close_hotel_id()
+    data_analysis_obj.dm_entered_per_review_features()
     data_analysis_obj.expert_answer_vs_average_score()
     data_analysis_obj.analyze_dm_payoff()
     data_analysis_obj.expert_answer_vs_ep()
