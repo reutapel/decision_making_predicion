@@ -8,8 +8,8 @@ import math
 from data_analysis import autolabel
 
 """score evaluation task"""
-data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/data_analysis/results/text_exp_2_tests/'
-                     'score evaluation task.xlsx', sheet_name='data_to_plot')
+data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
+                     'results/text_exp_2_tests/score evaluation task.xlsx', sheet_name='data_to_plot')
 reviews = data.review_id.unique()
 colors = (list(mcolors.BASE_COLORS.keys()) + list(mcolors.TABLEAU_COLORS.keys()))
 colors.remove('tab:olive')
@@ -119,7 +119,7 @@ ax.scatter([all_x_points], [all_y_points], color='black', marker=".")
 # the_table.set_fontsize(8)
 
 
-plt.title('Estimation of Text Understanding')
+plt.title('How Well do Humans Understand Text?')
 plt.xlabel('Participants Average Evaluation')
 plt.ylabel('Reviews Original Score')
 plt.xticks(range(3, 11))
@@ -172,7 +172,7 @@ ax1.plot(x, y1, color=colors[0], label='Numerical Condition', marker=markers[0],
 ax1.plot(x, y2, color=colors[1], label='Verbal Condition', marker=markers[0], linestyle='-')
 ax1.plot(x, x, color='darkblue', marker=markers[0], linestyle='-', label='Truth Telling')
 
-plt.title('The Communication Type Effect on the Experts Cheating Level')
+plt.title("The Experts' Cheating Level in Both Experiment Conditions")
 plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
 plt.ylabel('Expert Average Signal', fontsize=15)
 ax1.legend()

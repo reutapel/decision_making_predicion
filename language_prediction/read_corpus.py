@@ -19,7 +19,9 @@ def read_conll_corpus(filename):
     element_size = 0
     x = list()
     y = list()
+    counter = 0
     for data_string in data_string_list:
+        counter += 1
         words = data_string.strip().split()
         if len(words) is 0:
             data.append((x, y))
@@ -35,14 +37,16 @@ def read_conll_corpus(filename):
     if len(x) > 0:
         data.append((x, y))
 
+    print(f'\n* Number of data points: {counter}')
+
     return data
 
 
-def read_verbal_exp_data(filename, features_filename):
+def read_verbal_exp_data(filename, pair_ids: list=None):
     """
     Read data of the verbal experiments
-    :param filename:
-    :param features_filename
+    :param filename: the data file name
+    :param pair_ids: list of pair ids in the case of cross validation
     :return:
     """
     data = list()
@@ -56,9 +60,16 @@ def read_verbal_exp_data(filename, features_filename):
         print('Data format is not csv or csv or pkl')
         return
 
+    if pair_ids is not None:
+        data_df = data_df.loc[data_df.pair_id.isin(pair_ids)]
+        data_df = data_df.drop(['pair_id'], axis=1)
+    else:
+        if 'pair_id' in data_df.columns:
+            data_df = data_df.drop(['pair_id'], axis=1)
+
     for row_number, (index, row) in enumerate(data_df.iterrows()):
-        if row_number == 30:
-            break
+        # if row_number == 30:
+        #     break
         x = list()
         y = row['labels']
         for i in range(1, 11):
@@ -66,13 +77,22 @@ def read_verbal_exp_data(filename, features_filename):
                 x.append(row[f'features_{i}'])
         data.append((x, y))
 
-    print(f'\n* Number of data points: {row_number}')
+    print(f'\n* Number of data points: {row_number+1}')
 
-    if 'train' in filename and features_filename is not None:  # if train time - load the features names
+    return data
+
+
+def read_feature_names(features_filename=None):
+    """
+    Read the names of the features to use
+    :param features_filename:
+    :return:
+    """
+    if features_filename is not None:
         features_names = pd.read_excel(features_filename)
         features_names = features_names[0].values.tolist()
     else:
         features_names = None
 
-    return data, features_names
+    return features_names
 

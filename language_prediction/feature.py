@@ -68,20 +68,21 @@ def default_feature_func(_, x, t):
 
 
 class FeatureSet():
-    feature_dic = dict()
-    observation_set = set()
-    empirical_counts = Counter()
-    num_features = 0
-
-    label_dic = {STARTING_LABEL: STARTING_LABEL_INDEX}
-    label_array = [STARTING_LABEL]
-
-    feature_func = default_feature_func
-
     def __init__(self, feature_func=None, features_names=None):
         # Sets a custom feature function.
         if feature_func is not None:
             self.feature_func = feature_func(features_names)
+        else:
+            self.feature_func = default_feature_func
+        self.feature_dic = dict()
+        self.observation_set = set()
+        self.empirical_counts = Counter()
+        self.num_features = 0
+
+        self.label_dic = {STARTING_LABEL: STARTING_LABEL_INDEX}
+        self.label_array = [STARTING_LABEL]
+
+        return
 
     def scan(self, data):
         """
@@ -105,11 +106,13 @@ class FeatureSet():
                 self._add(prev_y, len_y, x, t)
                 prev_y = len_y
 
-    def load(self, feature_dic, num_features, label_array):
+    def load(self, feature_dic, num_features, label_array, empirical_counts, observation_set):
         self.num_features = num_features
         self.label_array = label_array
         self.label_dic = {label: i for label, i in enumerate(label_array)}
         self.feature_dic = self.deserialize_feature_dic(feature_dic)
+        self.empirical_counts = empirical_counts
+        self.observation_set = observation_set
 
     def __len__(self):
         return self.num_features

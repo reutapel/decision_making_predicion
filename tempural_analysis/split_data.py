@@ -7,14 +7,15 @@ import math
 
 
 def get_folds_per_participant(data: pd.DataFrame, k_folds: int=5, index_to_use: list=None,
-                              col_to_group: str='participant_code') -> pd.DataFrame:
+                              col_to_group: str='participant_code', col_to_group_in_df: bool=False) -> pd.DataFrame:
     """
     This function split the data to k folds, such that each participant will be in one fold only
     :param data: all the data to use
     :param k_folds: number of folds to split the data
     :param index_to_use: list of indexes to use --> after remove the first trials for window_size > 0
     :param col_to_group: the column to split the samples by (participant_code or pair)
-    :return: data with a fold_number column
+    :param col_to_group_in_df: if we want to return the col_to_group or not
+    :return: data with a fold_number column for each index in data
     """
 
     participants = pd.DataFrame(data[col_to_group].unique(), columns=[col_to_group])
@@ -25,6 +26,9 @@ def get_folds_per_participant(data: pd.DataFrame, k_folds: int=5, index_to_use: 
     for k in range(k_folds):
         participants.loc[participants[col_to_group].isin(
             [x for i, x in enumerate(participants_list) if i % k_folds == k]), 'fold_number'] = k
+
+    if col_to_group_in_df:
+        return participants
 
     participants = data.merge(participants)
     participants.index = data.index

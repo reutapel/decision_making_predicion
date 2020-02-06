@@ -606,7 +606,6 @@ class CreateSaveData:
                                     np.repeat(np.nan, col)])
             data = pd.DataFrame(data_column)
 
-            # TODO: continue from here
             # add labels column
             if self.total_payoff_label:  # TODO: change it
                 # Create label that will be the expert's total payoff over the 10 trails for all the pair's data
@@ -616,6 +615,7 @@ class CreateSaveData:
                 if self.label == 'single_round':
                     # the label is the exp_payoff of the current round - 1 or -1
                     single_label = pd.Series(np.where(data_pair.exp_payoff == 1, 1, -1))
+                    # single_label = data_pair.subsession_round_number
                     labels = pd.DataFrame(pd.Series(
                         [single_label.iloc[:self.number_of_rounds - i].values.tolist() for i in range(10)]),
                         columns=['labels'])
@@ -638,7 +638,8 @@ class CreateSaveData:
 
         file_name = f'all_data_{self.base_file_name}'
         print(f'{time.asctime(time.localtime(time.time()))}: Save all data')
-        save_data = self.final_data.drop(['pair_id'], axis=1)
+        # save_data = self.final_data.drop(['pair_id'], axis=1)
+        save_data = self.final_data
         save_data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
         joblib.dump(save_data, os.path.join(data_directory, f'{file_name}.pkl'))
 
