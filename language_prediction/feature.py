@@ -67,7 +67,7 @@ def default_feature_func(_, x, t):
     return features
 
 
-class FeatureSet():
+class FeatureSet:
     def __init__(self, feature_func=None, features_names=None):
         # Sets a custom feature function.
         if feature_func is not None:

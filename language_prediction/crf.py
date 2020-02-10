@@ -282,7 +282,7 @@ class LinearChainCRF():
         print('* Likelihood: %s' % str(log_likelihood))
 
     def train(self, corpus_filename, model_filename, features_filename=None, vector_rep_input: bool=True,
-              pair_ids:list=None):
+              pair_ids: list=None):
         """
         Estimates parameters using conjugate gradient methods.(L-BFGS-B used)
         :param corpus_filename: the data file name
@@ -322,13 +322,15 @@ class LinearChainCRF():
         print('* Elapsed time: %f' % elapsed_time)
         print('* [%s] Training done' % datetime.datetime.now())
 
-    def test(self, test_corpus_filename, predict_only_last=False, pair_ids: list=None, fold_num: int=None):
+    def test(self, test_corpus_filename, predict_only_last=False, pair_ids: list=None, fold_num: int=None,
+             use_viterbi_fix_history: bool=None):
         """
         Test the model
         :param test_corpus_filename: the test data filename
         :param predict_only_last: if we want to predict only the last round in the seq
         :param pair_ids: list of pair ids in the case of cross validation
         :param fold_num: if running cross validation this is the fold for test
+        :param use_viterbi_fix_history: if we want ot use the viterbi_fix_history function
         :return:
         """
         if self.params is None:
@@ -338,10 +340,18 @@ class LinearChainCRF():
             print(f'Start testing on fold {fold_num}')
         test_data = read_corpus(test_corpus_filename, pair_ids)
 
+        if use_viterbi_fix_history is None:
+            use_viterbi_fix_history = predict_only_last
+
+        if use_viterbi_fix_history:
+            print('Use viterbi_fix_history')
+        else:
+            print('Use Viterbi')
+
         total_count = 0
         correct_count = 0
         for x, y in test_data:
-            y_prime = self.inference(x, y, predict_only_last)
+            y_prime = self.inference(x, y, use_viterbi_fix_history)
             if predict_only_last:
                 total_count += 1
                 if y[len(y)-1] == y_prime[len(y)-1]:
@@ -375,13 +385,13 @@ class LinearChainCRF():
                 print('%s\t%s\t%s' % ('\t'.join(x[t]), y[t], y_prime[t]))
             print()
 
-    def inference(self, x, y=None, predict_only_last=False):
+    def inference(self, x, y=None, use_viterbi_fix_history=None):
         """
         Finds the best label sequence.
         """
         potential_table = _generate_potential_table(self.params, self.num_labels,
                                                     self.feature_set, x, inference=True)
-        if predict_only_last:
+        if use_viterbi_fix_history:
             return self.viterbi_fix_history(x, potential_table, y)
         else:
             return self.viterbi(x, potential_table)

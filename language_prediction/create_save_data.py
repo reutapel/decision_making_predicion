@@ -361,6 +361,11 @@ class CreateSaveData:
                             data = data.merge(self.reviews_features, on='review_id', how='left')
                         data = data.merge(history_reviews, on='review_id', how='left')
 
+                    else:
+                        temp_reviews =\
+                            self.data.loc[self.data.pair_id == pair][['review_id', 'subsession_round_number']]
+                        data = temp_reviews.merge(self.reviews_features, on='review_id', how='left')
+
                 data = data.drop('review_id', axis=1)
                 # first merge for the review_id for the previous round
                 if self.use_prev_round_text:
@@ -408,7 +413,8 @@ class CreateSaveData:
             self.final_data = pd.concat([self.final_data, data], axis=0, ignore_index=True)
 
         file_name = f'all_data_{self.base_file_name}'
-        self.final_data = self.final_data.drop('subsession_round_number', axis=1)
+        if 'subsession_round_number' in self.final_data.columns:
+            self.final_data = self.final_data.drop('subsession_round_number', axis=1)
         # sort columns according to the round number
         if self.use_all_history_text or self.use_all_history:
             columns_to_sort = list(self.final_data.columns)
@@ -557,9 +563,10 @@ class CreateSaveData:
 
         return
 
-    def create_manual_features_crf_data(self):
+    def create_manual_features_crf_data(self, features_to_drop: list=None):
         """
         This function create 10 samples with different length from each pair data raw for crf model
+        :param features_to_drop: a list of features to drop
         :return:
         """
 
@@ -570,6 +577,8 @@ class CreateSaveData:
                           'previous_round_lottery_result_high', 'previous_average_score_low',
                           'previous_round_lottery_result_med1', 'previous_average_score_high']
 
+        if features_to_drop is not None:
+            self.reviews_features = self.reviews_features.drop(features_to_drop, axis=1)
         all_columns = self.reviews_features.columns.to_list() + columns_to_use
         all_columns.remove('review_id')
         file_name = f'features_{self.base_file_name}'
@@ -838,7 +847,7 @@ def main():
                     'use_all_history_text': True,
                     'no_text': True,
                     'use_score': True,
-                    'predict_first_round': False,
+                    'predict_first_round': True,
                     'label': 'future_total_payoff'}
     }
     use_seq = False
@@ -863,7 +872,12 @@ def main():
         if use_seq:
             create_save_data_obj.create_manual_features_seq_data()
         elif use_crf:
-            create_save_data_obj.create_manual_features_crf_data()
+            create_save_data_obj.create_manual_features_crf_data(features_to_drop=
+                                                                 ['topic_room_positive',
+                                                                  'negative_buttom_line_recommendation', 'list',
+                                                                  'use_extreme_positive_words_1',
+                                                                  'topic_location_negative', 'topic_food_positive']
+                                                                 )
         else:
             create_save_data_obj.create_manual_features_data()
     else:
@@ -874,10 +888,10 @@ def main():
 
     if use_seq or use_crf:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()
-    else:
-        train_test_simple_features_model(create_save_data_obj.base_file_name,
-                                         f'all_data_{create_save_data_obj.base_file_name}.pkl', backward_search=False,
-                                         inner_data_directory=data_directory),
+    # else:
+    #     train_test_simple_features_model(create_save_data_obj.base_file_name,
+    #                                      f'all_data_{create_save_data_obj.base_file_name}.pkl', backward_search=False,
+    #                                      inner_data_directory=data_directory),
 
 
 if __name__ == '__main__':

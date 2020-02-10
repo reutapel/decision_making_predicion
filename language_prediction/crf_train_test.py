@@ -8,10 +8,13 @@ from datetime import datetime
 from tempural_analysis.split_data import get_folds_per_participant
 import joblib
 import pandas as pd
+import random
 
 base_directory = os.path.abspath(os.curdir)
-model_name = 'chunking_small'
+model_name = 'verbal'
 data_directory = os.path.join(base_directory, 'data', model_name)
+
+random.seed(1)
 
 
 def main(test=False, cv=False, test_chunking=False):
@@ -37,6 +40,7 @@ def main(test=False, cv=False, test_chunking=False):
         if test:
             crf.load(args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
             crf.test(args.testdatafile, predict_only_last=False)
+
     else:
         vector_rep_input = True
         if not cv:
@@ -55,6 +59,7 @@ def main(test=False, cv=False, test_chunking=False):
             if test:
                 crf.load(args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
                 crf.test(args.testdatafile, predict_only_last=True)
+
         else:
             args = parser.parse_args([
                 os.path.join(data_directory, 'all_data_single_round_label_crf_manual_binary_features_verbal_data.pkl'),
@@ -97,7 +102,8 @@ def main(test=False, cv=False, test_chunking=False):
                 if test:
                     crf.load(args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
                     correct_count, total_count =\
-                        crf.test(args.traindatafile, predict_only_last=True, pair_ids=test_pair_ids, fold_num=fold)
+                        crf.test(args.traindatafile, predict_only_last=True, pair_ids=test_pair_ids, fold_num=fold,
+                                 use_viterbi_fix_history=False)
                     all_correct_count += correct_count
                     all_total_count += total_count
 
