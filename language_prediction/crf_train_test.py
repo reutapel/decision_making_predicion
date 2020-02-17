@@ -9,10 +9,19 @@ from tempural_analysis.split_data import get_folds_per_participant
 import joblib
 import pandas as pd
 import random
+import logging
 
 base_directory = os.path.abspath(os.curdir)
-model_name = 'verbal'
+model_name = 'verbal'  # 'chunking_small'
 data_directory = os.path.join(base_directory, 'data', model_name)
+model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_%d_%m_%Y_%H_%M'), 'logs')
+
+log_file_name = os.path.join(model_directory, datetime.now().strftime('LogFile.log'))
+logging.basicConfig(filename=log_file_name,
+                    level=logging.DEBUG,
+                    format='%(asctime)s: %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    )
 
 random.seed(1)
 
@@ -24,7 +33,6 @@ def main(test=False, cv=False, test_chunking=False):
     parser.add_argument('modelfile', help="the model file name. (output)")
     parser.add_argument('testdatafile', help="data file for testing input")
 
-    model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_%d_%m_%Y_%H_%M'), 'logs')
     if test_chunking:
         vector_rep_input = False
         args = parser.parse_args([
@@ -34,7 +42,7 @@ def main(test=False, cv=False, test_chunking=False):
             os.path.join(data_directory, 'test.txt'),
         ])
 
-        crf = LinearChainCRF()
+        crf = LinearChainCRF(squared_sigma=10.0)
         crf.train(args.traindatafile, args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
 
         if test:
@@ -53,7 +61,7 @@ def main(test=False, cv=False, test_chunking=False):
                 os.path.join(data_directory,
                              'test_data_1_10_single_round_label_crf_manual_binary_features_verbal_data.pkl'),
                 ])
-            crf = LinearChainCRF()
+            crf = LinearChainCRF(squared_sigma=0.005)
             crf.train(args.traindatafile, args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
 
             if test:
@@ -95,15 +103,15 @@ def main(test=False, cv=False, test_chunking=False):
                 train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
                 test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
 
-                crf = LinearChainCRF()
+                crf = LinearChainCRF(squared_sigma=0.0001, predict_future=True)
                 crf.train(args.traindatafile, args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input,
-                          pair_ids=train_pair_ids)
+                          pair_ids=train_pair_ids, use_forward_backward_fix_history=False)
 
                 if test:
                     crf.load(args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
                     correct_count, total_count =\
                         crf.test(args.traindatafile, predict_only_last=True, pair_ids=test_pair_ids, fold_num=fold,
-                                 use_viterbi_fix_history=False)
+                                 use_viterbi_fix_history=True)
                     all_correct_count += correct_count
                     all_total_count += total_count
 
@@ -111,7 +119,13 @@ def main(test=False, cv=False, test_chunking=False):
             print('Correct: %d' % all_correct_count)
             print('Total: %d' % all_total_count)
             print('Performance: %f' % (all_correct_count / all_total_count))
+            logging.info('All folds accuracy')
+            logging.info('Correct: %d' % all_correct_count)
+            logging.info('Total: %d' % all_total_count)
+            logging.info('Performance: %f' % (all_correct_count / all_total_count))
+            # print('potential score in vitervi fix history')
+            # logging.info('potential score in vitervi fix history')
 
 
 if __name__ == '__main__':
-    main(test=True, cv=True)
+    main(test=True, cv=True, test_chunking=False)

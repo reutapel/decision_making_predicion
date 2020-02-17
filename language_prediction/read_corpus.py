@@ -3,6 +3,7 @@
 import pandas as pd
 import joblib
 import math
+import logging
 
 
 class FileFormatError(BaseException):
@@ -38,15 +39,17 @@ def read_conll_corpus(filename):
         data.append((x, y))
 
     print(f'\n* Number of data points: {counter}')
+    logging.info(f'\n* Number of data points: {counter}')
 
     return data
 
 
-def read_verbal_exp_data(filename, pair_ids: list=None):
+def read_verbal_exp_data(filename, pair_ids: list=None, predict_future: bool=False):
     """
     Read data of the verbal experiments
     :param filename: the data file name
     :param pair_ids: list of pair ids in the case of cross validation
+    :param predict_future: if we want to get  all sequence data but to predict only the future
     :return:
     """
     data = list()
@@ -67,17 +70,34 @@ def read_verbal_exp_data(filename, pair_ids: list=None):
         if 'pair_id' in data_df.columns:
             data_df = data_df.drop(['pair_id'], axis=1)
 
-    for row_number, (index, row) in enumerate(data_df.iterrows()):
+    # remove sequence of length 1:
+    data_df = data_df.loc[data_df.labels.str.len() > 1]
+
+    if predict_future:  # keep only sequence of length 10
+        data_df = data_df.loc[data_df.labels.str.len() == 10]
+
+    row_number = 0
+    features_columns = data_df.columns.to_list()
+    features_columns.remove('labels')
+    for index, row in data_df.iterrows():
         # if row_number == 30:
         #     break
         x = list()
-        y = row['labels']
-        for i in range(1, 11):
-            if type(row[f'features_{i}']) == list:
-                x.append(row[f'features_{i}'])
-        data.append((x, y))
+        y = row.labels
+        for column in features_columns:
+            if type(row[column]) == list:
+                x.append(row[column])
+
+        if predict_future:
+            for raisha in range(1, 10):  # different size of raisha
+                data.append((x, y, raisha))
+                row_number += 1
+        else:
+            data.append((x, y))
+            row_number += 1
 
     print(f'\n* Number of data points: {row_number+1}')
+    logging.info(f'\n* Number of data points: {row_number+1}')
 
     return data
 

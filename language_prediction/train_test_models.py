@@ -570,13 +570,14 @@ def train_predict_simple_baseline_model(model_name: str, binary_classification: 
 
 
 def train_test_simple_features_model(model_name: str, features_data_file_path: str, backward_search: bool = False,
-                                     inner_data_directory: str=data_directory):
+                                     inner_data_directory: str=data_directory, label: str='label'):
     """
     This function train and test some simple ML models that use text manual features to predict decisions
     :param features_data_file_path: hte path to the features file
     :param model_name: the full model name
     :param backward_search: use backward_search to find the best features
     :param inner_data_directory: the data directory to use
+    :param label: the label to predict
     :return:
     """
     experiment_path = utils.set_folder(datetime.now().strftime(f'{model_name}_%d_%m_%Y_%H_%M'), 'logs')
@@ -614,9 +615,8 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     # The label we want to predict
     label_dict = {
         'label': ['DM chose stay home', 'DM chose hotel'],
-        'total_payoff': [],
+        'future_total_payoff': ['DM chose stay home', 'DM chose hotel'],
     }
-    label = 'label'
     data = data.drop(['k_size', 'sample_id'], axis=1)
     features = [item for item in data.columns.tolist() if item not in [label, 'pair_id']]
     inner_batch_size = 9 if 'history' in features_data_file_path or 'prev' in features_data_file_path else 10
@@ -624,21 +624,22 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
     candidates_features = copy.deepcopy(features)
     model_dict = {'label':  # classification models:
                   [[
-                      # EnsembleClassifier(XGBClassifier(max_depth=10), SVC(), LogisticRegression()),
-                      # PredictLastDecision(),
-                      # DummyClassifier(strategy='stratified'), DummyClassifier(strategy='most_frequent'),
-                      # XGBClassifier(max_depth=10), DecisionTreeClassifier(), AdaBoostClassifier(n_estimators=100),
+                      EnsembleClassifier(XGBClassifier(max_depth=10), SVC(), LogisticRegression()),
+                      PredictLastDecision(),
+                      DummyClassifier(strategy='stratified'), DummyClassifier(strategy='most_frequent'),
+                      XGBClassifier(max_depth=10), DecisionTreeClassifier(), AdaBoostClassifier(n_estimators=100),
                       LinearKerasModel(input_dim=len(features), batch_size=inner_batch_size),
-                      # SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
-                      # SGDClassifier(), PassiveAggressiveClassifier(),
+                      SVC(), LogisticRegression(), Perceptron(), RandomForestClassifier(), SVC(kernel='linear'),
+                      SGDClassifier(), PassiveAggressiveClassifier(),
                       # ConvolutionalKerasModel(num_features=len([feature for feature in features if '_1' in feature]),
                       #                         input_len=len(features))
                       ],
                    'classification'],
-                  'total_payoff':  # regression models
+                  'future_total_payoff':  # regression models
                   [[RandomForestRegressor(), SGDRegressor(), PassiveAggressiveRegressor(),
                     SVR(), SVR(kernel='linear'),
-                    DecisionTreeRegressor(), XGBRegressor(),
+                    EnsembleClassifier(XGBRegressor(max_depth=10), SVR(), RandomForestRegressor()),
+                    DecisionTreeRegressor(), XGBRegressor(max_depth=10),
                     # Perceptron(),
                     DummyRegressor(strategy='median'), DummyRegressor(strategy='mean')], 'regression'],
                   }

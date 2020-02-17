@@ -28,7 +28,7 @@ class VectorRepresentationInput:
         return features
 
 
-def default_feature_func(_, x, t):
+def default_feature_func(x, t):
     """
     Returns a list of feature strings.
     (Default feature function)
@@ -92,18 +92,18 @@ class FeatureSet:
         """
 
         # Constructs a feature set, and counts empirical counts.
-        for x, y in data:
+        for data_list in data:  # x=data_list[0], y=data_list[1]
             prev_y = STARTING_LABEL_INDEX
-            for t in range(len(x)):
+            for t in range(len(data_list[0])):
                 # Gets a label id
                 try:
-                    len_y = self.label_dic[y[t]]
+                    len_y = self.label_dic[data_list[1][t]]
                 except KeyError:
                     len_y = len(self.label_dic)
-                    self.label_dic[y[t]] = len_y
-                    self.label_array.append(y[t])
+                    self.label_dic[data_list[1][t]] = len_y
+                    self.label_array.append(data_list[1][t])
                 # Adds features
-                self._add(prev_y, len_y, x, t)
+                self._add(prev_y, len_y, data_list[0], t)
                 prev_y = len_y
 
     def load(self, feature_dic, num_features, label_array, empirical_counts, observation_set):

@@ -31,7 +31,7 @@ alpha_global = 0.9
 
 
 def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list, last_round_to_use: int,
-                         first_round_to_use: int):
+                         first_round_to_use: int, total_payoff_label: bool=True, text_data: bool=False):
     """
     This function get data and flat it as for each row there is be the history of the relevant features in the data
     :param data: the data to flat
@@ -39,6 +39,8 @@ def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list
     :param columns_to_drop: the columns to drop, the first should be the column to add at last
     :param last_round_to_use: the last round to create history data for: 10 or 9
     :param first_round_to_use: the first round to use for history: the current round or the round before: 0 ot 1
+    :param total_payoff_label: if the label is the decision of a single round
+    :param text_data: if the data  we flat is the text representation
     :return:
     """
     all_history = pd.DataFrame()
@@ -52,7 +54,9 @@ def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list
         data_to_flat = data_to_flat.drop(columns_to_drop, axis=1)
         # for current and next rounds put -1 --> use also current if first_round_to_use=0
         # and not use use if first_round_to_use=1
-        data_to_flat.iloc[list(range(round_num - first_round_to_use, last_round_to_use))] = -1
+        # if we predict all the future payoff, so the future text can be seen
+        if not total_payoff_label and text_data or not text_data:
+            data_to_flat.iloc[list(range(round_num - first_round_to_use, last_round_to_use))] = -1
         data_to_flat.index = data_to_flat.index.astype(str)
         # data_to_flat.columns = data_to_flat.columns.astype(str)
         data_to_flat = data_to_flat.unstack().to_frame().sort_index(level=1).T
@@ -74,7 +78,7 @@ class CreateSaveData:
                  features_file_type: str='', use_all_history: bool = False, use_all_history_text_average: bool = False,
                  no_text: bool=False, use_score: bool=False, use_prev_round_text: bool=True,
                  use_all_history_text: bool=False, use_all_history_average: bool = False,
-                 predict_first_round: bool=False, use_crf: bool=False):
+                 predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -94,6 +98,7 @@ class CreateSaveData:
         :param use_all_history_text_average: if to use the history text as average over all the history
         :param predict_first_round: if we want to predict the data of the first round
         :param use_crf: if we create data for crf model
+        :param features_to_drop: a list of features to drop
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -137,6 +142,9 @@ class CreateSaveData:
                     reviews = pd.concat([reviews, temp], axis=1, ignore_index=True)
 
                 self.reviews_features = reviews
+            else:  # manual features
+                if features_to_drop is not None:
+                    self.reviews_features = self.reviews_features.drop(features_to_drop, axis=1)
 
         # calculate expert total payoff --> the label
         self.data['exp_payoff'] = self.data.group_receiver_choice.map({1: 0, 0: 1})
@@ -323,7 +331,8 @@ class CreateSaveData:
                     if self.use_all_history_text:
                         history_reviews = flat_reviews_numbers(
                             data_to_flat, rounds, columns_to_drop=['review_id', 'subsession_round_number'],
-                            last_round_to_use=10, first_round_to_use=0)
+                            last_round_to_use=10, first_round_to_use=0, text_data=True,
+                            total_payoff_label=self.total_payoff_label)
                         data = data.merge(history_reviews, left_on='review_id', right_on='review_id', how='left')
                     else:
                         # TODO: change to add current, previous and average text
@@ -354,7 +363,8 @@ class CreateSaveData:
                         else:  # self.use_all_history_text == True
                             history_reviews = flat_reviews_numbers(
                                 temp_reviews, rounds, columns_to_drop=['review_id', 'subsession_round_number'],
-                                last_round_to_use=10, first_round_to_use=0)
+                                last_round_to_use=10, first_round_to_use=0, text_data=True,
+                                total_payoff_label=self.total_payoff_label)
                         if self.use_all_history_text_average:
                             history_reviews = history_reviews.T
                             # add the current round reviews features
@@ -391,19 +401,26 @@ class CreateSaveData:
             if self.label == 'single_round':
                 # the label is the exp_payoff of the current round - 1 or -1
                 if 1 not in data.subsession_round_number.values:
-                    data['label'] =\
+                    data[self.label] =\
                         self.data.loc[(self.data.pair_id == pair) & (self.data.subsession_round_number > 1)][
                             'exp_payoff'].reset_index(drop=True)
                 else:
-                    data['label'] = self.data.loc[(self.data.pair_id == pair)]['exp_payoff'].reset_index(drop=True)
+                    data[self.label] = self.data.loc[(self.data.pair_id == pair)]['exp_payoff'].reset_index(drop=True)
                 data.label = np.where(data.label == 1, 1, -1)
-                label_column_name = 'label'
+                label_column_name = self.label
 
             else:  # the label is the total payoff
                 columns = [f'group_sender_payoff_{i}' for i in range(self.number_of_rounds - 1)]
-                data['total_payoff'] = (self.data.loc[self.data.pair_id == pair]['total_exp_payoff'].unique()[0] -
+                if self.use_all_history:
+                    data[self.label] = (self.data.loc[self.data.pair_id == pair]['total_exp_payoff'].unique()[0] -
                                         (data[columns] > 0).sum(axis=1)) / (self.number_of_rounds+1 - data['k_size'])
-                label_column_name = 'total_payoff'
+                else:
+                    for i in range(2, 11):
+                        data.loc[data.k_size == i, self.label] =\
+                            self.data.loc[(self.data.pair_id == pair) &
+                                          (self.data.subsession_round_number >= i)].group_sender_payoff.sum() /\
+                            (self.number_of_rounds + 1 - i)
+                label_column_name = self.label
             # save column names to get the features later
             if not already_save_column_names:
                 file_name = f'features_{self.base_file_name}'
@@ -563,10 +580,9 @@ class CreateSaveData:
 
         return
 
-    def create_manual_features_crf_data(self, features_to_drop: list=None):
+    def create_manual_features_crf_data(self):
         """
         This function create 10 samples with different length from each pair data raw for crf model
-        :param features_to_drop: a list of features to drop
         :return:
         """
 
@@ -577,8 +593,6 @@ class CreateSaveData:
                           'previous_round_lottery_result_high', 'previous_average_score_low',
                           'previous_round_lottery_result_med1', 'previous_average_score_high']
 
-        if features_to_drop is not None:
-            self.reviews_features = self.reviews_features.drop(features_to_drop, axis=1)
         all_columns = self.reviews_features.columns.to_list() + columns_to_use
         all_columns.remove('review_id')
         file_name = f'features_{self.base_file_name}'
@@ -824,20 +838,21 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_binary_features'
+    features_to_use = 'manual_features'
     # label can be single_round or total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': False,
                    'use_manual_features': True,
                    'use_all_history_average': False,
-                   'use_all_history': False,
+                   'use_all_history': True,
                    'use_all_history_text_average': False,
-                   'use_all_history_text': False,
+                   'use_all_history_text': True,
                    'no_text': False,
                    'use_score': False,
-                   'predict_first_round': False,
-                   'label': 'single_round'},
+                   'predict_first_round': True,
+                   'label': 'future_total_payoff',
+                   },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
                     'use_manual_features': False,
@@ -848,11 +863,16 @@ def main():
                     'no_text': True,
                     'use_score': True,
                     'predict_first_round': True,
-                    'label': 'future_total_payoff'}
+                    'label': 'future_total_payoff'
+                    }
     }
     use_seq = False
-    use_crf = True
-    create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=False,
+    use_crf = False
+    total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
+    # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
+    #                     'topic_location_negative', 'topic_food_positive']
+    features_to_drop = []
+    create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=total_payoff_label,
                                           label=conditions_dict[condition]['label'],
                                           use_seq=use_seq, use_prev_round=conditions_dict[condition]['use_prev_round'],
                                           use_manual_features=conditions_dict[condition]['use_manual_features'],
@@ -866,18 +886,14 @@ def main():
                                           no_text=conditions_dict[condition]['no_text'],
                                           use_score=conditions_dict[condition]['use_score'],
                                           use_prev_round_text=conditions_dict[condition]['use_prev_round_text'],
-                                          predict_first_round=conditions_dict[condition]['predict_first_round'],)
+                                          predict_first_round=conditions_dict[condition]['predict_first_round'],
+                                          features_to_drop=features_to_drop)
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:
             create_save_data_obj.create_manual_features_seq_data()
         elif use_crf:
-            create_save_data_obj.create_manual_features_crf_data(features_to_drop=
-                                                                 ['topic_room_positive',
-                                                                  'negative_buttom_line_recommendation', 'list',
-                                                                  'use_extreme_positive_words_1',
-                                                                  'topic_location_negative', 'topic_food_positive']
-                                                                 )
+            create_save_data_obj.create_manual_features_crf_data()
         else:
             create_save_data_obj.create_manual_features_data()
     else:
@@ -888,10 +904,11 @@ def main():
 
     if use_seq or use_crf:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()
-    # else:
-    #     train_test_simple_features_model(create_save_data_obj.base_file_name,
-    #                                      f'all_data_{create_save_data_obj.base_file_name}.pkl', backward_search=False,
-    #                                      inner_data_directory=data_directory),
+    else:
+        train_test_simple_features_model(create_save_data_obj.base_file_name,
+                                         f'all_data_{create_save_data_obj.base_file_name}.pkl', backward_search=False,
+                                         inner_data_directory=data_directory,
+                                         label=conditions_dict[condition]['label']),
 
 
 if __name__ == '__main__':
