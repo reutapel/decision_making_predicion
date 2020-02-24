@@ -65,10 +65,6 @@ def read_verbal_exp_data(filename, pair_ids: list=None, predict_future: bool=Fal
 
     if pair_ids is not None:
         data_df = data_df.loc[data_df.pair_id.isin(pair_ids)]
-        data_df = data_df.drop(['pair_id'], axis=1)
-    else:
-        if 'pair_id' in data_df.columns:
-            data_df = data_df.drop(['pair_id'], axis=1)
 
     # remove sequence of length 1:
     data_df = data_df.loc[data_df.labels.str.len() > 1]
@@ -79,18 +75,21 @@ def read_verbal_exp_data(filename, pair_ids: list=None, predict_future: bool=Fal
     row_number = 0
     features_columns = data_df.columns.to_list()
     features_columns.remove('labels')
+    if 'pair_id' in features_columns:
+        features_columns.remove('pair_id')
     for index, row in data_df.iterrows():
         # if row_number == 30:
         #     break
         x = list()
         y = row.labels
+        pair_id = row.pair_id
         for column in features_columns:
             if type(row[column]) == list:
                 x.append(row[column])
 
         if predict_future:
-            for raisha in range(1, 10):  # different size of raisha
-                data.append((x, y, raisha))
+            for raisha in range(0, 10):  # different size of raisha
+                data.append((x, y, raisha, f'{pair_id}_{raisha}'))
                 row_number += 1
         else:
             data.append((x, y))

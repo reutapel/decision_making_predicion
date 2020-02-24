@@ -636,12 +636,12 @@ def train_test_simple_features_model(model_name: str, features_data_file_path: s
                       ],
                    'classification'],
                   'future_total_payoff':  # regression models
-                  [[RandomForestRegressor(), SGDRegressor(), PassiveAggressiveRegressor(),
-                    SVR(), SVR(kernel='linear'),
-                    EnsembleClassifier(XGBRegressor(max_depth=10), SVR(), RandomForestRegressor()),
-                    DecisionTreeRegressor(), XGBRegressor(max_depth=10),
-                    # Perceptron(),
-                    DummyRegressor(strategy='median'), DummyRegressor(strategy='mean')], 'regression'],
+                  [[
+                      RandomForestRegressor(), SGDRegressor(), PassiveAggressiveRegressor(),
+                      SVR(), SVR(kernel='linear'),
+                      EnsembleClassifier(XGBRegressor(max_depth=10), SVR(), RandomForestRegressor()),
+                      DecisionTreeRegressor(), XGBRegressor(max_depth=10),
+                      DummyRegressor(strategy='median'), DummyRegressor(strategy='mean')], 'regression'],
                   }
 
     model_dict_to_use = {label: model_dict[label][0]}

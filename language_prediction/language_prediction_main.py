@@ -142,10 +142,12 @@ def main():
         #                                      'all_data_single_round_label_all_history_features_all_history_text_manual_'
         #                                      'features_verbal_data.pkl', backward_search=False),
         'SimpleFeaturesModelVerbalConditionAllHistoryFeaturesAndTextSingleRound':
-            train_test_simple_features_model('future_total_payoff_label_all_history_features_all_history_text_manual_'
-                                             'features_predict_first_round_verbal_data',
-                                             'all_data_future_total_payoff_label_all_history_features_all_history_text_'
-                                             'manual_features_predict_first_round_verbal_data.pkl',
+            train_test_simple_features_model('future_total_payoff_label_prev_round_prev_round_text_all_history_features'
+                                             '_average_with_global_alpha_0.9_all_history_text_average_with_alpha_0.8_'
+                                             'manual_features_predict_first_round_verbal_data',
+                                             'all_data_future_total_payoff_label_prev_round_prev_round_text_all_history'
+                                             '_features_average_with_global_alpha_0.9_all_history_text_average_with_'
+                                             'alpha_0.8_manual_features_predict_first_round_verbal_data.pkl',
                                              backward_search=False, label='future_total_payoff'),
         # 'BasicModelSentimentAnalysis':
         #     train_valid_base_text_decision_fix_text_features_model(

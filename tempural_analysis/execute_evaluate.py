@@ -13,6 +13,7 @@ from sklearn import metrics
 import tempural_analysis.utils as utils
 import copy
 import operator
+import math
 
 
 def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates_features: list, window_size_list: list,
@@ -39,9 +40,9 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
     table_writer = pd.ExcelWriter(os.path.join(classifier_results_dir, 'classification_results.xlsx'),
                                   engine='xlsxwriter')
     running_meta_data = pd.DataFrame(
-        columns=['model_name', 'model', 'features list', 'number of features', 'candidate feature', 'features_removed',
-                 'use first round', 'folds per participants', 'label', 'window size', 'accuracy', 'F1-score_pos',
-                 'F1-score_neg', 'AUC', 'MSE'])
+        columns=['model_name', 'model', 'features list', 'add feature', 'use first round',
+                 'folds per participants', 'label', 'window size', 'accuracy', 'F1-score_pos', 'F1-score_neg',
+                 'F1-score_third_bin', 'AUC', 'MSE', 'RMSE', 'MAE'])
 
     run_id = 0
 
@@ -132,8 +133,8 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                         [type(curr_model).__name__, str(curr_model), features_to_save,
                                          len(features_to_save), candidate, copy.deepcopy(features_removed),
                                          use_first_round, folds_per_participants, curr_label, curr_window_size,
-                                         round(100*accuracy, 2), round(100*f1_score_pos, 2), round(100*f1_score_neg, 2),
-                                         round(100*auc, 2), '-']
+                                         accuracy, round(100*f1_score_pos, 2), round(100*f1_score_neg, 2),
+                                         '-', auc, '-', '-', '-']
                                     score_with_candidates.append((accuracy, candidate))
                                     logging.info(
                                         f'Finish Run ID {run_id}: accuracy is {accuracy} and auc is {auc}')
@@ -143,13 +144,19 @@ def evaluate_backward_search(data: pd.DataFrame, base_features: list, candidates
                                     # remove subsession_round_number from the features we save
                                     if subsession_round_number_removed:
                                         features_to_save.remove('subsession_round_number')
-                                    mse_score = get_regression_final_results(simulator, run_id, table_writer)
+                                    mse, rmse, mae = get_regression_final_results(simulator, run_id, table_writer)
+                                    accuracy, auc, f1_score_0, f1_score_1, f1_score_2 = \
+                                        get_classification_final_results(simulator, classifier_results_dir,
+                                                                         [0, 1, 2], table_writer, run_id,
+                                                                         label_column='bin_label',
+                                                                         predictions_column='bin_predictions')
                                     running_meta_data.loc[run_id] =\
                                         [type(curr_model).__name__, str(curr_model), features_to_save,
                                          len(features_to_save), candidate, copy.deepcopy(features_removed),
                                          use_first_round, folds_per_participants, curr_label, curr_window_size,
-                                         '-', '-', '-', round(100*mse_score, 2)]
-                                    score_with_candidates.append((mse_score, candidate))
+                                         accuracy, round(100*f1_score_0, 2), round(100*f1_score_1, 2),
+                                         round(100 * f1_score_2, 2), auc, mse, rmse, mae]
+                                    score_with_candidates.append((mse, candidate))
 
                         score_with_candidates.sort(key=operator.itemgetter(0))
                         best_accuracy, best_candidate = score_with_candidates.pop()
@@ -209,8 +216,8 @@ def evaluate_grid_search(data: pd.DataFrame, base_features: list, add_feature_li
                                   engine='xlsxwriter')
     running_meta_data = pd.DataFrame(
         columns=['model_name', 'model', 'features list', 'add feature', 'use first round',
-                 'folds per participants', 'label', 'window size', 'accuracy', 'F1-score_pos', 'F1-score_neg', 'AUC',
-                 'MSE'])
+                 'folds per participants', 'label', 'window size', 'accuracy', 'F1-score_pos', 'F1-score_neg',
+                 'F1-score_third_bin', 'AUC', 'MSE', 'RMSE', 'MAE'])
 
     run_id = 0
 
@@ -271,16 +278,24 @@ def evaluate_grid_search(data: pd.DataFrame, base_features: list, add_feature_li
                                 running_meta_data.loc[run_id] =\
                                     [type(curr_model).__name__, str(curr_model), copy.deepcopy(curr_base_features),
                                      feature_to_add, use_first_round, folds_per_participants, curr_label,
-                                     curr_window_size, round(100*accuracy, 2), round(100*f1_score_pos, 2),
-                                     round(100*f1_score_neg, 2), round(100*auc, 2), '-']
+                                     curr_window_size, accuracy, round(100*f1_score_pos, 2),
+                                     round(100*f1_score_neg, 2), '-', auc, '-', '-', '-']
 
                             else:  # regression
-                                mse_score = get_regression_final_results(simulator, run_id, table_writer)
+                                mse, rmse, mae = get_regression_final_results(simulator, run_id, table_writer)
+                                accuracy, auc, f1_score_0, f1_score_1, f1_score_2 = \
+                                    get_classification_final_results(
+                                        simulator, classifier_results_dir,
+                                        ['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
+                                         'total future payoff > 2/3'],
+                                        table_writer, run_id, label_column='bin_label', predictions_column='bin_predictions')
                                 running_meta_data.loc[run_id] = [type(curr_model).__name__, str(curr_model),
                                                                  copy.deepcopy(curr_base_features), feature_to_add,
                                                                  use_first_round, folds_per_participants, curr_label,
-                                                                 curr_window_size, '-', '-', '-', '-',
-                                                                 round(100*mse_score, 2)]
+                                                                 curr_window_size, accuracy,
+                                                                 round(100*f1_score_0, 2), round(100*f1_score_1, 2),
+                                                                 round(100 * f1_score_2, 2),
+                                                                 auc, mse, rmse, mae]
 
     running_meta_data.index.name = 'run_id'
     utils.write_to_excel(table_writer, 'meta data', ['Experiment meta data'], running_meta_data)
@@ -290,7 +305,8 @@ def evaluate_grid_search(data: pd.DataFrame, base_features: list, add_feature_li
     return
 
 
-def get_regression_final_results(simulator: simulation, run_id: int, table_writer: pd.ExcelWriter) -> float:
+def get_regression_final_results(simulator: simulation, run_id: int, table_writer: pd.ExcelWriter) -> \
+        (float, float, float):
     """
     create results DF for regressions model
     :param simulator: the simulator object of this run
@@ -300,20 +316,24 @@ def get_regression_final_results(simulator: simulation, run_id: int, table_write
     """
     all_predictions = pd.concat(simulator.predictions_per_fold.values(), axis=0)
     all_predictions.index.name = 'participant_id_trial_num'
-    loss = metrics.mean_squared_error(all_predictions.label, all_predictions.predictions)
-    logging.info(f'MSE for run ID {run_id} is: {loss}')
+    mse = metrics.mean_squared_error(all_predictions.label, all_predictions.predictions)
+    rmse = round(100*math.sqrt(mse), 2)
+    mae = round(100*metrics.mean_absolute_error(all_predictions.label, all_predictions.predictions), 2)
+    mse = round(100*mse, 2)
+    logging.info(f'Measures for run ID {run_id} are: MSE: {mse}, RMSE: {rmse}, MAE: {mae}')
 
     model_name = type(simulator.model).__name__
     utils.write_to_excel(
         table_writer, str(run_id) + '_predictions',
         headers=[f'Regression all predictions for {simulator.label} and model {model_name} and run ID {run_id}',
-                 f'MSE for run ID {run_id} is: {round(100*loss, 2)}'], data=all_predictions)
+                 f'Measure for run ID {run_id} are: MSE: {mse}, RMSE: {rmse}, MAE: {mae}'], data=all_predictions)
 
-    return loss
+    return mse, rmse, mae
 
 
 def get_classification_final_results(simulator: simulation, classifier_results_dir: str, label_options: list,
-                                     table_writer: pd.ExcelWriter, run_id: int) -> (int, int):
+                                     table_writer: pd.ExcelWriter, run_id: int, label_column: str='label',
+                                     predictions_column: str='predictions'):
     """
     create results DF for regressions model
     :param simulator: the simulator object of this run
@@ -321,6 +341,8 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
     :param label_options: the options for labels
     :param table_writer: the excel writer
     :param run_id: running number of the experiment
+    :param label_column: the name of the label column
+    :param predictions_column: the name of the predictions column
     :return: accuracy and AUC score
     """
     all_predictions = pd.concat(simulator.predictions_per_fold.values(), axis=0)
@@ -328,42 +350,88 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
     model_name = type(simulator.model).__name__
 
     precision, recall, fbeta_score, support =\
-        metrics.precision_recall_fscore_support(all_predictions.label, all_predictions.predictions)
+        metrics.precision_recall_fscore_support(all_predictions[label_column], all_predictions[predictions_column])
 
-    f1_score_pos = metrics.f1_score(all_predictions.label, all_predictions.predictions)
-    f1_score_neg = metrics.f1_score(all_predictions.label, all_predictions.predictions, pos_label=-1)
+    # f1_score_pos = metrics.f1_score(all_predictions[label_column], all_predictions[predictions_column])
+    # f1_score_neg = metrics.f1_score(all_predictions[label_column], all_predictions[predictions_column], pos_label=-1)
 
     # number of DM chose stay home
-    status_size = all_predictions.label.where(all_predictions.label == -1).dropna().shape[0]
-    index_in_support = np.where(support == status_size)
-    if index_in_support[0][0] == 0:  # the first in support is the label -1
-        label_options = label_options
-    else:
-        label_options = [label_options[1], label_options[0]]
+    if label_column == 'label':
+        status_size = all_predictions[label_column].where(all_predictions[label_column] == -1).dropna().shape[0]
+        index_in_support = np.where(support == status_size)
+        if index_in_support[0][0] == 0:  # the first in support is the label -1
+            label_options = label_options
+            f_score_list = [fbeta_score[0], fbeta_score[1]]
+        else:
+            label_options = [label_options[1], label_options[0]]
+            f_score_list = [fbeta_score[1], fbeta_score[0]]
 
-    accuracy = metrics.accuracy_score(all_predictions.label, all_predictions.predictions)
-    auc = metrics.roc_auc_score(all_predictions.label, all_predictions.predictions)
-    accuracy_pd = pd.Series([round(100*accuracy, 2), '-'])
-    auc_pd = pd.Series([round(100*auc, 2), '-'])
+    else:
+        zero_status_size = all_predictions[label_column].where(all_predictions[label_column] == 0).dropna().shape[0]
+        one_status_size = all_predictions[label_column].where(all_predictions[label_column] == 1).dropna().shape[0]
+        zero_index_in_support = np.where(support == zero_status_size)
+        one_index_in_support = np.where(support == one_status_size)
+        if one_index_in_support[0][0] == 1 and zero_index_in_support[0][0] == 0:
+            label_options = label_options
+            f_score_list = [fbeta_score[0], fbeta_score[1], fbeta_score[2]]
+        else:
+            temp_labels = list()
+            temp_f_score = list()
+            if one_index_in_support[0][0] == 0:  # the first label option in support[0]
+                temp_labels.append(label_options[1])
+                temp_f_score.append(fbeta_score[1])
+            else:  # the second label option in support[0]
+                temp_labels.append(label_options[2])
+                temp_f_score.append(fbeta_score[2])
+            if zero_index_in_support[0][0] == 1:  # the zero label option in support[1]
+                temp_labels.append(label_options[0])
+                temp_f_score.append(fbeta_score[0])
+            else:  # the second label option in support[1]
+                temp_labels.append(label_options[2])
+                temp_f_score.append(fbeta_score[2])
+            if zero_index_in_support[0][0] == 2:  # the zero label option in support[2]
+                temp_labels.append(label_options[0])
+                temp_f_score.append(fbeta_score[0])
+            else:  # the first label option in support[2]
+                temp_labels.append(label_options[1])
+                temp_f_score.append(fbeta_score[1])
+            label_options = temp_labels
+            f_score_list = temp_f_score
+
+    accuracy = metrics.accuracy_score(all_predictions[label_column], all_predictions[predictions_column])
+    accuracy = round(100*accuracy, 2)
+    accuracy_pd = pd.Series([accuracy, '-'])
+    if label_column == 'labe':  # 2 classes
+        auc = metrics.roc_auc_score(all_predictions[label_column], all_predictions[predictions_column])
+        auc = round(100*auc, 2)
+        auc_pd = pd.Series([auc, '-'])
+    else:
+        auc = None
+        auc_pd = pd.Series(['-', '-'])
 
     results = pd.concat([pd.Series(100*precision).round(2), pd.Series(100*recall).round(2),
-                         pd.Series(100*fbeta_score).round(2), pd.Series(100*f1_score_pos).round(2),
-                         pd.Series(100*f1_score_neg).round(2), accuracy_pd, auc_pd], axis=1).T
-    results.index = ['precision', 'recall', 'fbeta_score', 'f1_score_pos', 'f1_score_neg', 'accuracy', 'AUC']
+                         pd.Series(100*fbeta_score).round(2),
+                         # pd.Series(100*f1_score_pos).round(2), pd.Series(100*f1_score_neg).round(2),
+                         accuracy_pd, auc_pd], axis=1).T
+    results.index = ['precision', 'recall', 'fbeta_score',
+                     # 'f1_score_pos', 'f1_score_neg',
+                     'accuracy', 'AUC']
     results.columns = label_options
 
     # save measures and all predictions to excel
     utils.write_to_excel(
         table_writer, str(run_id) + '_measures',
         headers=[f'Classifier measures for {simulator.label} and model {model_name} and run ID {run_id}'], data=results)
-    utils.write_to_excel(
-        table_writer, str(run_id) + '_predictions',
-        headers=[f'Classifier all predictions for {simulator.label} and model {model_name} and run ID {run_id}'],
-        data=all_predictions)
+    if label_column == 'label':  # classification case
+        utils.write_to_excel(
+            table_writer, str(run_id) + '_predictions',
+            headers=[f'Classifier all predictions for {simulator.label} and model {model_name} and run ID {run_id}'],
+            data=all_predictions)
 
     logging.info(f'Classifier measures for {simulator.label} and model {model_name} and run ID {run_id} are:')
-    logging.info(f'f1_score_neg: {round(100*f1_score_neg, 2)}, f1_score_pos: {round(100*f1_score_pos, 2)}, '
-                 f'accuracy: {round(100*accuracy, 2)}, AUC: {round(100*auc, 2)}')
+    logging.info(
+        # f'f1_score_neg: {round(100*f1_score_neg, 2)}, f1_score_pos: {round(100*f1_score_pos, 2)}, '
+        f'f_score: {f_score_list}, accuracy: {accuracy}, AUC: {auc}')
     # plot confusion matrix
     fig = plt.figure()
     title = f'Confusion matrix {run_id}'
@@ -371,7 +439,10 @@ def get_classification_final_results(simulator: simulation, classifier_results_d
     fig_to_save = fig
     fig_to_save.savefig(os.path.join(classifier_results_dir, title + '.png'), bbox_inches='tight')
 
-    return accuracy, auc, f1_score_pos, f1_score_neg
+    if label_column == 'label':
+        return accuracy, auc, f_score_list[0], f_score_list[1]
+    else:
+        return accuracy, auc, f_score_list[0], f_score_list[1], f_score_list[2]
 
 
 def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):

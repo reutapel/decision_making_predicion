@@ -19,13 +19,16 @@ from language_prediction.feature import FeatureSet, STARTING_LABEL_INDEX
 from math import exp, log
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+import pandas as pd
 
 import time
 import json
+import math
 import datetime
 import joblib
 import os
 import logging
+from sklearn import metrics
 
 from .feature import VectorRepresentationInput
 
@@ -49,7 +52,7 @@ def _callback(params):
 
 
 def _generate_potential_table(params, num_labels, feature_set, x, inference=True, y_list: list=None,
-                              label_dic: dict=None, raisha: int=None):
+                              label_dic: dict=None, raisha: int=None, use_forward_backward_fix_history: bool=False):
     """
     Generates a potential table using given observations.
     * potential_table[t][prev_y, y]
@@ -67,29 +70,36 @@ def _generate_potential_table(params, num_labels, feature_set, x, inference=True
                     table[prev_y, y] += score
         else:
             for (prev_y, y), feature_ids in x[t]:
-                if t < raisha:  # for the steps in the raisha - use the correct label
-                    if prev_y == -1:  # for unigram features
-                        if y == label_dic[y_list[t]]:
-                            score = sum(params[fid] for fid in feature_ids)
-                        else:
-                            continue
-                    elif t == 0:  # for bigram in t==0, the label should be STARTING_LABEL_INDEX
-                        if prev_y is not STARTING_LABEL_INDEX:
-                            continue
-                        else:
-                            if y == label_dic[y_list[t]]:  # t=0, bigram with prev_y = STARTING_LABEL_INDEX
-                                score = sum(params[fid] for fid in feature_ids)
+                if use_forward_backward_fix_history and raisha is not None:
+                    if t < raisha:  # for the steps in the raisha - use the correct label
+                        if prev_y == -1:  # for unigram features
+                            if y == label_dic[y_list[t]]:
+                                # score = sum(params[fid] for fid in feature_ids)
+                                score = 0.1
                             else:
                                 continue
+                        elif t == 0:  # for bigram in t==0, the label should be STARTING_LABEL_INDEX
+                            if prev_y is not STARTING_LABEL_INDEX:
+                                continue
+                            else:
+                                if y == label_dic[y_list[t]]:  # t=0, bigram with prev_y = STARTING_LABEL_INDEX
+                                    # score = sum(params[fid] for fid in feature_ids)
+                                    score = 0.1
+                                else:
+                                    continue
+                        else:
+                            # for t>0, bigram, the prev_y could not be STARTING_LABEL_INDEX
+                            if prev_y is STARTING_LABEL_INDEX or y is STARTING_LABEL_INDEX:
+                                continue
+                            else:
+                                if y == label_dic[y_list[t]] and prev_y == label_dic[y_list[t-1]]:
+                                    # score = sum(params[fid] for fid in feature_ids)
+                                    score = 0.1
+                                else:
+                                    continue
                     else:
-                        # for t>0, bigram, the prev_y could not be STARTING_LABEL_INDEX
-                        if prev_y is STARTING_LABEL_INDEX or y is STARTING_LABEL_INDEX:
-                            continue
-                        else:
-                            if y == label_dic[y_list[t]] and prev_y == label_dic[y_list[t-1]]:
-                                score = sum(params[fid] for fid in feature_ids)
-                            else:
-                                continue
+                        score = sum(params[fid] for fid in feature_ids)
+
                 else:
                     score = sum(params[fid] for fid in feature_ids)
                 # logging.info(f'score: {score}')
@@ -97,6 +107,7 @@ def _generate_potential_table(params, num_labels, feature_set, x, inference=True
                     table[:, y] += score
                 else:
                     table[prev_y, y] += score
+
         table = np.exp(table)
         if t == 0:
             table[STARTING_LABEL_INDEX+1:] = 0
@@ -159,8 +170,6 @@ def _forward_backward(num_labels, time_length, potential_table):
             beta[t] /= scaling_dic[t]
 
     z = sum(alpha[time_length-1])
-    if z == 0.0:
-        reut = 1
     # logging.info(f'alpha: {alpha}, beta: {beta}')
 
     return alpha, beta, z, scaling_dic
@@ -182,6 +191,12 @@ def _forward_backward_fix_history(num_labels, time_length, potential_table, y: l
     alpha[t, label_dic[y[t]]] = potential_table[t][STARTING_LABEL_INDEX, label_dic[y[t]]]
     for t in range(1, raisha):  # the history --> the correct label
         alpha[t, label_dic[y[t]]] = np.dot(alpha[t-1, :], potential_table[t][:, label_dic[y[t]]])
+        if alpha[t, label_dic[y[t]]] > SCALING_THRESHOLD:
+            scaling_time = t - 1
+            scaling_coefficient = SCALING_THRESHOLD
+            scaling_dic[scaling_time] = scaling_coefficient
+            alpha[t-1] /= scaling_coefficient
+            alpha[t] = 0
 
     t = raisha
     while t < time_length:
@@ -252,15 +267,15 @@ def _log_likelihood(params, *args):
     for i, X_features in enumerate(training_feature_data):
         potential_table = _generate_potential_table(params, len(label_dic), feature_set, X_features, inference=False,
                                                     y_list=training_data[i][1], label_dic=label_dic,
-                                                    raisha=training_data[i][2])
+                                                    raisha=training_data[i][2],
+                                                    use_forward_backward_fix_history=use_forward_backward_fix_history)
         if use_forward_backward_fix_history:
             alpha, beta, z, scaling_dic = _forward_backward_fix_history(len(label_dic), len(X_features),
                                                                         potential_table, y=training_data[i][1],
                                                                         label_dic=label_dic, raisha=training_data[i][2])
         else:
             alpha, beta, z, scaling_dic = _forward_backward(len(label_dic), len(X_features), potential_table)
-        total_logZ += log(z) + \
-                      sum(log(scaling_coefficient) for _, scaling_coefficient in scaling_dic.items())
+        total_logZ += log(z) + sum(log(scaling_coefficient) for _, scaling_coefficient in scaling_dic.items())
         for t in range(len(X_features)):
             potential = potential_table[t]
             for (prev_y, y), feature_ids in X_features[t]:
@@ -281,8 +296,8 @@ def _log_likelihood(params, *args):
                     else:
                         prob = (alpha[t-1, prev_y] * potential[prev_y, y] * beta[t, y]) / z
                 for fid in feature_ids:
-                    if prob == np.inf:
-                        print(f'prob is inf')
+                    # if prob == np.inf:
+                    #     print(f'prob is inf')
                     expected_counts[fid] += prob
 
     likelihood = np.dot(empirical_counts, params) - total_logZ - \
@@ -297,8 +312,8 @@ def _log_likelihood(params, *args):
     if SUB_ITERATION_NUM > 0:
         sub_iteration_str = '(' + '{0:02d}'.format(SUB_ITERATION_NUM) + ')'
 
-    if sub_iteration_str == '(19)':
-        reut = 1
+    # if sub_iteration_str == '(19)':
+    #     reut = 1
     print('  ', '{0:03d}'.format(ITERATION_NUM), sub_iteration_str, ':', likelihood * -1)
     logging.info(f'{ITERATION_NUM}  {sub_iteration_str} : {likelihood * -1}')
 
@@ -482,35 +497,71 @@ class LinearChainCRF():
             print('Use viterbi')
             logging.info('Use viterbi')
 
+        max_round = 10
+        columns = [item for sublist in [[f'y_{j}', f'y_prime_{j}', f'correct_{j}']
+                                        for j in range(max_round)] for item in sublist]
+        columns.extend(['sample_id', 'raisha', 'total_prediction', 'total_payoff'])
+        prediction_dict = dict()
         total_count = 0
+        total_seq_count = 0
         correct_count = 0
-        for data_list in test_data:  # x=data_list[0], y=data_list[1], raisha=data_list[2]
+        for data_num, data_list in enumerate(test_data):  # x=data_list[0], y=data_list[1], raisha=data_list[2]
+            prediction_list = list()
+            sample_y_prime_sum = 0
+            sample_y_sum = 0
             x = data_list[0]
             y = data_list[1]
-            raisha = data_list[2] if len(data_list) == 3 else None
+            raisha = data_list[2] if len(data_list) >= 3 else None
+            sample_id = data_list[3] if len(data_list) >= 4 else None
+            total_seq_count += 1
             y_prime = self.inference(x=x, y=y, raisha=raisha, use_viterbi_fix_history=use_viterbi_fix_history)
             if predict_only_last:
+                for t in range(raisha):
+                    correct = 1 if y[t] == y_prime[t] else 0
+                    prediction_list.extend([y[t], y_prime[t], correct])
                 for t in range(raisha, len(y)):
+                    correct = 1 if y[t] == y_prime[t] else 0
+                    prediction_list.extend([y[t], y_prime[t], correct])
                     total_count += 1
+                    sample_y_prime_sum += y_prime[t] if y_prime[t] == 1 else 0
+                    sample_y_sum += y[t] if y[t] == 1 else 0
                     if y[t] == y_prime[t]:
                         correct_count += 1
+                prediction_list.extend([sample_id, raisha, sample_y_prime_sum/(max_round-raisha),
+                                        sample_y_sum/(max_round-raisha)])
             else:
                 for t in range(len(y)):
+                    correct = 1 if y[t] == y_prime[t] else 0
+                    prediction_list.extend([y[t], y_prime[t], correct])
                     total_count += 1
+                    sample_y_prime_sum += y_prime[t] if y_prime[t] == 1 else 0
+                    sample_y_sum += y[t] if y[t] == 1 else 0
                     if y[t] == y_prime[t]:
                         correct_count += 1
+                prediction_list.extend([sample_id, raisha, sample_y_prime_sum/max_round, sample_y_sum/max_round])
+
+            prediction_dict[data_num] = prediction_list
 
         if fold_num is not None:
             print(f'Model Performance for fold: {fold_num}')
             logging.info(f'Model Performance for fold: {fold_num}')
+
+        prediction_df = pd.DataFrame.from_dict(prediction_dict, orient='index', columns=columns)
+        mse = metrics.mean_squared_error(prediction_df.total_payoff, prediction_df.total_prediction)
+        rmse = math.sqrt(mse)
+        mae = metrics.mean_absolute_error(prediction_df.total_payoff, prediction_df.total_prediction)
         print('Correct: %d' % correct_count)
         print('Total: %d' % total_count)
-        print('Performance: %f' % (correct_count/total_count))
+        print('Performance: %f' % round((100 * correct_count/total_count), 2))
+        print(f'Total sequences: {total_seq_count}')
+        print(f'Total payoff MSE: {round(100 * mse, 2)}, RMSE: {round(100 * rmse, 2)}, MAE: {round(100 * mae, 2)}')
         logging.info('Correct: %d' % correct_count)
         logging.info('Total: %d' % total_count)
-        logging.info('Performance: %f' % (correct_count/total_count))
+        logging.info('Performance: %f' % round((100 * correct_count/total_count), 2))
+        logging.info(f'Total sequences: {total_seq_count}')
+        logging.info(f'MSE: {round(100 * mse, 2)}, RMSE: {round(100 * rmse, 2)}, MAE: {round(100 * mae, 2)}')
 
-        return correct_count, total_count
+        return correct_count, total_count, prediction_df, total_seq_count
 
     def print_test_result(self, test_corpus_filename, pair_ids: list=None):
         """
@@ -527,7 +578,7 @@ class LinearChainCRF():
                 print('%s\t%s\t%s' % ('\t'.join(x[t]), y[t], y_prime[t]))
             print()
 
-    def inference(self, x, y=None, raisha=None, use_viterbi_fix_history=None):
+    def inference(self, x, y=None, raisha=None, use_viterbi_fix_history=None) -> list:
         """
         Finds the best label sequence.
         """
@@ -538,7 +589,7 @@ class LinearChainCRF():
         else:
             return self.viterbi(x, potential_table)
 
-    def viterbi(self, x, potential_table):
+    def viterbi(self, x, potential_table) -> list:
         """
         The Viterbi algorithm with backpointers
         """
@@ -570,7 +621,7 @@ class LinearChainCRF():
             sequence.append(next_label)
         return [self.label_dic[label_id] for label_id in sequence[::-1][1:]]
 
-    def viterbi_fix_history(self, x, potential_table, y, raisha):
+    def viterbi_fix_history(self, x, potential_table, y, raisha) -> list:
         """
         The Viterbi algorithm with backpointers
         """

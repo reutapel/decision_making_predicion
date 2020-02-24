@@ -10,23 +10,18 @@ import joblib
 import pandas as pd
 import random
 import logging
+from sklearn import metrics
+import math
 
 base_directory = os.path.abspath(os.curdir)
 model_name = 'verbal'  # 'chunking_small'
 data_directory = os.path.join(base_directory, 'data', model_name)
-model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_%d_%m_%Y_%H_%M'), 'logs')
-
-log_file_name = os.path.join(model_directory, datetime.now().strftime('LogFile.log'))
-logging.basicConfig(filename=log_file_name,
-                    level=logging.DEBUG,
-                    format='%(asctime)s: %(levelname)s %(message)s',
-                    datefmt='%H:%M:%S',
-                    )
 
 random.seed(1)
 
 
-def main(test=False, cv=False, test_chunking=False):
+def main(test=False, cv=False, test_chunking=False, use_forward_backward_fix_history=False,
+         use_viterbi_fix_history=False, squared_sigma=0.0005, predict_only_last=True, predict_future=True):
     parser = argparse.ArgumentParser()
     parser.add_argument('traindatafile', help="data file for training input")
     parser.add_argument('featuresfile', help="the features file name input.")
@@ -78,7 +73,8 @@ def main(test=False, cv=False, test_chunking=False):
 
             # split data to 5 folds
             num_folds = 5
-            all_correct_count, all_total_count = 0, 0
+            all_correct_count, all_total_count, all_total_seq_count = 0, 0, 0
+            all_prediction_df = pd.DataFrame()
             if 'csv' in args.traindatafile:
                 data_df = pd.read_csv(args.traindatafile)
             elif 'xlsx' in args.traindatafile:
@@ -103,29 +99,72 @@ def main(test=False, cv=False, test_chunking=False):
                 train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
                 test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
 
-                crf = LinearChainCRF(squared_sigma=0.0001, predict_future=True)
+                crf = LinearChainCRF(squared_sigma=squared_sigma, predict_future=True)
                 crf.train(args.traindatafile, args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input,
-                          pair_ids=train_pair_ids, use_forward_backward_fix_history=False)
+                          pair_ids=train_pair_ids, use_forward_backward_fix_history=use_forward_backward_fix_history)
 
                 if test:
                     crf.load(args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input)
-                    correct_count, total_count =\
-                        crf.test(args.traindatafile, predict_only_last=True, pair_ids=test_pair_ids, fold_num=fold,
-                                 use_viterbi_fix_history=True)
+                    correct_count, total_count, prediction_df, total_seq_count =\
+                        crf.test(args.traindatafile, predict_only_last=predict_only_last, pair_ids=test_pair_ids,
+                                 fold_num=fold, use_viterbi_fix_history=use_viterbi_fix_history)
                     all_correct_count += correct_count
                     all_total_count += total_count
+                    all_total_seq_count += total_seq_count
+                    all_prediction_df = all_prediction_df.append(prediction_df)
 
+            mse = metrics.mean_squared_error(all_prediction_df.total_payoff, all_prediction_df.total_prediction)
+            rmse = math.sqrt(mse)
+            mae = metrics.mean_absolute_error(all_prediction_df.total_payoff, all_prediction_df.total_prediction)
             print('All folds accuracy')
             print('Correct: %d' % all_correct_count)
             print('Total: %d' % all_total_count)
-            print('Performance: %f' % (all_correct_count / all_total_count))
+            print('Performance: %f' % round((100 * all_correct_count / all_total_count), 2))
+            print(f'Total sequences: {all_total_seq_count}')
+            print(f'Total payoff MSE: {round(100 * mse, 2)}, RMSE: {round(100 * rmse, 2)}, MAE: {round(100 * mae, 2)}')
             logging.info('All folds accuracy')
             logging.info('Correct: %d' % all_correct_count)
             logging.info('Total: %d' % all_total_count)
-            logging.info('Performance: %f' % (all_correct_count / all_total_count))
+            logging.info('Performance: %f' % round((100 * all_correct_count / all_total_count), 2))
+            logging.info(f'Total sequences: {all_total_seq_count}')
+            logging.info(f'Total payoff MSE: {round(100 * mse, 2)}, RMSE: {round(100 * rmse, 2)}, '
+                         f'MAE: {round(100 * mae, 2)}')
             # print('potential score in vitervi fix history')
             # logging.info('potential score in vitervi fix history')
 
+            all_prediction_df.to_excel(os.path.join(model_directory, 'crf_results.xlsx'))
+            print(f'model directory is: {model_directory}')
+
 
 if __name__ == '__main__':
-    main(test=True, cv=True, test_chunking=False)
+    model_param = {
+        'use_forward_backward_fix_history': True,
+        'use_viterbi_fix_history': True,
+        'squared_sigma': 0.0005,
+        'predict_only_last': True,
+        'predict_future': True,
+    }
+
+    dir_name_component = [
+        f'use_forward_backward_fix_history_' if model_param['use_forward_backward_fix_history'] else '',
+        'use_viterbi_fix_history_' if model_param['use_viterbi_fix_history'] else '',
+        f'squared_sigma_{model_param["squared_sigma"]}_',
+        'predict_only_last_' if model_param['predict_only_last'] else '',
+        'predict_future' if model_param['predict_future'] else '',]
+    base_file_name = ''.join(dir_name_component)
+
+    model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_{base_file_name}_%d_%m_%Y_%H_%M'), 'logs')
+
+    log_file_name = os.path.join(model_directory, datetime.now().strftime('LogFile.log'))
+    logging.basicConfig(filename=log_file_name,
+                        level=logging.DEBUG,
+                        format='%(asctime)s: %(levelname)s %(message)s',
+                        datefmt='%H:%M:%S',
+                        )
+
+    main(test=True, cv=True, test_chunking=False,
+         use_forward_backward_fix_history=model_param['use_forward_backward_fix_history'],
+         use_viterbi_fix_history=model_param['use_viterbi_fix_history'], squared_sigma=model_param['squared_sigma'],
+         predict_only_last=model_param['predict_only_last'], predict_future=model_param['predict_future'])
+
+    print(f'Model params:\n {model_param}')

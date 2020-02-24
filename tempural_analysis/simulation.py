@@ -62,9 +62,23 @@ class Simulator:
 
         test_y.name = 'label'
         train_y.name = 'label'
+        if predictions.dtype == float:  # regression- create bins to measure the F-score
+            # for prediction
+            keep_mask = predictions < 0.33
+            bin_prediction = np.where(predictions < 0.67, 1, 2)
+            bin_prediction[keep_mask] = 0
+            bin_prediction = pd.Series(bin_prediction, name='bin_predictions', index=test_y.index)
+            # for test_y
+            keep_mask = test_y < 0.33
+            bin_test_y = np.where(test_y < 0.67, 1, 2)
+            bin_test_y[keep_mask] = 0
+            bin_test_y = pd.Series(bin_test_y, name='bin_label', index=test_y.index)
+        else:
+            bin_prediction, bin_test_y = pd.Series(name='bin_prediction'), pd.Series(name='bin_label')
         if test_folds is not None:
             self.predictions_per_fold[experiment_id] =\
-                test_folds.join(test_y).join(pd.Series(predictions, name='predictions', index=test_y.index))
+                test_folds.join(test_y).join(pd.Series(predictions, name='predictions', index=test_y.index)).join(
+                    bin_test_y).join(bin_prediction)
         else:  # for train_test
             self.predictions_per_fold[experiment_id] = \
                 pd.concat([test_y, pd.Series(predictions, name='predictions', index=test_y.index)], axis=1)
@@ -73,11 +87,17 @@ class Simulator:
         self.predictions_per_fold[experiment_id]['correct'] = \
             np.where(self.predictions_per_fold[experiment_id].predictions ==
                      self.predictions_per_fold[experiment_id].label, 1, 0)
+        self.predictions_per_fold[experiment_id]['bin_correct'] = \
+            np.where(self.predictions_per_fold[experiment_id].bin_predictions ==
+                     self.predictions_per_fold[experiment_id].bin_label, 1, 0)
 
         # create confusion matrix for classification
         if predictions.dtype == 'int':
             cnf_matrix = confusion_matrix(test_y, predictions)
             self.total_conf_mtx += cnf_matrix
+        # else:
+        #     cnf_matrix = confusion_matrix(bin_test_y, bin_prediction)
+        #     self.total_conf_mtx += cnf_matrix
 
         return
 
