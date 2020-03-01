@@ -10,6 +10,7 @@ import copy
 import time
 from language_prediction.train_test_models import *
 import itertools
+from collections import defaultdict
 
 
 base_directory = os.path.abspath(os.curdir)
@@ -57,14 +58,14 @@ def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list
         # the last round is not relevant to for the history of any other rounds
         data_to_flat = data_to_flat.loc[data_to_flat.subsession_round_number <= last_round_to_use]
         data_to_flat = data_to_flat.drop(columns_to_drop, axis=1)
-        columns_to_use = data_to_flat.columns.tolist()
-        columns_to_use.remove('review_features')
         # for current and next rounds put -1 --> use also current if first_round_to_use=0
         # and not use use if first_round_to_use=1
         # if we predict all the future payoff, so the future text can be seen
         if not total_payoff_label and text_data or not text_data:
             data_to_flat.iloc[list(range(round_num - first_round_to_use, last_round_to_use))] = -1
         if crf_raisha:  # for saifa review put list of -1
+            columns_to_use = data_to_flat.columns.tolist()
+            columns_to_use.remove('review_features')
             for i in range(round_num - first_round_to_use, last_round_to_use):
                 data_to_flat.at[i, 'review_features'] = [-1] * data.iloc[0]['review_features'].shape[0]
             raisha_data_list = list()
@@ -99,7 +100,7 @@ class CreateSaveData:
                  use_seq: bool=True, use_prev_round: bool=False, use_manual_features: bool=False, features_file: str='',
                  features_file_type: str='', use_all_history: bool = False, use_all_history_text_average: bool = False,
                  no_text: bool=False, use_score: bool=False, use_prev_round_text: bool=True,
-                 use_all_history_text: bool=False, use_all_history_average: bool = False,
+                 use_all_history_text: bool=False, use_all_history_average: bool = False, use_crf_raisha: bool=False,
                  predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None):
         """
         :param load_file_name: the raw data file name
@@ -120,6 +121,7 @@ class CreateSaveData:
         :param use_all_history_text_average: if to use the history text as average over all the history
         :param predict_first_round: if we want to predict the data of the first round
         :param use_crf: if we create data for crf model
+        :param use_crf_raisha: if we create data for crf model with fixed raisha
         :param features_to_drop: a list of features to drop
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
@@ -189,7 +191,6 @@ class CreateSaveData:
         self.total_payoff_label = total_payoff_label
         self.label = label
         self.use_seq = use_seq
-        self.use_crf = use_crf
         self.use_prev_round = use_prev_round
         self.use_manual_features = use_manual_features
         self.number_of_rounds = 10  # if self.use_seq else 1
@@ -214,7 +215,8 @@ class CreateSaveData:
         # create file names:
         file_name_component = [f'{self.label}_label_',
                                'seq_' if self.use_seq else '',
-                               'crf_' if self.use_crf else '',
+                               'crf_' if use_crf else '',
+                               'crf_raisha_' if use_crf_raisha else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
                                f'all_history_features_' if self.use_all_history else '',
@@ -751,6 +753,100 @@ class CreateSaveData:
 
         return
 
+    def create_manual_features_crf_raisha_data(self):
+        """
+        This function create 10 samples with different length from each pair data raw for crf model.
+        The raisha text and decisions and the text of the relevant history in the safia represent in each round data
+        :return:
+        """
+
+        print(f'Start creating sequences with different lengths and concat for crf')
+        logging.info('Start creating sequences with different lengths and concat for crf')
+
+        # only for single_round label
+        if self.label != 'single_round':
+            print('CRF raisha function works only with single_round label!')
+            return
+
+            # columns for raisha data
+        text_columns = copy.deepcopy(self.reviews_features.columns.to_list())
+        text_columns.remove('review_id')
+        decisions_payoffs_columns = ['exp_payoff', 'lottery_result_high', 'lottery_result_low', 'lottery_result_med1',
+                                     'chose_lose', 'chose_earn', 'not_chose_lose', 'not_chose_earn']
+        columns_to_flat = text_columns + decisions_payoffs_columns
+        all_columns = sorted([f'{column}_{j}' for column, j in
+                              list(itertools.product(*[columns_to_flat, list(range(0, 10))]))], key=lambda x: int(x[-1]))
+
+        file_name = f'features_{self.base_file_name}'
+        pd.DataFrame(all_columns).to_excel(os.path.join(data_directory, f'{file_name}.xlsx'), index=True)
+
+        # merge the round number features with the review features
+        data_for_pairs = self.data.merge(self.reviews_features, left_on='review_id', right_on='review_id', how='left')
+        data_for_pairs.exp_payoff = np.where(data_for_pairs.exp_payoff == 1, 1, -1)
+        columns_to_flat.extend(['pair_id'])
+        data_for_pairs = data_for_pairs[columns_to_flat]
+        columns_to_flat.remove('pair_id')
+        for pair in self.pairs:
+            print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
+            data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair]
+
+            # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
+            data_pair = data_pair.drop('pair_id', axis=1)
+            data_pair = data_pair.reset_index(drop=True)
+            data_pair = data_pair.unstack().to_frame().sort_index(level=1).T
+            data_pair.columns = [f'{str(col)}_{i}' for col, i in zip(data_pair.columns.get_level_values(0),
+                                                                     data_pair.columns.get_level_values(1))]
+            data_pair = data_pair[all_columns]
+
+            # create data per raisha with all data of the raisha and all the text of the history in the saifa
+            raisha_data_dict = defaultdict(dict)
+            for raisha in range(0, 10):
+                # add metadata and labels
+                raisha_data_dict[raisha]['raisha'] = raisha
+                raisha_data_dict[raisha]['pair_id'] = pair
+                # only for single_round label
+                raisha_data_dict[raisha]['labels'] =\
+                    data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]].values.tolist()[0]
+
+                # all the saifa decisions and payoffs (raisha=3, so all the decisions of rounds 4-10)
+                raisha_columns_minus_1 = \
+                    sorted([f'{column}_{j}' for column, j in
+                            list(itertools.product(*[decisions_payoffs_columns, list(range(raisha, 10))]))],
+                           key=lambda x: int(x[-1]))
+                for round_num in range(0, 10):
+                    if round_num < raisha:  # the raisha data --> no need to put
+                        raisha_data_dict[raisha][f'features_round_{round_num+1}'] = None
+                    # the saifa data --> put all the raisha data + the history in the saifa text + the curr round text
+                    else:
+                        # all the future of the saifa text (round=5 --> so the text of rounds 6-10)
+                        round_columns_minus_1 = \
+                            sorted([f'{column}_{j}' for column, j in
+                                    list(itertools.product(*[text_columns, list(range(round_num+1, 10))]))],
+                                   key=lambda x: int(x[-1]))
+                        round_columns_minus_1.extend(raisha_columns_minus_1)
+                        # put -1 in these columns
+                        round_raisha_data = copy.deepcopy(data_pair)
+                        round_raisha_data[round_columns_minus_1] = -1
+                        round_raisha_data = round_raisha_data.values.tolist()[0]
+                        raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
+
+            pair_raisha_data = pd.DataFrame.from_dict(raisha_data_dict).T
+            self.final_data = pd.concat([self.final_data, pair_raisha_data], axis=0, ignore_index=True)
+
+        file_name = f'all_data_{self.base_file_name}'
+        print(f'{time.asctime(time.localtime(time.time()))}: Save all data')
+        # save_data = self.final_data.drop(['pair_id'], axis=1)
+        save_data = self.final_data
+        save_data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
+        joblib.dump(save_data, os.path.join(data_directory, f'{file_name}.pkl'))
+
+        print(f'{time.asctime(time.localtime(time.time()))}:'
+              f'Finish creating sequences with different lengths and concat with manual features for the text')
+        logging.info(f'{time.asctime(time.localtime(time.time()))}:'
+                     f'Finish creating sequences with different lengths and concat features for the text')
+
+        return
+
     def create_seq_data(self):
         """
         This function create 10 samples with different length from each pair data raw
@@ -887,8 +983,6 @@ class CreateSaveData:
             # save 10 sequences per pair
 
             file_name = f'{data_name}_data_1_{self.number_of_rounds}_{self.base_file_name}'
-            if self.use_crf:
-                data = data.drop(['pair_id'], axis=1)
             data.to_csv(os.path.join(data_directory, f'{file_name}.csv'), index=False)
             joblib.dump(data, os.path.join(data_directory, f'{file_name}.pkl'))
             # save 9 sequences per pair
@@ -945,7 +1039,8 @@ def main():
                     }
     }
     use_seq = False
-    use_crf = True
+    use_crf = False
+    use_crf_raisha = True
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
@@ -955,7 +1050,7 @@ def main():
                                           use_seq=use_seq, use_prev_round=conditions_dict[condition]['use_prev_round'],
                                           use_manual_features=conditions_dict[condition]['use_manual_features'],
                                           features_file_type=features_files[features_to_use],
-                                          features_file=features_to_use, use_crf=use_crf,
+                                          features_file=features_to_use, use_crf=use_crf, use_crf_raisha=use_crf_raisha,
                                           use_all_history=conditions_dict[condition]['use_all_history'],
                                           use_all_history_average=conditions_dict[condition]['use_all_history_average'],
                                           use_all_history_text_average=conditions_dict[condition]
@@ -972,6 +1067,8 @@ def main():
             create_save_data_obj.create_manual_features_seq_data()
         elif use_crf:
             create_save_data_obj.create_manual_features_crf_data()
+        elif use_crf_raisha:
+            create_save_data_obj.create_manual_features_crf_raisha_data()
         else:
             create_save_data_obj.create_manual_features_data()
     else:
@@ -980,8 +1077,10 @@ def main():
         else:
             create_save_data_obj.create_manual_features_data()
 
-    if use_seq or use_crf:  # for not NN models - no need train and test --> use cross validation
+    if use_seq:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()
+    elif use_crf or use_crf_raisha:
+        return
     else:
         train_test_simple_features_model(create_save_data_obj.base_file_name,
                                          f'all_data_{create_save_data_obj.base_file_name}.pkl', backward_search=False,

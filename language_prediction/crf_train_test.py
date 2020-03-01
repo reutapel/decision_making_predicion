@@ -89,17 +89,24 @@ def main(test=False, cv=False, test_chunking=False, use_forward_backward_fix_his
             for fold in range(num_folds):
                 args = parser.parse_args([
                     os.path.join(data_directory,
-                                 'all_data_single_round_label_crf_manual_binary_features_verbal_data.pkl'),
+                                 'all_data_single_round_label_crf_raisha_all_history_features_all_history_text_manual_'
+                                 'binary_features_predict_first_round_verbal_data.pkl'),
                     os.path.join(data_directory,
-                                 'features_single_round_label_crf_manual_binary_features_verbal_data.xlsx'),
+                                 'features_single_round_label_crf_raisha_all_history_features_all_history_text_'
+                                 'manual_binary_features_predict_first_round_verbal_data.xlsx'),
                     os.path.join(model_directory, f'crf_model_test_fold{fold}.pkl'),
                     os.path.join(data_directory,
-                                 'all_data_single_round_label_crf_manual_binary_features_verbal_data.pkl'),
+                                 'all_data_single_round_label_crf_raisha_all_history_features_all_history_text_manual_'
+                                 'binary_features_predict_first_round_verbal_data.pkl'),
                 ])
                 train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
                 test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
+                # For Debug with small train data
+                # train_pair_ids = folds.loc[folds.fold_number == 4].pair_id.tolist()
 
-                crf = LinearChainCRF(squared_sigma=squared_sigma, predict_future=True)
+                print(f'Data file name: {args.traindatafile}')
+                logging.info(f'Data file name: {args.traindatafile}')
+                crf = LinearChainCRF(squared_sigma=squared_sigma, predict_future=predict_future)
                 crf.train(args.traindatafile, args.modelfile, args.featuresfile, vector_rep_input=vector_rep_input,
                           pair_ids=train_pair_ids, use_forward_backward_fix_history=use_forward_backward_fix_history)
 
@@ -113,9 +120,11 @@ def main(test=False, cv=False, test_chunking=False, use_forward_backward_fix_his
                     all_total_seq_count += total_seq_count
                     all_prediction_df = all_prediction_df.append(prediction_df)
 
-            mse = metrics.mean_squared_error(all_prediction_df.total_payoff, all_prediction_df.total_prediction)
+            mse = metrics.mean_squared_error(all_prediction_df.total_payoff_label,
+                                             all_prediction_df.total_payoff_prediction)
             rmse = math.sqrt(mse)
-            mae = metrics.mean_absolute_error(all_prediction_df.total_payoff, all_prediction_df.total_prediction)
+            mae = metrics.mean_absolute_error(all_prediction_df.total_payoff_label,
+                                              all_prediction_df.total_payoff_prediction)
             print('All folds accuracy')
             print('Correct: %d' % all_correct_count)
             print('Total: %d' % all_total_count)
@@ -138,11 +147,11 @@ def main(test=False, cv=False, test_chunking=False, use_forward_backward_fix_his
 
 if __name__ == '__main__':
     model_param = {
-        'use_forward_backward_fix_history': True,
-        'use_viterbi_fix_history': True,
-        'squared_sigma': 0.0005,
-        'predict_only_last': True,
-        'predict_future': True,
+        'use_forward_backward_fix_history': False,
+        'use_viterbi_fix_history': False,
+        'squared_sigma': 10.0,
+        'predict_only_last': False,
+        'predict_future': False,
     }
 
     dir_name_component = [

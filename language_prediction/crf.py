@@ -483,7 +483,7 @@ class LinearChainCRF():
             raise BaseException("You should load a model first!")
 
         if fold_num is not None:
-            logging.info(f'Start testing on fold {fold_num}')
+            print(f'Start testing on fold {fold_num}')
             logging.info(f'Start testing on fold {fold_num}')
         test_data = read_corpus(test_corpus_filename, pair_ids, self.predict_future)
 
@@ -500,45 +500,51 @@ class LinearChainCRF():
         max_round = 10
         columns = [item for sublist in [[f'y_{j}', f'y_prime_{j}', f'correct_{j}']
                                         for j in range(max_round)] for item in sublist]
-        columns.extend(['sample_id', 'raisha', 'total_prediction', 'total_payoff'])
+        columns.extend(['sample_id', 'raisha', 'total_payoff_prediction', 'total_payoff_label'])
         prediction_dict = dict()
         total_count = 0
         total_seq_count = 0
         correct_count = 0
         for data_num, data_list in enumerate(test_data):  # x=data_list[0], y=data_list[1], raisha=data_list[2]
             prediction_list = list()
-            sample_y_prime_sum = 0
-            sample_y_sum = 0
+            sample_y_prime_positive_sum = 0
+            sample_y_positive_sum = 0
             x = data_list[0]
             y = data_list[1]
             raisha = data_list[2] if len(data_list) >= 3 else None
             sample_id = data_list[3] if len(data_list) >= 4 else None
             total_seq_count += 1
             y_prime = self.inference(x=x, y=y, raisha=raisha, use_viterbi_fix_history=use_viterbi_fix_history)
-            if predict_only_last:
-                for t in range(raisha):
-                    correct = 1 if y[t] == y_prime[t] else 0
-                    prediction_list.extend([y[t], y_prime[t], correct])
-                for t in range(raisha, len(y)):
-                    correct = 1 if y[t] == y_prime[t] else 0
-                    prediction_list.extend([y[t], y_prime[t], correct])
-                    total_count += 1
-                    sample_y_prime_sum += y_prime[t] if y_prime[t] == 1 else 0
-                    sample_y_sum += y[t] if y[t] == 1 else 0
-                    if y[t] == y_prime[t]:
-                        correct_count += 1
-                prediction_list.extend([sample_id, raisha, sample_y_prime_sum/(max_round-raisha),
-                                        sample_y_sum/(max_round-raisha)])
+            if len(y_prime) == len(y):
+                if predict_only_last:
+                    for t in range(raisha):
+                        correct = 1 if y[t] == y_prime[t] else 0
+                        prediction_list.extend([y[t], y_prime[t], correct])
+                    for t in range(raisha, len(y)):
+                        correct = 1 if y[t] == y_prime[t] else 0
+                        prediction_list.extend([y[t], y_prime[t], correct])
+                        total_count += 1
+                        sample_y_prime_positive_sum += y_prime[t] if y_prime[t] == 1 else 0
+                        sample_y_positive_sum += y[t] if y[t] == 1 else 0
+                        if y[t] == y_prime[t]:
+                            correct_count += 1
+                    prediction_list.extend([sample_id, raisha, sample_y_prime_positive_sum/(max_round-raisha),
+                                            sample_y_positive_sum/(max_round-raisha)])
+                else:
+                    for raisha_data in range(0, raisha):
+                        prediction_list.extend(['-', '-', '-'])
+                    for t in range(len(y)):
+                        correct = 1 if y[t] == y_prime[t] else 0
+                        prediction_list.extend([y[t], y_prime[t], correct])
+                        total_count += 1
+                        sample_y_prime_positive_sum += y_prime[t] if y_prime[t] == 1 else 0
+                        sample_y_positive_sum += y[t] if y[t] == 1 else 0
+                        if y[t] == y_prime[t]:
+                            correct_count += 1
+                    prediction_list.extend([sample_id, raisha, sample_y_prime_positive_sum/len(y),
+                                            sample_y_positive_sum/len(y)])
             else:
-                for t in range(len(y)):
-                    correct = 1 if y[t] == y_prime[t] else 0
-                    prediction_list.extend([y[t], y_prime[t], correct])
-                    total_count += 1
-                    sample_y_prime_sum += y_prime[t] if y_prime[t] == 1 else 0
-                    sample_y_sum += y[t] if y[t] == 1 else 0
-                    if y[t] == y_prime[t]:
-                        correct_count += 1
-                prediction_list.extend([sample_id, raisha, sample_y_prime_sum/max_round, sample_y_sum/max_round])
+                raise ValueError(f'y_prime and y are not with the same length')
 
             prediction_dict[data_num] = prediction_list
 
@@ -547,9 +553,9 @@ class LinearChainCRF():
             logging.info(f'Model Performance for fold: {fold_num}')
 
         prediction_df = pd.DataFrame.from_dict(prediction_dict, orient='index', columns=columns)
-        mse = metrics.mean_squared_error(prediction_df.total_payoff, prediction_df.total_prediction)
+        mse = metrics.mean_squared_error(prediction_df.total_payoff_label, prediction_df.total_payoff_prediction)
         rmse = math.sqrt(mse)
-        mae = metrics.mean_absolute_error(prediction_df.total_payoff, prediction_df.total_prediction)
+        mae = metrics.mean_absolute_error(prediction_df.total_payoff_label, prediction_df.total_payoff_prediction)
         print('Correct: %d' % correct_count)
         print('Total: %d' % total_count)
         print('Performance: %f' % round((100 * correct_count/total_count), 2))

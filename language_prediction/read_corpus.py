@@ -67,7 +67,8 @@ def read_verbal_exp_data(filename, pair_ids: list=None, predict_future: bool=Fal
         data_df = data_df.loc[data_df.pair_id.isin(pair_ids)]
 
     # remove sequence of length 1:
-    data_df = data_df.loc[data_df.labels.str.len() > 1]
+    if 'crf_raisha' not in filename:
+        data_df = data_df.loc[data_df.labels.str.len() > 1]
 
     if predict_future:  # keep only sequence of length 10
         data_df = data_df.loc[data_df.labels.str.len() == 10]
@@ -91,12 +92,17 @@ def read_verbal_exp_data(filename, pair_ids: list=None, predict_future: bool=Fal
             for raisha in range(0, 10):  # different size of raisha
                 data.append((x, y, raisha, f'{pair_id}_{raisha}'))
                 row_number += 1
+
+        elif 'raisha' in data_df.columns:
+            data.append((x, y, row.raisha, f'{pair_id}_{row.raisha}'))
+            row_number += 1
+
         else:
             data.append((x, y))
             row_number += 1
 
-    print(f'\n* Number of data points: {row_number+1}')
-    logging.info(f'\n* Number of data points: {row_number+1}')
+    print(f'\n* Number of data points: {row_number}')
+    logging.info(f'\n* Number of data points: {row_number}')
 
     return data
 

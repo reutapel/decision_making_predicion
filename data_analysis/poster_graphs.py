@@ -7,6 +7,56 @@ from sklearn.metrics import mean_squared_error, r2_score
 import math
 from data_analysis import autolabel
 
+
+"""New text experiment initial results analysis"""
+data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
+                     'results/text_exp_2_tests/numeric_deterministic/initial_analysis.xlsx', sheet_name='data_to_plot')
+# fig = plt.figure(figsize=(15, 15))
+# ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+participants = data.participant_code.unique()
+colors = ['red', 'blue']
+for user_num, user in enumerate(participants):
+    user_data = data.loc[data.participant_code == user]
+    fig, ax = plt.subplots(figsize=(10, 5))
+    all_x_points = user_data.subsession_round_number.tolist()
+    all_y_points = user_data.group_sender_answer_scores.tolist()
+    all_x_real_score = user_data.group_lottery_result.tolist()
+    all_x_index = user_data.group_sender_answer_index.tolist()
+    all_x_dm_decision = user_data.group_sender_payoff.tolist()
+    all_index_above = user_data.above.tolist()
+    all_index_below = user_data.below.tolist()
+    all_index_diff = user_data.index_diff.tolist()
+    chose_points_x, chose_points_y = list(), list()
+    not_chose_points_x, not_chose_points_y = list(), list()
+    for i, point in enumerate(all_x_points):
+        color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
+        if all_x_dm_decision[i] == 1:
+            color = colors[0]
+            chose_points_x.append(all_x_points[i])
+            chose_points_y.append(all_y_points[i])
+        else:
+            color = colors[1]
+            not_chose_points_x.append(all_x_points[i])
+            not_chose_points_y.append(all_y_points[i])
+
+        ax.annotate(f'({all_x_real_score[i]},{all_y_points[i]},\n'
+                    f'{all_index_above[i]}, {all_index_below[i]}, {all_index_diff[i]})',
+                    (point-0.4, all_y_points[i]-0.6), color=color, fontsize=10)
+    ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel')
+    ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home')
+    print(f'pair number {user_num+1} with participant_code {user}')
+    plt.title(f'Pair number {user_num+1} results: (true score, expert chosen score,\n'
+              f'#numbers above, #numbers below, expert choice with respect to chosen index)')
+    plt.xlabel('Round Number')
+    plt.ylabel('Expert Chosen Score')
+    plt.xticks(range(1, 11))
+    plt.yticks(range(3, 11))
+    plt.legend(loc='lower right')
+    plt.show()
+    fig.savefig(f'/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/results/'
+                f'text_exp_2_tests/numeric_deterministic/Pair number {user_num+1} results.png', bbox_inches='tight')
+
+
 """score evaluation task"""
 data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
                      'results/text_exp_2_tests/score evaluation task.xlsx', sheet_name='data_to_plot')
@@ -27,76 +77,76 @@ all_x_avg = list()
 all_y = list()
 points_annotate = list()
 move = False
-for i, average_score in enumerate(all_x_points):
+for i, point in enumerate(all_x_points):
     y = all_y_points[i]
     y_loc = y
-    x_loc = average_score
-    if average_score == 6.5 and y == 10 and [6.5, 10] not in points_annotate:
+    x_loc = point
+    if point == 6.5 and y == 10 and [6.5, 10] not in points_annotate:
         y_loc = 10.2
         points_annotate.append([6.5, 10])
-    elif average_score == 6.6 and y == 10 and [6.6, 10] not in points_annotate:
+    elif point == 6.6 and y == 10 and [6.6, 10] not in points_annotate:
         y_loc = 9.8
         points_annotate.append([6.6, 10])
     # elif average_score == 8.1 and y == 10 and [8.1, 10] not in points_annotate:
     #     x_loc = 7.9
     #     points_annotate.append([8.1, 10])
-    elif average_score == 8.3 and y == 10 and [8.3, 10] not in points_annotate:
+    elif point == 8.3 and y == 10 and [8.3, 10] not in points_annotate:
         y_loc = 9.8
         points_annotate.append([8.3, 10])
-    elif average_score == 8.5 and y == 10 and [8.5, 10] not in points_annotate:
+    elif point == 8.5 and y == 10 and [8.5, 10] not in points_annotate:
         y_loc = 10.2
         points_annotate.append([8.5, 10])
-    elif average_score == 8.9 and y == 10 and [8.9, 10] not in points_annotate:
+    elif point == 8.9 and y == 10 and [8.9, 10] not in points_annotate:
         y_loc = 9.75
         points_annotate.append([8.9, 10])
-    elif average_score == 8.7 and y == 10 and [8.7, 10] not in points_annotate:
+    elif point == 8.7 and y == 10 and [8.7, 10] not in points_annotate:
         y_loc = 9.75
         x_loc = 8.65
         points_annotate.append([8.7, 10])
-    elif average_score == 8.3 and y == 9.6 and [8.3, 9.6] not in points_annotate:
+    elif point == 8.3 and y == 9.6 and [8.3, 9.6] not in points_annotate:
         x_loc = 8.1
         points_annotate.append([8.3, 9.6])
-    elif average_score == 8.4 and y == 9.6 and [8.4, 9.6] not in points_annotate:
+    elif point == 8.4 and y == 9.6 and [8.4, 9.6] not in points_annotate:
         y_loc = 9.35
         points_annotate.append([8.4, 9.6])
-    elif average_score == 7.3 and y == 9.6 and [7.3, 9.6] not in points_annotate:
+    elif point == 7.3 and y == 9.6 and [7.3, 9.6] not in points_annotate:
         x_loc = 7.1
         points_annotate.append([7.3, 9.6])
-    elif average_score == 7.4 and y == 9.6 and [7.4, 9.6] not in points_annotate:
+    elif point == 7.4 and y == 9.6 and [7.4, 9.6] not in points_annotate:
         y_loc = 9.35
         points_annotate.append([7.4, 9.6])
-    elif average_score == 7.3 and y == 9.6 and [7.31, 9.6] not in points_annotate:
+    elif point == 7.3 and y == 9.6 and [7.31, 9.6] not in points_annotate:
         y_loc = 9.35
         x_loc = 7.1
         points_annotate.append([7.31, 9.6])
-    elif average_score == 6.1 and y == 9.6 and [6.1, 9.6] not in points_annotate:
+    elif point == 6.1 and y == 9.6 and [6.1, 9.6] not in points_annotate:
         y_loc = 9.35
         x_loc = 5.9
         points_annotate.append([6.1, 9.6])
-    elif average_score == 6.1 and y == 9.6 and [6.15, 9.6] not in points_annotate:
+    elif point == 6.1 and y == 9.6 and [6.15, 9.6] not in points_annotate:
         x_loc = 5.9
         points_annotate.append([6.15, 9.6])
-    elif average_score == 7.1 and y == 9.2 and [7.1, 9.2] not in points_annotate:
+    elif point == 7.1 and y == 9.2 and [7.1, 9.2] not in points_annotate:
         y_loc = 9
         points_annotate.append([7.1, 9.2])
-    elif average_score == 7.7 and y == 9.2 and [7.7, 9.2] not in points_annotate:
+    elif point == 7.7 and y == 9.2 and [7.7, 9.2] not in points_annotate:
         x_loc = 7.5
         points_annotate.append([7.7, 9.2])
-    elif average_score == 8.5 and y == 9.2 and [8.5, 9.2] not in points_annotate:
+    elif point == 8.5 and y == 9.2 and [8.5, 9.2] not in points_annotate:
         y_loc = 8.95
         points_annotate.append([8.5, 9.2])
-    elif average_score == 6.4 and y == 8.8 and [6.4, 8.8] not in points_annotate:
+    elif point == 6.4 and y == 8.8 and [6.4, 8.8] not in points_annotate:
         y_loc = 8.55
         x_loc = 6.2
         points_annotate.append([6.4, 8.8])
-    elif average_score == 7.3 and y == 8.3 and [7.3, 8.3] not in points_annotate:
+    elif point == 7.3 and y == 8.3 and [7.3, 8.3] not in points_annotate:
         y_loc = 8.05
         x_loc = 7.1
         points_annotate.append([7.3, 8.3])
-    elif average_score == 3.5 and y == 3.3 and [3.5, 3.3] not in points_annotate:
+    elif point == 3.5 and y == 3.3 and [3.5, 3.3] not in points_annotate:
         x_loc = 3.3
         points_annotate.append([3.5, 3.3])
-    elif average_score == 4.3 and y == 3.3 and [4.3, 3.3] not in points_annotate:
+    elif point == 4.3 and y == 3.3 and [4.3, 3.3] not in points_annotate:
         x_loc = 4.0
         points_annotate.append([4.3, 3.3])
     else:
