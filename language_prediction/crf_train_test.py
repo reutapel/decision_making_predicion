@@ -149,7 +149,7 @@ if __name__ == '__main__':
     model_param = {
         'use_forward_backward_fix_history': False,
         'use_viterbi_fix_history': False,
-        'squared_sigma': 10.0,
+        'squared_sigma': 0.008,
         'predict_only_last': False,
         'predict_future': False,
     }
@@ -159,10 +159,10 @@ if __name__ == '__main__':
         'use_viterbi_fix_history_' if model_param['use_viterbi_fix_history'] else '',
         f'squared_sigma_{model_param["squared_sigma"]}_',
         'predict_only_last_' if model_param['predict_only_last'] else '',
-        'predict_future' if model_param['predict_future'] else '',]
+        'predict_future_' if model_param['predict_future'] else '',]
     base_file_name = ''.join(dir_name_component)
 
-    model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_{base_file_name}_%d_%m_%Y_%H_%M'), 'logs')
+    model_directory = utils.set_folder(datetime.now().strftime(f'CRF_cv_{base_file_name}%d_%m_%Y_%H_%M'), 'logs')
 
     log_file_name = os.path.join(model_directory, datetime.now().strftime('LogFile.log'))
     logging.basicConfig(filename=log_file_name,
@@ -177,3 +177,4 @@ if __name__ == '__main__':
          predict_only_last=model_param['predict_only_last'], predict_future=model_param['predict_future'])
 
     print(f'Model params:\n {model_param}')
+    logging.info(f'Model params:\n {model_param}')

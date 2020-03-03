@@ -7,7 +7,7 @@ from allennlp.modules.token_embedders import ElmoTokenEmbedder
 from allennlp.modules.elmo import Elmo
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
-from language_prediction.dataset_readers import TextExpDataSetReader
+from language_prediction.dataset_readers import TextExpDataSetReader, LSTMDatasetReader
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
@@ -38,6 +38,8 @@ from xgboost import XGBClassifier, XGBRegressor
 from tempural_analysis.predict_last_decision import PredictLastDecision
 from sklearn.ensemble import AdaBoostClassifier
 from tempural_analysis.ensemble_classifier import EnsembleClassifier
+import torch
+from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper
 
 
 # define directories
@@ -538,6 +540,102 @@ def train_valid_base_text_decision_fix_text_features_model(
 
     # save the model predictions
     model.predictions.to_csv(os.path.join(run_log_directory, 'predictions.csv'))
+
+
+def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_data_file_name: str,
+                                                           func_batch_size: int = 10):
+    """
+    This function train and validate model that use fix texts features only.
+    :param model_name: the full model name
+    :param all_data_file_name: the name of the data file to use
+    :param func_batch_size: the batch size to use
+    :return:
+    """
+
+    all_data_file_inner_path = os.path.join(data_directory, all_data_file_name)
+    # split data to 5 folds
+    num_folds = 5
+    num_epochs = 100
+
+    run_log_directory = utils.set_folder(
+        datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_{num_folds}_folds_%d_%m_%Y_%H_%M_%S'), 'logs')
+    all_predictions = pd.DataFrame()
+    all_correct_count, all_total_count, all_total_seq_count = 0, 0, 0
+    all_prediction_df = pd.DataFrame()
+    if 'csv' in all_data_file_inner_path:
+        data_df = pd.read_csv(all_data_file_inner_path)
+    elif 'xlsx' in all_data_file_inner_path:
+        data_df = pd.read_excel(all_data_file_inner_path)
+    elif 'pkl' in all_data_file_inner_path:
+        data_df = joblib.load(all_data_file_inner_path)
+    else:
+        print('Data format is not csv or csv or pkl')
+        return
+    folds = get_folds_per_participant(data=data_df, k_folds=num_folds, col_to_group='pair_id',
+                                      col_to_group_in_df=True)
+    if num_folds == 2:  # train-test --> the fold to test is 1.
+        num_folds = [1]
+    for fold in range(num_folds):
+        train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
+        test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
+        # load train data
+        train_reader = LSTMDatasetReader(pair_ids=train_pair_ids)
+        test_reader = LSTMDatasetReader(pair_ids=test_pair_ids)
+
+        train_instances = train_reader.read(all_data_file_inner_path)
+        validation_instances = test_reader.read(all_data_file_inner_path)
+        vocab = Vocabulary.from_instances(train_instances + validation_instances)
+
+        metrics_dict = {
+            'Accuracy': CategoricalAccuracy()  # BooleanAccuracy(),
+            # 'auc': Auc(),
+            # 'F1measure': F1Measure(positive_label=1),
+        }
+
+        # TODO: change this if necessary
+        # batch_size should be: 10 or 9 depends on the input
+        # and not shuffle so all the data of the same pair will be in the same batch
+        iterator = BasicIterator(batch_size=func_batch_size)  # , instances_per_epoch=10)
+        iterator.index_with(vocab)
+        HIDDEN_DIM = 5
+        lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, HIDDEN_DIM, batch_first=True,
+                                                   num_layers=1, dropout=0.0))
+        model = models.BasicLSTMFixTextFeaturesDecisionResultModel(lstm, metrics_dict=metrics_dict, vocab=vocab)
+        if torch.cuda.is_available():
+            cuda_device = 0
+            model = model.cuda(cuda_device)
+        else:
+            cuda_device = -1
+        optimizer = optim.SGD(model.parameters(), lr=0.1)
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            iterator=iterator,
+            train_dataset=train_instances,
+            validation_dataset=validation_instances,
+            num_epochs=num_epochs,
+            shuffle=False,
+            serialization_dir=run_log_directory,
+            patience=10,
+            histogram_interval=10,
+            cuda_device=cuda_device,
+        )
+
+        model_dict = trainer.train()
+
+        print(f'{model_name}: evaluation measures are:')
+        for key, value in model_dict.items():
+            if 'accuracy' in key:
+                value = value*100
+            print(f'{key}: {value}')
+
+        fold_predictions = pd.DataFrame.from_dict(model.predictions, orient='index')
+        fold_predictions = fold_predictions.assign(fold=fold)
+        all_predictions = pd.concat([all_predictions, fold_predictions])
+
+    # save the model predictions
+    all_predictions.to_csv(os.path.join(run_log_directory, 'predictions.csv'))
 
 
 def train_predict_simple_baseline_model(model_name: str, binary_classification: bool=False, use_first_round: bool=True):

@@ -6,7 +6,7 @@ import numpy as np
 import tqdm
 from overrides import overrides
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import LabelField, TextField, MetadataField, ListField, ArrayField
+from allennlp.data.fields import LabelField, TextField, MetadataField, ListField, ArrayField, SequenceLabelField
 from float_label_field import FloatLabelField
 from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Tokenizer, WordTokenizer, Token
@@ -144,8 +144,8 @@ class TextExpDataSetReader(DatasetReader):
                 review_textfield_list.append(ArrayField(review))
             else:
                 review_textfield_list.append(TextField(review, self._token_indexers))
-        sequence_filed = ListField(review_textfield_list)
-        fields = {'sequence_review': sequence_filed}
+        sentence_field = ListField(review_textfield_list)
+        fields = {'sequence_review': sentence_field}
 
         # add numeric features to fields
         if numbers_seq is not None:
@@ -183,3 +183,66 @@ class TextExpDataSetReader(DatasetReader):
             fields['metadata'] = MetadataField(metadata)
 
         return Instance(fields)
+
+
+class LSTMDatasetReader(DatasetReader):
+    """
+    DatasetReader for LSTM models that predict for each round the DM's decision
+    """
+    def __init__(self,
+                 lazy: bool = False,
+                 label_column: Optional[str] = 'labels',
+                 pair_ids: list = None) -> None:
+        super().__init__(lazy)
+        self._label_column = label_column
+        self.num_features = 0
+        self.num_labels = 2
+        self.pair_ids = pair_ids
+
+    @overrides
+    def text_to_instance(self, features_list: List[ArrayField], labels: List[str] = None,
+                         metadata: Dict=None) -> Instance:
+        sentence_field = ListField(features_list)
+        fields = {'sequence_review': sentence_field}
+
+        if labels:
+            label_field = SequenceLabelField(labels=labels, sequence_field=sentence_field)
+            fields['labels'] = label_field
+
+        if metadata is not None:
+            fields['metadata'] = MetadataField(metadata)
+
+        return Instance(fields)
+
+    @overrides
+    def _read(self, file_path: str) -> Iterator[Instance]:
+        """
+        This function takes a filename, read the data and produces a stream of Instances
+        :param str file_path: the path to the file with the data
+        :return:
+        """
+        # Load the data
+        if 'csv' in file_path:
+            df = pd.read_csv(file_path)
+        else:
+            df = joblib.load(file_path)
+
+        # if we run with CV we need the pair ids to use
+        if self.pair_ids is not None:
+            df = df.loc[df.pair_id.isin(self.pair_ids)]
+
+        # get the reviews and label columns -> no metadata, and metadata columns
+        metadata_columns = ['raisha', 'pair_id', 'sample_id']
+        rounds = list(range(1, 11))  # rounds 1-10
+
+        for i, row in tqdm.tqdm(df.iterrows()):
+            text_list = list()
+            for round_num in rounds:
+                # use only available rounds
+                if row[f'features_round_{round_num}'] is not None:
+                    if self.num_features == 0:
+                        self.num_features = len(row[f'features_round_{round_num}'])
+                    text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+            labels = row[self._label_column]
+            metadata_dict = {column: row[column] for column in metadata_columns}
+            yield self.text_to_instance(text_list, labels, metadata_dict)

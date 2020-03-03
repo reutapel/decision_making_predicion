@@ -101,7 +101,8 @@ class CreateSaveData:
                  features_file_type: str='', use_all_history: bool = False, use_all_history_text_average: bool = False,
                  no_text: bool=False, use_score: bool=False, use_prev_round_text: bool=True,
                  use_all_history_text: bool=False, use_all_history_average: bool = False, use_crf_raisha: bool=False,
-                 predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None):
+                 predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None,
+                 string_labels: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -123,6 +124,7 @@ class CreateSaveData:
         :param use_crf: if we create data for crf model
         :param use_crf_raisha: if we create data for crf model with fixed raisha
         :param features_to_drop: a list of features to drop
+        :param string_labels: if the labels are string --> for LSTM model
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -217,6 +219,7 @@ class CreateSaveData:
                                'seq_' if self.use_seq else '',
                                'crf_' if use_crf else '',
                                'crf_raisha_' if use_crf_raisha else '',
+                               'string_labels_' if string_labels else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
                                f'all_history_features_' if self.use_all_history else '',
@@ -753,7 +756,7 @@ class CreateSaveData:
 
         return
 
-    def create_manual_features_crf_raisha_data(self):
+    def create_manual_features_crf_raisha_data(self, string_labels=False):
         """
         This function create 10 samples with different length from each pair data raw for crf model.
         The raisha text and decisions and the text of the relevant history in the safia represent in each round data
@@ -804,9 +807,16 @@ class CreateSaveData:
                 # add metadata and labels
                 raisha_data_dict[raisha]['raisha'] = raisha
                 raisha_data_dict[raisha]['pair_id'] = pair
-                # only for single_round label
-                raisha_data_dict[raisha]['labels'] =\
-                    data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]].values.tolist()[0]
+                raisha_data_dict[raisha]['sample_id'] = f'{pair}_{raisha}'
+
+                if string_labels:
+                    raisha_data_dict[raisha]['labels'] =\
+                        np.where(data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]] == 1,
+                                 'hotel', 'stay_home')[0].tolist()
+                else:
+                    # only for single_round label
+                    raisha_data_dict[raisha]['labels'] = \
+                        data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]].astype(int).values.tolist()[0]
 
                 # all the saifa decisions and payoffs (raisha=3, so all the decisions of rounds 4-10)
                 raisha_columns_minus_1 = \
@@ -1041,6 +1051,7 @@ def main():
     use_seq = False
     use_crf = False
     use_crf_raisha = True
+    string_labels = True
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
@@ -1060,7 +1071,7 @@ def main():
                                           use_score=conditions_dict[condition]['use_score'],
                                           use_prev_round_text=conditions_dict[condition]['use_prev_round_text'],
                                           predict_first_round=conditions_dict[condition]['predict_first_round'],
-                                          features_to_drop=features_to_drop)
+                                          features_to_drop=features_to_drop, string_labels=string_labels)
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:
@@ -1068,7 +1079,7 @@ def main():
         elif use_crf:
             create_save_data_obj.create_manual_features_crf_data()
         elif use_crf_raisha:
-            create_save_data_obj.create_manual_features_crf_raisha_data()
+            create_save_data_obj.create_manual_features_crf_raisha_data(string_labels=string_labels)
         else:
             create_save_data_obj.create_manual_features_data()
     else:
@@ -1077,9 +1088,9 @@ def main():
         else:
             create_save_data_obj.create_manual_features_data()
 
-    if use_seq:  # for not NN models - no need train and test --> use cross validation
+    if use_seq or use_crf_raisha:  # for not NN models - no need train and test --> use cross validation
         create_save_data_obj.split_data()
-    elif use_crf or use_crf_raisha:
+    elif use_crf:
         return
     else:
         train_test_simple_features_model(create_save_data_obj.base_file_name,

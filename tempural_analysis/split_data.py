@@ -4,6 +4,7 @@ import copy
 import pandas as pd
 from random import shuffle
 import math
+import numpy as np
 
 
 def get_folds_per_participant(data: pd.DataFrame, k_folds: int=5, index_to_use: list=None,
@@ -19,13 +20,20 @@ def get_folds_per_participant(data: pd.DataFrame, k_folds: int=5, index_to_use: 
     """
 
     participants = pd.DataFrame(data[col_to_group].unique(), columns=[col_to_group])
-    # shuffle participants
-    participants = participants.sample(frac=1)
-    participants = participants.assign(fold_number=0)
-    participants_list = participants[col_to_group].unique()
-    for k in range(k_folds):
-        participants.loc[participants[col_to_group].isin(
-            [x for i, x in enumerate(participants_list) if i % k_folds == k]), 'fold_number'] = k
+    if k_folds == 2:  # train-test
+        pairs = pd.Series(participants[col_to_group].unique())
+        train_pairs = np.split(pairs.sample(frac=1), int(.8 * len(pairs)))
+        participants = participants.assign(fold_number=0)
+        participants.fold_number = np.where(participants.loc[participants[col_to_group].isin(train_pairs)], 0, 1)
+
+    else:
+        # shuffle participants
+        participants = participants.sample(frac=1)
+        participants = participants.assign(fold_number=0)
+        participants_list = participants[col_to_group].unique()
+        for k in range(k_folds):
+            participants.loc[participants[col_to_group].isin(
+                [x for i, x in enumerate(participants_list) if i % k_folds == k]), 'fold_number'] = k
 
     if col_to_group_in_df:
         return participants

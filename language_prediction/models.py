@@ -10,13 +10,51 @@ from allennlp.modules import FeedForward
 from allennlp.modules.matrix_attention import MatrixAttention
 from allennlp.data.vocabulary import Vocabulary
 from allennlp.nn.regularizers.regularizer_applicator import RegularizerApplicator
-from allennlp.nn.util import get_text_field_mask
 from allennlp.nn.initializers import InitializerApplicator
 from allennlp.nn.util import masked_softmax
 import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 import joblib
+from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
+from allennlp.modules.seq2seq_encoders import Seq2SeqEncoder, PytorchSeq2SeqWrapper
+from collections import defaultdict
+
+
+def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
+                                metadata, epoch: int, is_train: bool, mask: torch.Tensor) -> dict:
+    """
+    This function get the predictions class and save with the gold labels for sequence models where each sample had a
+    list of predictions and labels
+    :param prediction_df: dataframe with all the predictions by now
+    :param predictions: the predictions for a specific batch in a specific epoch
+    :param gold_labels: the labels for a specific batch
+    :param metadata: the metadata for a specific batch
+    :param epoch: the number of epoch
+    :param is_train: if this is train data or not
+    :param mask: mask for each sample- which index is a padding
+    :return:
+    """
+
+    for i in range(predictions.shape[0]):  # go over each sample
+        if epoch == 0:  # if this is the first epoch - keep the label
+            gold_labels_list = gold_labels[i][:mask[i].sum()].tolist()
+            prediction_df[metadata[i]['sample_id']] = \
+                {'is_train': is_train, f'labels': gold_labels_list,
+                 f'total_payoff_label': sum(gold_labels_list) / len(gold_labels_list)}
+        predictions_list = predictions[i][:mask[i].sum()].argmax(1).tolist()
+        prediction_df[metadata[i]['sample_id']][f'predictions_{epoch}'] = predictions_list
+        prediction_df[metadata[i]['sample_id']][f'total_payoff_prediction_{epoch}'] =\
+            sum(predictions_list) / len(predictions_list)
+
+    # prediction_df_temp = pd.DataFrame.from_dict(predictions_dict, orient='index')
+    #
+    # if epoch != 0:
+    #     prediction_df = prediction_df.merge(prediction_df_temp, how='left', right_index=True, left_index=True)
+    # else:
+    #     prediction_df = pd.concat([prediction_df, prediction_df_temp])
+
+    return prediction_df
 
 
 def save_predictions(prediction_df: pd.DataFrame, predictions: torch.Tensor, gold_labels: torch.Tensor, metadata,
@@ -670,3 +708,50 @@ class AttentionSoftMaxLayer(Model):
         output = attention_weights.mean(dim=1)
 
         return output
+
+
+class BasicLSTMFixTextFeaturesDecisionResultModel(Model):
+    """
+    This is a LSTM model that predict the class for each 't'
+    """
+    def __init__(self,
+                 encoder: Seq2SeqEncoder,
+                 metrics_dict: dict,
+                 vocab: Vocabulary) -> None:
+        super().__init__(vocab)
+        self.encoder = encoder
+        self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
+                                          out_features=vocab.get_vocab_size('labels'))
+        self.metrics = metrics_dict
+        self.predictions = defaultdict(dict)
+        self._epoch = 0
+        self._first_pair = None
+
+    def forward(self,
+                sequence_review: torch.Tensor,
+                metadata: list,
+                labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+
+        if self._first_pair is not None:
+            if self._first_pair == metadata[0]['pair_id']:
+                self._epoch += 1
+        else:
+            self._first_pair = metadata[0]['pair_id']
+
+        mask = get_text_field_mask({'tokens': sequence_review})
+        encoder_out = self.encoder(sequence_review, mask)
+        decision_logits = self.hidden2tag(encoder_out)
+        output = {'decision_logits': decision_logits}
+        if labels is not None:
+            for metric_name, metric in self.metrics.items():
+                metric(decision_logits, labels, mask)
+            output['loss'] = sequence_cross_entropy_with_logits(decision_logits, labels, mask)
+
+        self.predictions = save_predictions_seq_models(prediction_df=self.predictions, mask=mask,
+                                                       predictions=output['decision_logits'], gold_labels=labels,
+                                                       metadata=metadata, epoch=self._epoch, is_train=self.training)
+
+        return output
+
+    def get_metrics(self, train=True, reset: bool = False) -> Dict[str, float]:
+        return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
