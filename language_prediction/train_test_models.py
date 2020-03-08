@@ -40,6 +40,9 @@ from sklearn.ensemble import AdaBoostClassifier
 from tempural_analysis.ensemble_classifier import EnsembleClassifier
 import torch
 from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper
+from sklearn import metrics
+import math
+from .utils import calculate_measures_seq_models
 
 
 # define directories
@@ -55,6 +58,25 @@ batch_size = 9 if '9' in train_data_file_path else 10
 # test:
 # train_data_file_path = os.path.join(data_directory, 'test_code_data.csv')
 # validation_data_file_path = os.path.join(data_directory, 'test_code_data.csv')
+
+
+def calc_print_measures(all_predictions: pd.DataFrame):
+    """
+    Calc and print the regression measures
+    :param all_predictions:
+    :return:
+    """
+    validation_measures = all_predictions.loc[all_predictions.is_train == False]
+    mse = metrics.mean_squared_error(validation_measures.final_total_payoff_prediction,
+                                     validation_measures.total_payoff_label)
+    rmse = round(100 * math.sqrt(mse), 2)
+    mae = round(100 * metrics.mean_absolute_error(validation_measures.final_total_payoff_prediction,
+                                                  validation_measures.total_payoff_label), 2)
+    mse = round(100 * mse, 2)
+    logging.info(f'MSE: {mse}, RMSE: {rmse}, MAE: {mae}')
+    print(f'MSE: {mse}, RMSE: {rmse}, MAE: {mae}')
+
+    return mse, rmse, mae
 
 
 def train_valid_base_text_model(model_name):
@@ -557,11 +579,15 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
     num_folds = 5
     num_epochs = 100
 
+    all_validation_accuracy = list()
+    all_train_accuracy = list()
+    HIDDEN_DIM = 100
+
     run_log_directory = utils.set_folder(
-        datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_{num_folds}_folds_%d_%m_%Y_%H_%M_%S'), 'logs')
+        datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_{num_folds}_folds_{HIDDEN_DIM}_hidden_dim_'
+                                f'%d_%m_%Y_%H_%M_%S'), 'logs')
+    print(f'run_log_directory is: {run_log_directory}')
     all_predictions = pd.DataFrame()
-    all_correct_count, all_total_count, all_total_seq_count = 0, 0, 0
-    all_prediction_df = pd.DataFrame()
     if 'csv' in all_data_file_inner_path:
         data_df = pd.read_csv(all_data_file_inner_path)
     elif 'xlsx' in all_data_file_inner_path:
@@ -576,6 +602,7 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
     if num_folds == 2:  # train-test --> the fold to test is 1.
         num_folds = [1]
     for fold in range(num_folds):
+        run_log_directory_fold = utils.set_folder(f'fold_{fold}', run_log_directory)
         train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
         test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
         # load train data
@@ -597,10 +624,10 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         # and not shuffle so all the data of the same pair will be in the same batch
         iterator = BasicIterator(batch_size=func_batch_size)  # , instances_per_epoch=10)
         iterator.index_with(vocab)
-        HIDDEN_DIM = 5
         lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, HIDDEN_DIM, batch_first=True,
                                                    num_layers=1, dropout=0.0))
         model = models.BasicLSTMFixTextFeaturesDecisionResultModel(lstm, metrics_dict=metrics_dict, vocab=vocab)
+        print(model)
         if torch.cuda.is_available():
             cuda_device = 0
             model = model.cuda(cuda_device)
@@ -616,15 +643,16 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
             validation_dataset=validation_instances,
             num_epochs=num_epochs,
             shuffle=False,
-            serialization_dir=run_log_directory,
+            serialization_dir=run_log_directory_fold,
             patience=10,
             histogram_interval=10,
             cuda_device=cuda_device,
+            validation_metric='+Accuracy'
         )
 
         model_dict = trainer.train()
 
-        print(f'{model_name}: evaluation measures are:')
+        print(f'{model_name}: evaluation measures for fold {fold} are:')
         for key, value in model_dict.items():
             if 'accuracy' in key:
                 value = value*100
@@ -632,10 +660,26 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
 
         fold_predictions = pd.DataFrame.from_dict(model.predictions, orient='index')
         fold_predictions = fold_predictions.assign(fold=fold)
-        all_predictions = pd.concat([all_predictions, fold_predictions])
+        fold_predictions['final_prediction'] = fold_predictions[f'predictions_{model_dict["training_epochs"]+1}']
+        fold_predictions['final_total_payoff_prediction'] =\
+            fold_predictions[f'total_payoff_prediction_{model_dict["training_epochs"]+1}']
+        all_predictions = pd.concat([all_predictions, fold_predictions], sort=True)
+
+        calc_print_measures(fold_predictions)
+        all_validation_accuracy.append(model_dict['validation_Accuracy'])
+        all_train_accuracy.append(model_dict['training_Accuracy'])
 
     # save the model predictions
     all_predictions.to_csv(os.path.join(run_log_directory, 'predictions.csv'))
+    print(f'All folds measures:')
+    calc_print_measures(all_predictions)
+    print(f'Train accuracy per round: {sum(all_train_accuracy)/len(all_train_accuracy)}, '
+          f'Validation accuracy per round: {sum(all_validation_accuracy)/len(all_validation_accuracy)}')
+
+    results = calculate_measures_seq_models(
+        all_predictions, 'final_total_payoff_prediction', 'total_payoff_label',
+        label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3', 'total future payoff > 2/3'])
+    results.to_csv(os.path.join(run_log_directory, 'results.csv'))
 
 
 def train_predict_simple_baseline_model(model_name: str, binary_classification: bool=False, use_first_round: bool=True):

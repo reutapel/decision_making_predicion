@@ -6,11 +6,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import math
 from data_analysis import autolabel
+import os
 
 
 """New text experiment initial results analysis"""
-data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
-                     'results/text_exp_2_tests/numeric_deterministic/initial_analysis.xlsx', sheet_name='data_to_plot')
+directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
+            'text_exp_2_tests/deterministic_initial_analysis'
+data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot')
 # fig = plt.figure(figsize=(15, 15))
 # ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
 participants = data.participant_code.unique()
@@ -18,43 +20,52 @@ colors = ['red', 'blue']
 for user_num, user in enumerate(participants):
     user_data = data.loc[data.participant_code == user]
     fig, ax = plt.subplots(figsize=(10, 5))
-    all_x_points = user_data.subsession_round_number.tolist()
-    all_y_points = user_data.group_sender_answer_scores.tolist()
+    all_round_num = user_data.subsession_round_number.tolist()
+    all_expert_score = user_data.group_sender_answer_scores.tolist()
     all_x_real_score = user_data.group_lottery_result.tolist()
     all_x_index = user_data.group_sender_answer_index.tolist()
     all_x_dm_decision = user_data.group_sender_payoff.tolist()
     all_index_above = user_data.above.tolist()
     all_index_below = user_data.below.tolist()
     all_index_diff = user_data.index_diff.tolist()
+    all_chosen_index = user_data.chosen_index.tolist()
+    all_score_diff = user_data.score_diff.tolist()
     chose_points_x, chose_points_y = list(), list()
     not_chose_points_x, not_chose_points_y = list(), list()
-    for i, point in enumerate(all_x_points):
+    condition = user_data.condition.unique()[0]
+    for i, point in enumerate(all_round_num):
         color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
         if all_x_dm_decision[i] == 1:
             color = colors[0]
-            chose_points_x.append(all_x_points[i])
-            chose_points_y.append(all_y_points[i])
+            chose_points_x.append(all_round_num[i])
+            chose_points_y.append(all_expert_score[i])
         else:
             color = colors[1]
-            not_chose_points_x.append(all_x_points[i])
-            not_chose_points_y.append(all_y_points[i])
+            not_chose_points_x.append(all_round_num[i])
+            not_chose_points_y.append(all_expert_score[i])
 
-        ax.annotate(f'({all_x_real_score[i]},{all_y_points[i]},\n'
+        ax.annotate(f'({all_x_real_score[i]},{all_expert_score[i]},\n'
                     f'{all_index_above[i]}, {all_index_below[i]}, {all_index_diff[i]})',
-                    (point-0.4, all_y_points[i]-0.6), color=color, fontsize=10)
+                    (point - 0.4, all_expert_score[i] - 0.6), color=color, fontsize=10)
     ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel')
     ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home')
+    index_rmse = round(math.sqrt(mean_squared_error(all_x_index, all_chosen_index)), 2)
+    score_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_x_real_score)), 2)
+    index_avg_diff = round(sum(all_index_diff)/len(all_index_diff), 2)
+    score_avg_diff = round(sum(all_score_diff)/len(all_score_diff), 2)
     print(f'pair number {user_num+1} with participant_code {user}')
-    plt.title(f'Pair number {user_num+1} results: (true score, expert chosen score,\n'
-              f'#numbers above, #numbers below, expert choice with respect to chosen index)')
+    plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
+              f'(true score, expert chosen score, #numbers above, #numbers below, '
+              f'expert choice with respect to chosen index)\n'
+              f'index RMSE: {index_rmse}, score RMSE: {score_rmse}, score avg diff: {score_avg_diff},'
+              f'index avg diff: {index_avg_diff}')
     plt.xlabel('Round Number')
     plt.ylabel('Expert Chosen Score')
     plt.xticks(range(1, 11))
-    plt.yticks(range(3, 11))
-    plt.legend(loc='lower right')
+    plt.yticks(range(1, 11))
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     plt.show()
-    fig.savefig(f'/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/results/'
-                f'text_exp_2_tests/numeric_deterministic/Pair number {user_num+1} results.png', bbox_inches='tight')
+    fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
 
 """score evaluation task"""
@@ -69,16 +80,16 @@ colors = colors*5
 # fig = plt.figure(figsize=(15, 15))
 # ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
 fig, ax = plt.subplots()
-all_x_points = data.average_answer.round(1).tolist()
-all_y_points = data.review_real_score.round(1).tolist()
+all_round_num = data.average_answer.round(1).tolist()
+all_expert_score = data.review_real_score.round(1).tolist()
 all_x_min = data.min_answer.tolist()
 all_x_max = data.max_answer.tolist()
 all_x_avg = list()
 all_y = list()
 points_annotate = list()
 move = False
-for i, point in enumerate(all_x_points):
-    y = all_y_points[i]
+for i, point in enumerate(all_round_num):
+    y = all_expert_score[i]
     y_loc = y
     x_loc = point
     if point == 6.5 and y == 10 and [6.5, 10] not in points_annotate:
@@ -155,7 +166,7 @@ for i, point in enumerate(all_x_points):
     # ax.annotate(f'({min(x)},{y[0]})', (min(x), y[0]), color=colors[i])
     # ax.annotate(f'({max(x)},{y[0]})', (max(x), y[0]), color=colors[i])
 
-ax.scatter([all_x_points], [all_y_points], color='black', marker=".")
+ax.scatter([all_round_num], [all_expert_score], color='black', marker=".")
 # Add a table at the right size of the axes
 # cell_text = list()
 # cell_text.append(all_y)
@@ -186,22 +197,22 @@ fig.savefig('score evaluation task.png', bbox_inches='tight')
 
 """Linear Regression"""
 linear = LinearRegression()
-all_x_points = np.array(all_x_points)
-linear.fit(all_x_points.reshape(-1, 1), all_y_points)
+all_round_num = np.array(all_round_num)
+linear.fit(all_round_num.reshape(-1, 1), all_expert_score)
 # Make predictions using the testing set
-pred = linear.predict(all_x_points.reshape(-1, 1))
+pred = linear.predict(all_round_num.reshape(-1, 1))
 # The coefficients
 print('Coefficients: \n', linear.coef_)
 # The mean squared error
 print('Root Mean squared error: %.2f'
-      % math.sqrt(mean_squared_error(all_y_points, pred)))
+      % math.sqrt(mean_squared_error(all_expert_score, pred)))
 # The coefficient of determination: 1 is perfect prediction
 print('Coefficient of determination: %.2f'
-      % r2_score(all_y_points, pred))
+      % r2_score(all_expert_score, pred))
 
 # Plot outputs
-plt.scatter(all_x_points, all_y_points,  color='black')
-plt.plot(all_x_points, pred, color='blue', linewidth=3)
+plt.scatter(all_round_num, all_expert_score, color='black')
+plt.plot(all_round_num, pred, color='blue', linewidth=3)
 
 plt.xticks(())
 plt.yticks(())

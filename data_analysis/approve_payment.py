@@ -12,7 +12,7 @@ number_of_rounds = 10
 
 
 def define_status():
-    results = pd.read_excel(os.path.join(base_directory, 'text_exp_data.xlsx'))  #, sheetname='data_to_use')
+    results = pd.read_excel(os.path.join(base_directory, 'text_exp_deterministic_2020-03-08.xlsx'))  #, sheetname='data_to_use')
     results.columns = results.columns.str.replace(r".", "_")
 
     results = results.assign(status='')
