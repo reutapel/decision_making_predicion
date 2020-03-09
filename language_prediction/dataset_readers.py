@@ -206,8 +206,11 @@ class LSTMDatasetReader(DatasetReader):
         fields = {'sequence_review': sentence_field}
 
         if labels:
-            label_field = SequenceLabelField(labels=labels, sequence_field=sentence_field)
-            fields['labels'] = label_field
+            seq_labels_field = SequenceLabelField(labels=labels, sequence_field=sentence_field)
+            fields['seq_labels'] = seq_labels_field
+            reg_labels = [0 if label == 'hotel' else 1 for label in labels]
+            reg_label_field = FloatLabelField(sum(reg_labels) / len(reg_labels))
+            fields['reg_labels'] = reg_label_field
 
         if metadata is not None:
             fields['metadata'] = MetadataField(metadata)

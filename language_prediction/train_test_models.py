@@ -565,12 +565,17 @@ def train_valid_base_text_decision_fix_text_features_model(
 
 
 def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_data_file_name: str,
-                                                           func_batch_size: int = 10):
+                                                           func_batch_size: int = 10, predict_seq: bool=True,
+                                                           predict_avg_total_payoff: bool=True):
     """
-    This function train and validate model that use fix texts features only.
+    This function train and validate model that use fix texts features only. It use LSTM model to predict the label of
+    each round in the saifa given a saifa.
+    The labels of this model is 0 for hotel and 1 for stay at home
     :param model_name: the full model name
     :param all_data_file_name: the name of the data file to use
     :param func_batch_size: the batch size to use
+    :param predict_seq: if we want to predict the seq
+    :param predict_avg_total_payoff: if we want to predict the final average total payoff of the saifa
     :return:
     """
 
@@ -587,7 +592,9 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_{num_folds}_folds_{HIDDEN_DIM}_hidden_dim_'
                                 f'%d_%m_%Y_%H_%M_%S'), 'logs')
     print(f'run_log_directory is: {run_log_directory}')
-    all_predictions = pd.DataFrame()
+    all_seq_predictions = pd.DataFrame()
+    all_reg_predictions = pd.DataFrame()
+
     if 'csv' in all_data_file_inner_path:
         data_df = pd.read_csv(all_data_file_inner_path)
     elif 'xlsx' in all_data_file_inner_path:
@@ -613,10 +620,17 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         validation_instances = test_reader.read(all_data_file_inner_path)
         vocab = Vocabulary.from_instances(train_instances + validation_instances)
 
-        metrics_dict = {
-            'Accuracy': CategoricalAccuracy()  # BooleanAccuracy(),
+        hotel_label_0 = True if vocab._index_to_token['labels'][0] == 'hotel' else False
+
+        metrics_dict_seq = {
+            'Accuracy': CategoricalAccuracy(),  # BooleanAccuracy(),
             # 'auc': Auc(),
-            # 'F1measure': F1Measure(positive_label=1),
+            'F1measure_hotel_label': F1Measure(positive_label=vocab._token_to_index['labels']['hotel']),
+            'F1measure_home_label': F1Measure(positive_label=vocab._token_to_index['labels']['stay_home']),
+        }
+
+        metrics_dict_reg = {
+            'mean_absolute_error': MeanAbsoluteError(),
         }
 
         # TODO: change this if necessary
@@ -626,7 +640,9 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         iterator.index_with(vocab)
         lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, HIDDEN_DIM, batch_first=True,
                                                    num_layers=1, dropout=0.0))
-        model = models.BasicLSTMFixTextFeaturesDecisionResultModel(lstm, metrics_dict=metrics_dict, vocab=vocab)
+        model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
+            encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
+            predict_seq=predict_seq, predict_avg_total_payoff=predict_avg_total_payoff, hotel_label_0=hotel_label_0)
         print(model)
         if torch.cuda.is_available():
             cuda_device = 0
@@ -634,6 +650,8 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         else:
             cuda_device = -1
         optimizer = optim.SGD(model.parameters(), lr=0.1)
+
+        validation_metric = '+Accuracy' if predict_seq else '-loss'
 
         trainer = Trainer(
             model=model,
@@ -647,37 +665,46 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
             patience=10,
             histogram_interval=10,
             cuda_device=cuda_device,
-            validation_metric='+Accuracy'
+            validation_metric=validation_metric,
         )
 
         model_dict = trainer.train()
 
         print(f'{model_name}: evaluation measures for fold {fold} are:')
         for key, value in model_dict.items():
-            if 'accuracy' in key:
-                value = value*100
             print(f'{key}: {value}')
 
-        fold_predictions = pd.DataFrame.from_dict(model.predictions, orient='index')
-        fold_predictions = fold_predictions.assign(fold=fold)
-        fold_predictions['final_prediction'] = fold_predictions[f'predictions_{model_dict["training_epochs"]+1}']
-        fold_predictions['final_total_payoff_prediction'] =\
-            fold_predictions[f'total_payoff_prediction_{model_dict["training_epochs"]+1}']
-        all_predictions = pd.concat([all_predictions, fold_predictions], sort=True)
+        if predict_seq:
+            fold_seq_predictions = pd.DataFrame.from_dict(model.seq_predictions, orient='index')
+            fold_seq_predictions = fold_seq_predictions.assign(fold=fold)
+            fold_seq_predictions['final_prediction'] =\
+                fold_seq_predictions[f'predictions_{model_dict["training_epochs"]+1}']
+            fold_seq_predictions['final_total_payoff_prediction'] =\
+                fold_seq_predictions[f'total_payoff_prediction_{model_dict["training_epochs"]+1}']
+            all_seq_predictions = pd.concat([all_seq_predictions, fold_seq_predictions], sort=True)
 
-        calc_print_measures(fold_predictions)
-        all_validation_accuracy.append(model_dict['validation_Accuracy'])
-        all_train_accuracy.append(model_dict['training_Accuracy'])
+            calc_print_measures(fold_seq_predictions)
+            all_validation_accuracy.append(model_dict['validation_Accuracy'])
+            all_train_accuracy.append(model_dict['training_Accuracy'])
+
+        if predict_avg_total_payoff:
+            fold_reg_predictions = model.reg_predictions
+            fold_reg_predictions = fold_reg_predictions.assign(fold=fold)
+            fold_reg_predictions['final_total_payoff_prediction'] =\
+                fold_reg_predictions[f'prediction_{model_dict["training_epochs"]+1}']
+            all_reg_predictions = pd.concat([all_reg_predictions, fold_reg_predictions], sort=True)
 
     # save the model predictions
-    all_predictions.to_csv(os.path.join(run_log_directory, 'predictions.csv'))
+    all_seq_predictions.to_csv(os.path.join(run_log_directory, 'seq_predictions.csv'))
+    all_reg_predictions.to_csv(os.path.join(run_log_directory, 'reg_predictions.csv'))
+
     print(f'All folds measures:')
-    calc_print_measures(all_predictions)
+    calc_print_measures(all_seq_predictions)
     print(f'Train accuracy per round: {sum(all_train_accuracy)/len(all_train_accuracy)}, '
           f'Validation accuracy per round: {sum(all_validation_accuracy)/len(all_validation_accuracy)}')
 
     results = calculate_measures_seq_models(
-        all_predictions, 'final_total_payoff_prediction', 'total_payoff_label',
+        all_seq_predictions, 'final_total_payoff_prediction', 'total_payoff_label',
         label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3', 'total future payoff > 2/3'])
     results.to_csv(os.path.join(run_log_directory, 'results.csv'))
 

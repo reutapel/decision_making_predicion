@@ -1026,9 +1026,9 @@ def main():
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': False,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
+                   'use_all_history_average': True,
                    'use_all_history': True,
-                   'use_all_history_text_average': False,
+                   'use_all_history_text_average': True,
                    'use_all_history_text': True,
                    'no_text': False,
                    'use_score': False,
@@ -1050,8 +1050,8 @@ def main():
     }
     use_seq = False
     use_crf = False
-    use_crf_raisha = True
-    string_labels = True
+    use_crf_raisha = False
+    string_labels = False
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
