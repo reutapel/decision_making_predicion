@@ -9,6 +9,70 @@ from data_analysis import autolabel
 import os
 
 
+"""Onlu Num text experiment initial results analysis"""
+directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
+            'text_exp_2_tests/deterministic_initial_analysis'
+data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot_stochastic')
+# fig = plt.figure(figsize=(15, 15))
+# ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+participants = data.participant_code.unique()
+colors = ['red', 'blue']
+for user_num, user in enumerate(participants):
+    user_data = data.loc[data.participant_code == user]
+    fig, ax = plt.subplots(figsize=(10, 5))
+    all_round_num = user_data.subsession_round_number.tolist()
+    all_expert_score = user_data.group_sender_answer_scores.tolist()
+    all_x_real_score = user_data.group_lottery_result.tolist()
+    all_x_index = user_data.group_sender_answer_index.tolist()
+    all_x_dm_decision = user_data.group_sender_payoff.tolist()
+    all_average_score = user_data.average_score.round(1).tolist()
+    all_median_score = user_data.median_score.round(1).tolist()
+    all_median_index = user_data.median_index.round(1).tolist()
+    all_index_median_diff = user_data.index_median_diff.round(1).tolist()
+    all_score_median_diff = user_data.score_median_diff.round(1).tolist()
+    all_score_average_diff = user_data.score_average_diff.round(1).tolist()
+    chose_points_x, chose_points_y = list(), list()
+    not_chose_points_x, not_chose_points_y = list(), list()
+    condition = user_data.condition.unique()[0]
+    for i, point in enumerate(all_round_num):
+        color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
+        if all_x_dm_decision[i] == 1:
+            color = colors[0]
+            chose_points_x.append(all_round_num[i])
+            chose_points_y.append(all_expert_score[i])
+        else:
+            color = colors[1]
+            not_chose_points_x.append(all_round_num[i])
+            not_chose_points_y.append(all_expert_score[i])
+
+        ax.annotate(f'({all_x_real_score[i]}, {all_expert_score[i]}, {all_x_index[i]},\n'
+                    f'{all_average_score[i]}, {all_median_score[i]}\n'
+                    f'{all_score_median_diff[i]}, {all_score_average_diff[i]}, {all_index_median_diff[i]})',
+                    (point - 0.4, all_expert_score[i] - 0.8), color=color, fontsize=8)
+    ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel', s=0.5)
+    ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home', s=0.5)
+    average_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_average_score)), 2)
+    median_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_median_score)), 2)
+    avg_diff = round(sum(all_score_average_diff)/len(all_score_average_diff), 2)
+    median_diff = round(sum(all_score_median_diff)/len(all_score_median_diff), 2)
+    median_index_diff = round(sum(all_index_median_diff)/len(all_index_median_diff), 2)
+    print(f'pair number {user_num+1} with participant_code {user}')
+    plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
+              f'(lottery score, expert chosen score, expert chosen index,\nhotel average score, hotel median score,\n'
+              f'chosen-median, chosen-average, index_median_diff)\n'
+              f'average score RMSE: {average_rmse}, median score RMSE: {median_rmse},\n'
+              f'average(chosen score-average score): {avg_diff},\n'
+              f'average(chosen score-median score): {median_diff}, '
+              f'average(index_median_diff): {median_index_diff}')
+    plt.xlabel('Round Number')
+    plt.ylabel('Expert Chosen Score')
+    plt.xticks(range(1, 11))
+    plt.yticks(range(1, 11))
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
+    fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
+
+
 """New text experiment initial results analysis"""
 directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
             'text_exp_2_tests/deterministic_initial_analysis'

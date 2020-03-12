@@ -31,10 +31,14 @@ def calculate_measures(train_data: pd.DataFrame, validation_data: pd.DataFrame, 
 
 
 def calculate_measures_seq_models(all_predictions: pd.DataFrame, final_total_payoff_prediction_column: str,
-                                  total_payoff_label_column: str, label_options: list):
+                                  total_payoff_label_column: str, label_options: list, hotel_label_0: bool):
     """
     Calc and print the regression measures, including bin analysis
     :param all_predictions:
+    :param total_payoff_label_column: the name of the label column
+    :param final_total_payoff_prediction_column: the name of the prediction label
+    :param label_options: list of the label option names
+    :param hotel_label_0: if the label of the hotel option is 0
     :return:
     """
 
@@ -53,16 +57,20 @@ def calculate_measures_seq_models(all_predictions: pd.DataFrame, final_total_pay
     mse = round(100 * mse, 2)
     mse_pd = pd.Series([mse, '-'])
 
-    # bin measures
+    # bin measures,
+    # class: hotel_label == 1: predictions < 0.33 --> 0, 0.33<predictions<0.67 --> 1, predictions > 0.67 --> 2
+    #        hotel_label == 0: predictions < 0.33 --> 2, 0.33<predictions<0.67 --> 1, predictions > 0.67 --> 0
+    low_entry_rate_class = 2 if hotel_label_0 else 0
+    high_entry_rate_class = 0 if hotel_label_0 else 2
     # for prediction
     keep_mask = predictions < 0.33
-    bin_prediction = np.where(predictions < 0.67, 1, 2)
-    bin_prediction[keep_mask] = 0
+    bin_prediction = np.where(predictions < 0.67, 1, high_entry_rate_class)
+    bin_prediction[keep_mask] = low_entry_rate_class
     bin_prediction = pd.Series(bin_prediction, name='bin_predictions', index=gold_labels.index)
     # for test_y
     keep_mask = gold_labels < 0.33
-    bin_gold_label = np.where(gold_labels < 0.67, 1, 2)
-    bin_gold_label[keep_mask] = 0
+    bin_gold_label = np.where(gold_labels < 0.67, 1, high_entry_rate_class)
+    bin_gold_label[keep_mask] = low_entry_rate_class
     bin_gold_label = pd.Series(bin_gold_label, name='bin_label', index=gold_labels.index)
 
     # calculate bin measures

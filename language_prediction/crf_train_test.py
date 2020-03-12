@@ -16,7 +16,7 @@ import math
 base_directory = os.path.abspath(os.curdir)
 model_name = 'verbal'  # 'chunking_small'
 data_directory = os.path.join(base_directory, 'data', model_name)
-
+#
 random.seed(1)
 
 
