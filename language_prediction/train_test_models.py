@@ -42,7 +42,7 @@ import torch
 from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper
 from sklearn import metrics
 import math
-from .utils import calculate_measures_seq_models
+from .utils import calculate_measures_for_continues_labels
 
 
 # define directories
@@ -703,7 +703,7 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
     print(f'Train accuracy per round: {sum(all_train_accuracy)/len(all_train_accuracy)}, '
           f'Validation accuracy per round: {sum(all_validation_accuracy)/len(all_validation_accuracy)}')
 
-    results = calculate_measures_seq_models(
+    results = calculate_measures_for_continues_labels(
         all_seq_predictions, 'final_total_payoff_prediction', 'total_payoff_label',
         label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3', 'total future payoff > 2/3'])
     results.to_csv(os.path.join(run_log_directory, 'results.csv'))

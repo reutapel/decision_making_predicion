@@ -10,6 +10,7 @@ import logging
 from matplotlib.font_manager import FontProperties
 import math
 from data_analysis import create_chart_bars, create_statistics, create_point_plot, create_histogram, create_bar_from_df
+from collections import defaultdict
 
 
 base_directory = os.path.abspath(os.curdir)
@@ -45,6 +46,10 @@ like_zero_one_list = ['zero_one_accurate_all', 'zero_one_accurate_prob', 'zero_o
 batch_size = 5
 number_of_rounds = 10
 alpha = 1
+
+score_eval_data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
+                                'data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
+                                sheet_name='data_to_plot')
 
 
 def compare_positive_negative_first(data: pd.DataFrame):
@@ -146,7 +151,7 @@ class DataAnalysis:
         This function set the expert answer score in the verbal condition
         :return:
         """
-        if self.condition != 'num':
+        if self.condition == 'verbal':
             # for each row set the group_sender_answer_scores using group_sender_answer_index
             # for index, row in self.results_payments.iterrows():
             #     group_sender_answer_index = row['group_sender_answer_index']
@@ -377,6 +382,8 @@ class DataAnalysis:
         self.results_payments['lottery_result_lose'] = np.where(self.results_payments.group_lottery_result < 8, 1, 0)
         self.results_payments['average_score_low'] = np.where(self.results_payments.group_average_score < 5, 1, 0)
         self.results_payments['average_score_high'] = np.where(self.results_payments.group_average_score >= 8, 1, 0)
+        self.results_payments['dm_expected_payoff'] = np.where(self.results_payments.group_sender_payoff == 1,
+                                                               self.results_payments.group_average_score-8, 0)
 
         return
 
@@ -1562,7 +1569,7 @@ class DataAnalysis:
                               legend=['Expert Average Score'],
                               title=f'Expert average score VS the decision maker expected payoff for hotel '
                                     f'average score {hotel_average_score}, {self.condition} condition and {self.gender}',
-                              xlabel='Decision Maker Expected Payoff', ylabel='Expert Average Score',
+                              xlabel='Round Number', ylabel='Expert Average Score',
                               curr_date_directory=data_analysis_directory, add_line_between_points=True,
                               add_truth_telling=False)
 
@@ -1583,25 +1590,27 @@ class DataAnalysis:
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')]
 
-        dm_payoff = data_to_use.groupby(by='subsession_round_number').player_payoff.mean()
-        dm_payoff = dm_payoff.round(2)
+        for column, column_name in [['player_payoff', ''], ['dm_expected_payoff', 'Expected ']]:
+            dm_payoff = data_to_use.groupby(by='subsession_round_number')[column].mean()
+            dm_payoff = dm_payoff.round(2)
 
-        create_bar_from_df(data=dm_payoff, xlabel='Round Number', ylabel='Decision Maker Average Payoff',
-                           add_table=False, rot=False,
-                           title=f'Decision Maker average payoff vs round number for {self.condition} condition '
-                                 f'and {self.gender}',
-                           curr_date_directory=data_analysis_directory, add_text_label=True,
-                           max_height=dm_payoff.max(), label_rotation='horizontal')
-
-        for round_num in range(1, 11):
-            round_data = data_to_use.loc[data_to_use.subsession_round_number == round_num]
-            round_group_data = round_data.groupby(by='player_payoff').participant_code.count()
-            create_bar_from_df(data=round_group_data, xlabel='DM payoff', ylabel='Number of participants',
+            create_bar_from_df(data=dm_payoff, xlabel='Round Number',
+                               ylabel=f'Decision Maker Average {column_name}Payoff',
                                add_table=False, rot=False,
-                               title=f'Number of DM get each payoff for {self.condition} condition and '
-                                     f'{self.gender} and round number {round_num}', max_height=dm_payoff.max()+10,
+                               title=f'Decision Maker Average {column_name}Payoff vs round number for '
+                                     f'{self.condition} condition and {self.gender}',
                                curr_date_directory=data_analysis_directory, add_text_label=True,
-                               label_rotation='horizontal')
+                               max_height=dm_payoff.max(), label_rotation='horizontal')
+
+            for round_num in range(1, 11):
+                round_data = data_to_use.loc[data_to_use.subsession_round_number == round_num]
+                round_group_data = round_data.groupby(by=column).participant_code.count()
+                create_bar_from_df(data=round_group_data, xlabel='DM payoff', ylabel='Number of participants',
+                                   add_table=False, rot=False,
+                                   title=f'Number of DM get each {column_name}payoff for {self.condition} condition '
+                                         f'and {self.gender} and round number {round_num}',
+                                   max_height=dm_payoff.max()+10, curr_date_directory=data_analysis_directory,
+                                   add_text_label=True, label_rotation='horizontal')
 
         return
 
@@ -1614,7 +1623,7 @@ class DataAnalysis:
         data_function = self.results_payments.loc[(self.results_payments.status == 'play') &
                                                   (self.results_payments.player_id_in_group == 1)]
         for param in ['hotel_id', 'positive_negative_review_len_prop', 'group_average_score', 'group_median_score']:
-            if self.condition == 'num' and param == 'positive_negative_review_len_prop':
+            if self.condition != 'verbal' and param == 'positive_negative_review_len_prop':
                 continue
             else:
                 # create bar with the number of expert chose each index per param
@@ -1736,7 +1745,7 @@ class DataAnalysis:
             print(f'% of experts {column[1]} in all rounds is: 'f'{expert_data[column[0]].mean().round(2)}')
             expert_choices = expert_data.groupby(by='subsession_round_number')[column[0]].mean()
             expert_choices = expert_choices*100
-            expert_choices = expert_choices.round(2)
+            expert_choices = expert_choices.round(1)
             median_vs_average[column[0]] = expert_choices
 
             create_bar_from_df(data=expert_choices, xlabel='Round Number', ylabel='% of experts',
@@ -1750,8 +1759,9 @@ class DataAnalysis:
         create_bar_from_df(data=median_vs_average, xlabel='Round Number', ylabel='% of experts',
                            add_table=False, rot=False, stacked=False, convert_to_int=False,
                            title=f'% of experts chose the score that is closer to the average score vs the median '
-                                 f'score per round number for {self.condition} condition and {self.gender}',
+                                 f'score\nper round number for {self.condition} condition and {self.gender}',
                            curr_date_directory=data_analysis_directory, add_text_label=True,
+                           y_ticks_list=list(range(0, 101, 10)), figsize=(15, 5), autolabel_fontsize=8,
                            max_height=median_vs_average.max().max(), label_rotation='horizontal')
         print(f'Bias of experts answer from the average score in all rounds is: '
               f'{expert_data.bias_from_most_close_avg.mean().round(2)}')
@@ -1804,6 +1814,47 @@ class DataAnalysis:
                                     f'% DM entered based on review features for condition {self.condition} and gender '
                                     f'{self.gender}.csv'))
 
+    def eval_real_score_analysis(self):
+        """
+        This function compare per hotel the % of exert chose each index and the different between the real score
+        and the average estimation
+        :return:
+        """
+
+        data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 1) &
+                                                (self.results_payments.status == 'play')]
+        unique_averages = data_to_use.group_average_score.unique().tolist()
+        unique_averages.sort()
+        index_dict = defaultdict(list)
+        eval_score_dict = defaultdict(list)
+        df_index = list()
+        for hotel_average_score in unique_averages:
+            hotel_data = data_to_use.loc[data_to_use.group_average_score == hotel_average_score]
+            expert_avg_score = hotel_data.group_sender_answer_scores.mean().round(2)
+            df_index.append((hotel_average_score, expert_avg_score))
+            hotel_eval_data = score_eval_data.loc[score_eval_data.hotel_avg_score == hotel_average_score]
+            hotel_group_data = hotel_data.groupby(by='group_sender_answer_index').participant_code.count()
+            for idx in range(1, 8):
+                eval_score_dict[int(idx)].append((round(hotel_eval_data.average_answer.values[idx-1], 1),
+                                                  round(hotel_eval_data.review_real_score.values[idx-1], 1)))
+                if idx in hotel_group_data.index:
+                    index_dict[int(idx)].append(round(100 * hotel_group_data.loc[idx]/hotel_group_data.sum(), 2))
+                else:
+                    index_dict[int(idx)].append(0.0)
+
+        data_to_plot = pd.DataFrame(index_dict, index=df_index)
+        autolabel_text = [item for sublist in eval_score_dict.values() for item in sublist]
+
+        create_bar_from_df(data=data_to_plot, curr_date_directory=data_analysis_directory, add_table=False,
+                           title=f'% Experts chose each index per hotel for condition {self.condition} and gender '
+                                 f'{self.gender}\nThe legend are the reviews index, the text is the (estimated score, '
+                                 f'original score)', xlabel="Hotel Average Score, Experts' Average Answer",
+                           ylabel='% experts chose each index', stacked=False, figsize=(17, 5), add_text_label=True,
+                           convert_to_int=False, autolabel_text=autolabel_text, autolabel_fontsize=8,
+                           y_ticks_list=list(range(0, 85, 10)))
+
+        return
+
 
 def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj = DataAnalysis(main_gender, main_condition)
@@ -1811,6 +1862,7 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_current_round_measures()
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
+    data_analysis_obj.eval_real_score_analysis()
     data_analysis_obj.average_most_close_hotel_id()
     data_analysis_obj.dm_entered_per_review_features()
     data_analysis_obj.expert_answer_vs_average_score()

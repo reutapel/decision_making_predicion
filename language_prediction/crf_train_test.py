@@ -99,7 +99,7 @@ def main(test=False, cv=False, test_chunking=False, use_forward_backward_fix_his
                                  'all_data_single_round_label_crf_raisha_all_history_features_all_history_text_manual_'
                                  'binary_features_predict_first_round_verbal_data.pkl'),
                 ])
-                train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
+                train_pair_ids = folds.loc[folds.fold_number == 4].pair_id.tolist()
                 test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
                 # For Debug with small train data
                 # train_pair_ids = folds.loc[folds.fold_number == 4].pair_id.tolist()

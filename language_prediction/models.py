@@ -47,6 +47,8 @@ def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, 
             prediction_df[metadata[i]['sample_id']] = \
                 {'is_train': is_train, f'labels': gold_labels_list,
                  f'total_payoff_label': sum(gold_labels_list) / len(gold_labels_list)}
+            if 'raisha' in metadata[i].keys():  # TODO: debug this
+                prediction_df[metadata[i]['sample_id']]['raisha'] = metadata[i]['raisha']
         predictions_list = predictions[i][:mask[i].sum()].argmax(1).tolist()
         # if hotel_label_0:
         #     predictions_list = [0 if prediction == 1 else 1 for prediction in predictions_list]
@@ -88,6 +90,8 @@ def save_predictions(prediction_df: pd.DataFrame, predictions: torch.Tensor, gol
         pd.concat([pd.DataFrame(metadata).sample_id,
                    pd.DataFrame(gold_labels, columns=['label']),
                    pd.DataFrame(predictions, columns=[f'prediction_{epoch}'])], axis=1)
+    if 'raisha' in metadata.keys():  # TODO: debug this
+        label_prediction = pd.concat([label_prediction,metadata['raisha']], axis=1)
     label_prediction[f'correct_{epoch}'] =\
         np.where(label_prediction[f'prediction_{epoch}'] == label_prediction.label, 1, 0)
     if epoch == 0:  # if this is the first epoch - keep the label
@@ -836,12 +840,18 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  reg_weight_loss: float=0.5,
                  predict_seq: bool=True,
                  predict_avg_total_payoff: bool=True,
-                 batch_size: int=10) -> None:
+                 batch_size: int=10,
+                 linear_dim: int=None) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
         if predict_seq:  # need hidden2tag layer
-            self.hidden2tag = LinearLayer(input_size=encoder.get_output_dim(),
-                                          output_size=vocab.get_vocab_size('labels'))
+            if linear_dim is not None:  # add linear layer before hidden2tag
+                self.linear_layer = LinearLayer(input_size=encoder.get_output_dim(), output_size=linear_dim)
+                hidden2tag_input_size = linear_dim
+            else:
+                self.linear_layer = None
+                hidden2tag_input_size = encoder.get_output_dim()
+            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
@@ -876,6 +886,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         mask = get_text_field_mask({'tokens': sequence_review})
         encoder_out = self.encoder(sequence_review, mask)
         if self.predict_seq:
+            if self.linear_layer is not None:
+                encoder_out = self.linear_layer(encoder_out)  # add linear layer before hidden2tag
             decision_logits = self.hidden2tag(encoder_out)
             output['decision_logits'] = decision_logits
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,

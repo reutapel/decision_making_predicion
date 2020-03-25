@@ -41,7 +41,8 @@ batch_size = 5
 def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel: str='',
                        curr_date_directory: str=date_directory, add_table: bool=True, rot: bool=True,
                        add_point: float=None, add_text_label: bool=False, max_height=100, convert_to_int=True,
-                       axes_bounds: list=None, label_rotation='vertical', stacked=True):
+                       axes_bounds: list=None, label_rotation='vertical', stacked=True, y_ticks_list: list=None,
+                       figsize: tuple=(20, 5), autolabel_fontsize=6, autolabel_text: list=None):
     """
     This function create bar plot from data frame and adding table with values ad the bottom
     :param pd.DataFrame data: the data to plot
@@ -58,10 +59,14 @@ def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel
     :param axes_bounds: if we have bounds for the axes
     :param label_rotation: the rotation of the label to print
     :param stacked: if more than 1 column and want the columns to be near each other and not on each other - put False
+    :param y_ticks_list: list of ticks for the y axis
+    :param figsize: the figure size
+    :param autolabel_fontsize: the fontsize of the auto labels
+    :param autolabel_text: if we want to pass specific text to autolabel
     :return:
     """
     print('Create plot from DF for', title)
-    plt.figure(figsize=(20, 5))
+    plt.figure(figsize=figsize)
 
     # Plot bars and create text labels for the table
     if add_table:
@@ -85,9 +90,9 @@ def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel
         #           'orangered']
         # plot_colors = [colors[i] for i in data.index]
         if rot:
-            ax = data.plot(kind="bar", stacked=stacked, rot=1, figsize=(20, 5))  # , colormap=plot_colors)
+            ax = data.plot(kind="bar", stacked=stacked, rot=1, figsize=figsize)  # , colormap=plot_colors)
         else:
-            ax = data.plot(kind="bar", stacked=stacked, figsize=(20, 5))  # , colormap=plot_colors)
+            ax = data.plot(kind="bar", stacked=stacked, figsize=figsize)  # , colormap=plot_colors)
 
     if add_point is not None:
         ax.axvline(x=add_point, linewidth=1, color='black')
@@ -96,15 +101,18 @@ def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel
 
     if add_text_label:
         rects = ax.patches
-        autolabel(rects, ax, rotation=label_rotation, max_height=max_height, convert_to_int=convert_to_int, fontsize=6)
+        autolabel(rects, ax, rotation=label_rotation, max_height=max_height, convert_to_int=convert_to_int,
+                  fontsize=autolabel_fontsize, text=autolabel_text)
 
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.title(title, fontsize=15)
+    plt.xlabel(xlabel, fontsize=15)
+    plt.ylabel(ylabel, fontsize=15)
+    if y_ticks_list is not None:
+        plt.yticks(y_ticks_list)
     if axes_bounds is not None:
-        ax.axis(axes_bounds)
-    for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize('x-small')
+        ax.axis(axes_bounds, fontsize=20)
+    # for tick in ax.xaxis.get_major_ticks():
+    #     tick.label.set_fontsize('x-small')
     fig_to_save = ax.get_figure()
     # if add_table:
     fig_to_save.savefig(os.path.join(curr_date_directory, title + '.png'), bbox_inches='tight')
@@ -349,24 +357,31 @@ def create_statistics(data):
 
 
 def autolabel(rects, ax, rotation, max_height, percentage_graph=False, convert_to_int=True, add_0_label=False,
-              fontsize=7):
+              fontsize=7, text=None):
     """
     Attach a text label above each bar displaying its height
     :param convert_to_int: if height>1 convert to int
+    :param text: if we want to pass specific text
     """
-    for rect in rects:
-        height = rect.get_height()
-        if (height > 0.0 or height < 0.0) or (height == 0.0 and add_0_label):  # don't add 0 label
-            if convert_to_int:
-                height = int(height) if height > 1 else height
+    for rect_num, rect in enumerate(rects):
+        if text is None:
+            height = rect.get_height()
+            if (height > 0.0 or height < 0.0) or (height == 0.0 and add_0_label):  # don't add 0 label
+                if convert_to_int and height > 1:
+                    height = int(height)
+                else:
+                    height = height.round(2)
+                if height < 0:
+                    y_pos = height - max_height * 0.035
+                else:
+                    y_pos = height + max_height * 0.01
             else:
-                height = height.round(2)
-            if height < 0:
-                y_pos = height - max_height * 0.035
-            else:
-                y_pos = height + max_height * 0.01
-            ax.text(rect.get_x() + rect.get_width() / 2, y_pos, height,
-                    ha='center', va='bottom', rotation=rotation, fontsize=fontsize)
+                continue
+        else:
+            height = text[rect_num]
+            y_pos = rect.get_height() + max_height * 0.001
+        ax.text(rect.get_x() + rect.get_width() / 2, y_pos, height, ha='center', va='bottom', rotation=rotation,
+                fontsize=fontsize)
 
 
 def create_point_plot(points_x, points_y, legend, title, xlabel, ylabel, points_x_other_color=None,

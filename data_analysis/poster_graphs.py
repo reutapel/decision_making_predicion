@@ -10,132 +10,133 @@ import os
 
 
 """Onlu Num text experiment initial results analysis"""
-directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
-            'text_exp_2_tests/deterministic_initial_analysis'
-data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot_stochastic')
-# fig = plt.figure(figsize=(15, 15))
-# ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
-participants = data.participant_code.unique()
-colors = ['red', 'blue']
-for user_num, user in enumerate(participants):
-    user_data = data.loc[data.participant_code == user]
-    fig, ax = plt.subplots(figsize=(10, 5))
-    all_round_num = user_data.subsession_round_number.tolist()
-    all_expert_score = user_data.group_sender_answer_scores.tolist()
-    all_x_real_score = user_data.group_lottery_result.tolist()
-    all_x_index = user_data.group_sender_answer_index.tolist()
-    all_x_dm_decision = user_data.group_sender_payoff.tolist()
-    all_average_score = user_data.average_score.round(1).tolist()
-    all_median_score = user_data.median_score.round(1).tolist()
-    all_median_index = user_data.median_index.round(1).tolist()
-    all_index_median_diff = user_data.index_median_diff.round(1).tolist()
-    all_score_median_diff = user_data.score_median_diff.round(1).tolist()
-    all_score_average_diff = user_data.score_average_diff.round(1).tolist()
-    chose_points_x, chose_points_y = list(), list()
-    not_chose_points_x, not_chose_points_y = list(), list()
-    condition = user_data.condition.unique()[0]
-    for i, point in enumerate(all_round_num):
-        color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
-        if all_x_dm_decision[i] == 1:
-            color = colors[0]
-            chose_points_x.append(all_round_num[i])
-            chose_points_y.append(all_expert_score[i])
-        else:
-            color = colors[1]
-            not_chose_points_x.append(all_round_num[i])
-            not_chose_points_y.append(all_expert_score[i])
+# directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
+#             'text_exp_2_tests/deterministic_initial_analysis'
+# data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot_stochastic')
+# # fig = plt.figure(figsize=(15, 15))
+# # ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+# participants = data.participant_code.unique()
+# colors = ['red', 'blue']
+# for user_num, user in enumerate(participants):
+#     user_data = data.loc[data.participant_code == user]
+#     fig, ax = plt.subplots(figsize=(10, 5))
+#     all_round_num = user_data.subsession_round_number.tolist()
+#     all_expert_score = user_data.group_sender_answer_scores.tolist()
+#     all_x_real_score = user_data.group_lottery_result.tolist()
+#     all_x_index = user_data.group_sender_answer_index.tolist()
+#     all_x_dm_decision = user_data.group_sender_payoff.tolist()
+#     all_average_score = user_data.average_score.round(1).tolist()
+#     all_median_score = user_data.median_score.round(1).tolist()
+#     all_median_index = user_data.median_index.round(1).tolist()
+#     all_index_median_diff = user_data.index_median_diff.round(1).tolist()
+#     all_score_median_diff = user_data.score_median_diff.round(1).tolist()
+#     all_score_average_diff = user_data.score_average_diff.round(1).tolist()
+#     chose_points_x, chose_points_y = list(), list()
+#     not_chose_points_x, not_chose_points_y = list(), list()
+#     condition = user_data.condition.unique()[0]
+#     for i, point in enumerate(all_round_num):
+#         color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
+#         if all_x_dm_decision[i] == 1:
+#             color = colors[0]
+#             chose_points_x.append(all_round_num[i])
+#             chose_points_y.append(all_expert_score[i])
+#         else:
+#             color = colors[1]
+#             not_chose_points_x.append(all_round_num[i])
+#             not_chose_points_y.append(all_expert_score[i])
+#
+#         ax.annotate(f'({all_x_real_score[i]}, {all_expert_score[i]}, {all_x_index[i]},\n'
+#                     f'{all_average_score[i]}, {all_median_score[i]}\n'
+#                     f'{all_score_median_diff[i]}, {all_score_average_diff[i]}, {all_index_median_diff[i]})',
+#                     (point - 0.4, all_expert_score[i] - 0.8), color=color, fontsize=8)
+#     ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel', s=0.5)
+#     ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home', s=0.5)
+#     average_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_average_score)), 2)
+#     median_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_median_score)), 2)
+#     avg_diff = round(sum(all_score_average_diff)/len(all_score_average_diff), 2)
+#     median_diff = round(sum(all_score_median_diff)/len(all_score_median_diff), 2)
+#     median_index_diff = round(sum(all_index_median_diff)/len(all_index_median_diff), 2)
+#     print(f'pair number {user_num+1} with participant_code {user}')
+#     plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
+#               f'(lottery score, expert chosen score, expert chosen index,\nhotel average score, hotel median score,\n'
+#               f'chosen-median, chosen-average, index_median_diff)\n'
+#               f'average score RMSE: {average_rmse}, median score RMSE: {median_rmse},\n'
+#               f'average(chosen score-average score): {avg_diff},\n'
+#               f'average(chosen score-median score): {median_diff}, '
+#               f'average(index_median_diff): {median_index_diff}')
+#     plt.xlabel('Round Number')
+#     plt.ylabel('Expert Chosen Score')
+#     plt.xticks(range(1, 11))
+#     plt.yticks(range(1, 11))
+#     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+#     plt.show()
+#     fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
-        ax.annotate(f'({all_x_real_score[i]}, {all_expert_score[i]}, {all_x_index[i]},\n'
-                    f'{all_average_score[i]}, {all_median_score[i]}\n'
-                    f'{all_score_median_diff[i]}, {all_score_average_diff[i]}, {all_index_median_diff[i]})',
-                    (point - 0.4, all_expert_score[i] - 0.8), color=color, fontsize=8)
-    ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel', s=0.5)
-    ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home', s=0.5)
-    average_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_average_score)), 2)
-    median_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_median_score)), 2)
-    avg_diff = round(sum(all_score_average_diff)/len(all_score_average_diff), 2)
-    median_diff = round(sum(all_score_median_diff)/len(all_score_median_diff), 2)
-    median_index_diff = round(sum(all_index_median_diff)/len(all_index_median_diff), 2)
-    print(f'pair number {user_num+1} with participant_code {user}')
-    plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
-              f'(lottery score, expert chosen score, expert chosen index,\nhotel average score, hotel median score,\n'
-              f'chosen-median, chosen-average, index_median_diff)\n'
-              f'average score RMSE: {average_rmse}, median score RMSE: {median_rmse},\n'
-              f'average(chosen score-average score): {avg_diff},\n'
-              f'average(chosen score-median score): {median_diff}, '
-              f'average(index_median_diff): {median_index_diff}')
-    plt.xlabel('Round Number')
-    plt.ylabel('Expert Chosen Score')
-    plt.xticks(range(1, 11))
-    plt.yticks(range(1, 11))
-    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
-    fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
-
-"""New text experiment initial results analysis"""
-directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
-            'text_exp_2_tests/deterministic_initial_analysis'
-data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot')
-# fig = plt.figure(figsize=(15, 15))
-# ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
-participants = data.participant_code.unique()
-colors = ['red', 'blue']
-for user_num, user in enumerate(participants):
-    user_data = data.loc[data.participant_code == user]
-    fig, ax = plt.subplots(figsize=(10, 5))
-    all_round_num = user_data.subsession_round_number.tolist()
-    all_expert_score = user_data.group_sender_answer_scores.tolist()
-    all_x_real_score = user_data.group_lottery_result.tolist()
-    all_x_index = user_data.group_sender_answer_index.tolist()
-    all_x_dm_decision = user_data.group_sender_payoff.tolist()
-    all_index_above = user_data.above.tolist()
-    all_index_below = user_data.below.tolist()
-    all_index_diff = user_data.index_diff.tolist()
-    all_chosen_index = user_data.chosen_index.tolist()
-    all_score_diff = user_data.score_diff.tolist()
-    chose_points_x, chose_points_y = list(), list()
-    not_chose_points_x, not_chose_points_y = list(), list()
-    condition = user_data.condition.unique()[0]
-    for i, point in enumerate(all_round_num):
-        color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
-        if all_x_dm_decision[i] == 1:
-            color = colors[0]
-            chose_points_x.append(all_round_num[i])
-            chose_points_y.append(all_expert_score[i])
-        else:
-            color = colors[1]
-            not_chose_points_x.append(all_round_num[i])
-            not_chose_points_y.append(all_expert_score[i])
-
-        ax.annotate(f'({all_x_real_score[i]},{all_expert_score[i]},\n'
-                    f'{all_index_above[i]}, {all_index_below[i]}, {all_index_diff[i]})',
-                    (point - 0.4, all_expert_score[i] - 0.6), color=color, fontsize=10)
-    ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel')
-    ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home')
-    index_rmse = round(math.sqrt(mean_squared_error(all_x_index, all_chosen_index)), 2)
-    score_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_x_real_score)), 2)
-    index_avg_diff = round(sum(all_index_diff)/len(all_index_diff), 2)
-    score_avg_diff = round(sum(all_score_diff)/len(all_score_diff), 2)
-    print(f'pair number {user_num+1} with participant_code {user}')
-    plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
-              f'(true score, expert chosen score, #numbers above, #numbers below, '
-              f'expert choice with respect to chosen index)\n'
-              f'index RMSE: {index_rmse}, score RMSE: {score_rmse}, score avg diff: {score_avg_diff},'
-              f'index avg diff: {index_avg_diff}')
-    plt.xlabel('Round Number')
-    plt.ylabel('Expert Chosen Score')
-    plt.xticks(range(1, 11))
-    plt.yticks(range(1, 11))
-    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
-    fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
+# """New text experiment initial results analysis"""
+# directory = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/analysis/' \
+#             'text_exp_2_tests/deterministic_initial_analysis'
+# data = pd.read_excel(os.path.join(directory, 'initial_analysis.xlsx'), sheet_name='data_to_plot')
+# # fig = plt.figure(figsize=(15, 15))
+# # ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+# participants = data.participant_code.unique()
+# colors = ['red', 'blue']
+# for user_num, user in enumerate(participants):
+#     user_data = data.loc[data.participant_code == user]
+#     fig, ax = plt.subplots(figsize=(10, 5))
+#     all_round_num = user_data.subsession_round_number.tolist()
+#     all_expert_score = user_data.group_sender_answer_scores.tolist()
+#     all_x_real_score = user_data.group_lottery_result.tolist()
+#     all_x_index = user_data.group_sender_answer_index.tolist()
+#     all_x_dm_decision = user_data.group_sender_payoff.tolist()
+#     all_index_above = user_data.above.tolist()
+#     all_index_below = user_data.below.tolist()
+#     all_index_diff = user_data.index_diff.tolist()
+#     all_chosen_index = user_data.chosen_index.tolist()
+#     all_score_diff = user_data.score_diff.tolist()
+#     chose_points_x, chose_points_y = list(), list()
+#     not_chose_points_x, not_chose_points_y = list(), list()
+#     condition = user_data.condition.unique()[0]
+#     for i, point in enumerate(all_round_num):
+#         color = colors[0] if all_x_dm_decision[i] == 1 else colors[1]
+#         if all_x_dm_decision[i] == 1:
+#             color = colors[0]
+#             chose_points_x.append(all_round_num[i])
+#             chose_points_y.append(all_expert_score[i])
+#         else:
+#             color = colors[1]
+#             not_chose_points_x.append(all_round_num[i])
+#             not_chose_points_y.append(all_expert_score[i])
+#
+#         ax.annotate(f'({all_x_real_score[i]},{all_expert_score[i]},\n'
+#                     f'{all_index_above[i]}, {all_index_below[i]}, {all_index_diff[i]})',
+#                     (point - 0.4, all_expert_score[i] - 0.6), color=color, fontsize=10)
+#     ax.scatter([chose_points_x], [chose_points_y], color=colors[0], marker=".", label='DM chose Hotel')
+#     ax.scatter([not_chose_points_x], [not_chose_points_y], color=colors[1], marker=".", label='DM chose Stay Home')
+#     index_rmse = round(math.sqrt(mean_squared_error(all_x_index, all_chosen_index)), 2)
+#     score_rmse = round(math.sqrt(mean_squared_error(all_expert_score, all_x_real_score)), 2)
+#     index_avg_diff = round(sum(all_index_diff)/len(all_index_diff), 2)
+#     score_avg_diff = round(sum(all_score_diff)/len(all_score_diff), 2)
+#     print(f'pair number {user_num+1} with participant_code {user}')
+#     plt.title(f'Pair number {user_num+1}, played {condition} condition results:\n'
+#               f'(true score, expert chosen score, #numbers above, #numbers below, '
+#               f'expert choice with respect to chosen index)\n'
+#               f'index RMSE: {index_rmse}, score RMSE: {score_rmse}, score avg diff: {score_avg_diff},'
+#               f'index avg diff: {index_avg_diff}')
+#     plt.xlabel('Round Number')
+#     plt.ylabel('Expert Chosen Score')
+#     plt.xticks(range(1, 11))
+#     plt.yticks(range(1, 11))
+#     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+#     plt.show()
+#     fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
 
 """score evaluation task"""
-data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
-                     'results/text_exp_2_tests/score evaluation task.xlsx', sheet_name='data_to_plot')
-reviews = data.review_id.unique()
+score_eval_data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
+                                'data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
+                                sheet_name='data_to_plot')
+reviews = score_eval_data.review_id.unique()
 colors = (list(mcolors.BASE_COLORS.keys()) + list(mcolors.TABLEAU_COLORS.keys()))
 colors.remove('tab:olive')
 colors.remove('y')
@@ -144,10 +145,10 @@ colors = colors*5
 # fig = plt.figure(figsize=(15, 15))
 # ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
 fig, ax = plt.subplots()
-all_round_num = data.average_answer.round(1).tolist()
-all_expert_score = data.review_real_score.round(1).tolist()
-all_x_min = data.min_answer.tolist()
-all_x_max = data.max_answer.tolist()
+all_round_num = score_eval_data.average_answer.round(1).tolist()
+all_expert_score = score_eval_data.review_real_score.round(1).tolist()
+all_x_min = score_eval_data.min_answer.tolist()
+all_x_max = score_eval_data.max_answer.tolist()
 all_x_avg = list()
 all_y = list()
 points_annotate = list()
@@ -284,23 +285,33 @@ plt.yticks(())
 plt.show()
 
 """The Communication Type Effect on the Experts Cheating Level"""
-colors = ['crimson', 'forestgreen', 'navy']
+colors = ['forestgreen', 'darkblue', 'crimson']
 markers = [".", "x", "+", "1"]
 fig1, ax1 = plt.subplots()
 ax1.axis([4, 10, 4, 10])
 x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
-y1 = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
-y2 = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
+num = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
+verbal = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
+num_only = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
 
+ax1.plot(x, verbal, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
+ax1.plot(x, num, color=colors[1], label='Numerical', marker=markers[0], linestyle='-')
+ax1.plot(x, num_only, color=colors[2], label='Only Numeric', marker=markers[0], linestyle='-')
+ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
 
-ax1.plot(x, y1, color=colors[0], label='Numerical Condition', marker=markers[0], linestyle='-')
-ax1.plot(x, y2, color=colors[1], label='Verbal Condition', marker=markers[0], linestyle='-')
-ax1.plot(x, x, color='darkblue', marker=markers[0], linestyle='-', label='Truth Telling')
+for hotel in range(1, 11):
+    hotel_list = score_eval_data.loc[score_eval_data.hotel_id == hotel].answer_real.round(1).tolist()
+    if hotel != 4:
+        y_gap = 0
+    else:
+        y_gap = -0.1
+    ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
+             {'fontsize': 8})
 
-plt.title("The Experts' Cheating Level in Both Experiment Conditions")
+plt.title("The Experts' Cheating Level in All Experiment Conditions")
 plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
 plt.ylabel('Expert Average Signal', fontsize=15)
-ax1.legend()
+ax1.legend(loc='upper left', shadow=True, fontsize=8)
 plt.xticks(range(4, 11))
 plt.yticks(range(4, 11))
 plt.show()
@@ -309,32 +320,62 @@ fig1.savefig('The Communication Type Effect on the Experts Cheating Level.png', 
 """Decision maker average payoff"""
 verbal = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
 numerical = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
+num_only = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
+
 index = list(range(1, 11))
-decision_data = pd.DataFrame({'Verbal': verbal,
-                              'Numerical': numerical}, index=index)
+decision_data = pd.DataFrame({f'Verbal: average payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
+                              f'Numerical: average payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
+                              f'Only Numeric: average payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only},
+                             index=index)
 plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue'])
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
 plt.title("The Decision Makers' Average Payoff Throughout the Experiment")
 plt.xlabel('Round Number')
 plt.ylabel("Decision Makers' Average Payoff")
 rects = ax2.patches
 autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
+ax2.legend(loc='lower center', shadow=True)
 plt.show()
 fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Decision maker average payoff.png', bbox_inches='tight')
 
+"""Decision maker average expected payoff"""
+verbal = [0.31, 0.11, 0.38, 0.47, 0.2, 0.3, 0.32, 0.28, 0.21, 0.12]
+numerical = [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04]
+num_only = [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2]
+
+index = list(range(1, 11))
+decision_data = pd.DataFrame({
+    f'Verbal: average expected payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
+    f'Numerical: average expected payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
+    f'Only Numeric: average expected payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only}, index=index)
+plt.figure(figsize=(10, 5))
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
+plt.title("The Decision Makers' Average Expected Payoff Throughout the Experiment")
+plt.xlabel('Round Number')
+plt.ylabel("Decision Makers' Average Expected Payoff")
+rects = ax2.patches
+autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
+ax2.legend(loc='lower center', shadow=True)
+plt.show()
+fig_to_save = ax2.get_figure()
+fig_to_save.savefig('Decision maker average expected payoff.png', bbox_inches='tight')
+
 """Expert average payoff"""
 verbal = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
 numerical = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
+num_only = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
 index = list(range(1, 11))
-decision_data = pd.DataFrame({'Verbal': verbal,
-                              'Numerical': numerical}, index=index)
+decision_data = pd.DataFrame({f'Verbal: average percentage: {sum(verbal)/ len(verbal)}': verbal,
+                              f'Numerical: average percentage: {sum(numerical)/ len(numerical)}': numerical,
+                              f'Only Numeric: average percentage: {sum(num_only)/ len(num_only)}': num_only}, index=index)
 plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue'])
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
 plt.title("Percentage of Decision Makers that Chose the Hotel Option Throughout the Experiment", fontsize=15)
 plt.xlabel('Round Number', fontsize=15)
 plt.ylabel("% Decision Makers", fontsize=15)
 rects = ax2.patches
+ax2.legend(loc='lower center', shadow=True)
 autolabel(rects, ax2, rotation='horizontal', max_height=89, convert_to_int=False, fontsize=10)
 ax2.set_yticks([0, 20, 40, 60, 80, 100])
 plt.show()
