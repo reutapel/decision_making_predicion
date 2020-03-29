@@ -30,8 +30,8 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.9
-alpha_global = 0.8
+alpha_text = 0.0
+alpha_global = 0.0
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
@@ -203,7 +203,7 @@ class CreateSaveData:
                  use_all_history_text: bool=False, use_all_history_average: bool = False, use_crf_raisha: bool=False,
                  predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None,
                  string_labels: bool=False, saifa_average_text: bool=False, no_saifa_text: bool=False,
-                 saifa_prev_rounds_text: bool=False):
+                 saifa_only_prev_rounds_text: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -228,7 +228,7 @@ class CreateSaveData:
         :param string_labels: if the labels are string --> for LSTM model
         :param saifa_average_text:  if we want to add the saifa average text features
         :param no_saifa_text: if we don't want to use the text of the saifa rounds
-        :param saifa_prev_rounds_text: if we want to use only the previous rounds in the saifa
+        :param saifa_only_prev_rounds_text: if we want to use only the previous rounds in the saifa
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -314,7 +314,7 @@ class CreateSaveData:
         self.predict_first_round = predict_first_round
         self.saifa_average_text = saifa_average_text
         self.no_saifa_text = no_saifa_text
-        self.saifa_prev_rounds_text = saifa_prev_rounds_text
+        self.saifa_only_prev_rounds_text = saifa_only_prev_rounds_text
         # if we use the history average -> don't predict the first round because there is no history
         # if self.use_all_history_text_average or self.use_all_history_average:
         #     self.predict_first_round = False
@@ -338,7 +338,7 @@ class CreateSaveData:
                                self.use_all_history_text_average else '',
                                f'no_saifa_text_' if self.no_saifa_text else '',
                                f'all_saifa_text_average_' if self.saifa_average_text else '',
-                               'saifa_prev_rounds_text' if self.saifa_prev_rounds_text else '',
+                               'saifa_only_prev_rounds_text' if self.saifa_only_prev_rounds_text else '',
                                f'all_history_text_' if self.use_all_history_text else '',
                                'no_text_' if self.no_text else '',
                                f'{self.features_file}_' if self.use_manual_features and not self.no_text else '',
@@ -933,7 +933,7 @@ class CreateSaveData:
                     # the saifa data --> put all the raisha data + the history in the saifa text + the curr
                     # round text
                     else:
-                        if self.saifa_prev_rounds_text:
+                        if self.saifa_only_prev_rounds_text:
                             # all the future of the saifa text (round=5 --> so we don't use the text of rounds 6-10)
                             round_columns_minus_1 = \
                                 sorted([f'{column}_{j}' for column, j in
@@ -978,6 +978,7 @@ class CreateSaveData:
         save_data = self.final_data
         save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
         joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
+        print(f'Save data: {file_name}.pkl')
 
         print(f'{time.asctime(time.localtime(time.time()))}:'
               f'Finish creating sequences with different lengths and concat with manual features for the text')
@@ -1066,8 +1067,8 @@ class CreateSaveData:
                     else:
                         round_data = data_pair.loc[data_pair.subsession_round_number == round_num+1]
                         round_columns = [column for column in round_data.columns if 'curr_round_feature' in column]
-                        cuur_round_data = round_data[round_columns].copy()
-                        round_data_list = cuur_round_data.values.tolist()[0]
+                        curr_round_data = round_data[round_columns].copy()
+                        round_data_list = curr_round_data.values.tolist()[0]
                         if self.use_prev_round_text:
                             prev_round_columns = [column for column in round_data.columns if 'prev_round' in column]
                             prev_round_data = round_data[prev_round_columns].copy()
@@ -1096,6 +1097,7 @@ class CreateSaveData:
         save_data = self.final_data
         save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
         joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
+        print(f'Save data: {file_name}.pkl')
 
         print(f'{time.asctime(time.localtime(time.time()))}:Finish create_manual_features_crf_raisha_data_avg_features')
         logging.info(f'{time.asctime(time.localtime(time.time()))}:'
@@ -1268,17 +1270,17 @@ def main():
     }
     features_to_use = 'manual_binary_features'
     # label can be single_round or total_payoff
-    conditions_dict = {
+    # conditions_dict = {
         'verbal': {'use_prev_round': False,
-                   'use_prev_round_text': False,
+                   'use_prev_round_text': True,
                    'use_manual_features': True,
                    'use_all_history_average': False,
-                   'use_all_history': False,
+                   'use_all_history': True,
                    'use_all_history_text_average': False,
-                   'use_all_history_text': False,
-                   'saifa_average_text': True,
+                   'use_all_history_text': True,
+                   'saifa_average_text': False,
                    'no_saifa_text': False,
-                   'saifa_prev_rounds_text': False,
+                   'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
@@ -1293,7 +1295,7 @@ def main():
                     'use_all_history_text': True,
                     'saifa_average_text': True,
                     'no_saifa_text': True,
-                    'saifa_prev_rounds_text': True,
+                    'saifa_only_prev_rounds_text': True,
                     'no_text': True,
                     'use_score': True,
                     'predict_first_round': True,
@@ -1303,7 +1305,7 @@ def main():
     use_seq = False
     use_crf = False
     use_crf_raisha = True
-    string_labels = True  # labels are string --> for LSTM model
+    string_labels = False  # labels are string --> for LSTM model
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
@@ -1332,7 +1334,7 @@ def main():
                                           features_to_drop=features_to_drop, string_labels=string_labels,
                                           saifa_average_text=conditions_dict[condition]['saifa_average_text'],
                                           no_saifa_text=conditions_dict[condition]['no_saifa_text'],
-                                          saifa_prev_rounds_text=conditions_dict[condition]['saifa_prev_rounds_text'])
+                                          saifa_only_prev_rounds_text=conditions_dict[condition]['saifa_only_prev_rounds_text'])
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:
