@@ -17,7 +17,7 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'verbal'
+condition_directory = 'both'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -463,14 +463,15 @@ class DataAnalysis:
                     time_spent_to_merge = time_spent_to_merge.append(
                         role_data[['participant_code', 'subsession_round_number', 'seconds_on_page',
                                    'group_receiver_passed_test']])
-                    for passed in [0, 1]:
+                    for passed in [0, 1, 0.5]:
                         passed_role_data = role_data.loc[(role_data.seconds_on_page <= 150) &
                                                          (role_data.group_receiver_passed_test == passed)]
-                        x = np.array(passed_role_data['seconds_on_page'])
-                        create_histogram(title=f'time_spent_in_page_condition_{self.condition}_{role[1]}_passed_test_'
-                                               f'{passed}_all_rounds', x=x, xlabel='seconds_in_page',
-                                         ylabel='total_number_of_rounds', add_labels=True,
-                                         curr_date_directory=data_analysis_directory, step=10)
+                        if not passed_role_data.empty:
+                            x = np.array(passed_role_data['seconds_on_page'])
+                            create_histogram(title=f'time_spent_in_page_condition_{self.condition}_{role[1]}_passed_'
+                                                   f'test_{passed}_all_rounds', x=x, xlabel='seconds_in_page',
+                                             ylabel='total_number_of_rounds', add_labels=True,
+                                             curr_date_directory=data_analysis_directory, step=10)
 
                 else:
                     time_spent_to_merge = time_spent_to_merge.append(
@@ -1156,7 +1157,7 @@ class DataAnalysis:
         # number of partner_left workers that got bonus - how much we could save
         partner_left = self.results_payments.loc[self.results_payments.status == 'partner_left']
         partner_left = partner_left.drop_duplicates('participant_code')
-        partner_left_bonus = partner_left.loc[partner_left.bonus > 1]
+        partner_left_bonus = partner_left.loc[partner_left.bonus > 2.5]
         print(time.asctime(time.localtime(time.time())), ': number of participants that their partner has left'
                                                          ' and got bonus:', partner_left_bonus.shape[0])
         logging.info('{}: number of participants that their partner has left and got bonus: {}'.
@@ -1174,9 +1175,9 @@ class DataAnalysis:
 
             number_of_started = role_started.participant_code.unique()
             # participants with role[0] that got bonus
-            role_data_bonus = role_started.loc[role_started.bonus >= 1]
+            role_data_bonus = role_started.loc[role_started.bonus > 2.5]
             # participants with role[0] that played but didn't got bonus
-            role_data_no_bonus = role_started.loc[(role_started.bonus >= 0) & (role_started.bonus < 1)]
+            role_data_no_bonus = role_started.loc[(role_started.bonus >= 0) & (role_started.bonus <= 2.5)]
             participants_got_bonus = role_data_bonus.participant_code.unique()
             participants_no_bonus = role_data_no_bonus.participant_code.unique()
 

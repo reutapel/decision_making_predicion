@@ -620,7 +620,7 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         validation_instances = test_reader.read(all_data_file_inner_path)
         vocab = Vocabulary.from_instances(train_instances + validation_instances)
 
-        hotel_label_0 = True if vocab._index_to_token['labels'][0] == 'hotel' else False
+        # hotel_label_0 = True if vocab._index_to_token['labels'][0] == 'hotel' else False
 
         metrics_dict_seq = {
             'Accuracy': CategoricalAccuracy(),  # BooleanAccuracy(),
@@ -642,7 +642,7 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
                                                    num_layers=1, dropout=0.0))
         model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
             encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
-            predict_seq=predict_seq, predict_avg_total_payoff=predict_avg_total_payoff, hotel_label_0=hotel_label_0)
+            predict_seq=predict_seq, predict_avg_total_payoff=predict_avg_total_payoff)
         print(model)
         if torch.cuda.is_available():
             cuda_device = 0

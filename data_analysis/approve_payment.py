@@ -12,7 +12,7 @@ number_of_rounds = 10
 
 
 def define_status():
-    results = pd.read_excel(os.path.join(base_directory, 'text_exp_2020-03-23.xlsx'))  #, sheetname='data_to_use')
+    results = pd.read_excel(os.path.join(base_directory, 'text_exp_2020-04-02.xlsx'))  #, sheetname='data_to_use')
     results = results.drop_duplicates()
     results.columns = results.columns.str.replace(r".", "_")
 

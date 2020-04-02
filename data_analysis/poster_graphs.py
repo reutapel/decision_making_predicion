@@ -285,7 +285,7 @@ plt.yticks(())
 plt.show()
 
 """The Communication Type Effect on the Experts Cheating Level"""
-colors = ['forestgreen', 'darkblue', 'crimson']
+colors = ['forestgreen', 'darkblue', 'crimson', 'pink']
 markers = [".", "x", "+", "1"]
 fig1, ax1 = plt.subplots()
 ax1.axis([4, 10, 4, 10])
@@ -293,20 +293,23 @@ x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
 num = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
 verbal = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
 num_only = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
+both = [5.12, 8.48, 8.94, 9.35, 9.13, 9.64, 9.01, 9.6, 9.83, 9.83]
 
 ax1.plot(x, verbal, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
 ax1.plot(x, num, color=colors[1], label='Numerical', marker=markers[0], linestyle='-')
 ax1.plot(x, num_only, color=colors[2], label='Only Numeric', marker=markers[0], linestyle='-')
+ax1.plot(x, both, color=colors[3], label='Numeric + Verbal', marker=markers[0], linestyle='-')
+
 ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
 
-for hotel in range(1, 11):
-    hotel_list = score_eval_data.loc[score_eval_data.hotel_id == hotel].answer_real.round(1).tolist()
-    if hotel != 4:
-        y_gap = 0
-    else:
-        y_gap = -0.1
-    ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
-             {'fontsize': 8})
+# for hotel in range(1, 11):
+#     hotel_list = score_eval_data.loc[score_eval_data.hotel_id == hotel].answer_real.round(1).tolist()
+#     if hotel != 4:
+#         y_gap = 0
+#     else:
+#         y_gap = -0.1
+#     ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
+#              {'fontsize': 8})
 
 plt.title("The Experts' Cheating Level in All Experiment Conditions")
 plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
@@ -321,14 +324,17 @@ fig1.savefig('The Communication Type Effect on the Experts Cheating Level.png', 
 verbal = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
 numerical = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
 num_only = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
+both = [0.62, 0.56, 0.25, -0.06, 0.67, 0.69, 0.33, -1.19, 0.14, 0.43]
 
 index = list(range(1, 11))
 decision_data = pd.DataFrame({f'Verbal: average payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
                               f'Numerical: average payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
-                              f'Only Numeric: average payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only},
+                              f'Only Numeric: average payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only,
+                              f'Numeric + Verbal: {round(sum(both)/ len(both), 2)}': both},
                              index=index)
 plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
+                         color=['forestgreen', 'darkblue', 'crimson', 'pink'])
 plt.title("The Decision Makers' Average Payoff Throughout the Experiment")
 plt.xlabel('Round Number')
 plt.ylabel("Decision Makers' Average Payoff")
@@ -343,14 +349,17 @@ fig_to_save.savefig('Decision maker average payoff.png', bbox_inches='tight')
 verbal = [0.31, 0.11, 0.38, 0.47, 0.2, 0.3, 0.32, 0.28, 0.21, 0.12]
 numerical = [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04]
 num_only = [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2]
+both = [0.72, 0.51, 0.03, -0.23, 0.97, 0.76, 0.16, -0.47, 0.32, 0.25]
 
 index = list(range(1, 11))
 decision_data = pd.DataFrame({
     f'Verbal: average expected payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
     f'Numerical: average expected payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
-    f'Only Numeric: average expected payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only}, index=index)
+    f'Only Numeric: average expected payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only,
+    f'Numeric + Verbal: average expected payoff: {round(sum(both)/ len(both), 2)}': both}, index=index)
 plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
+                         color=['forestgreen', 'darkblue', 'crimson', 'pink'])
 plt.title("The Decision Makers' Average Expected Payoff Throughout the Experiment")
 plt.xlabel('Round Number')
 plt.ylabel("Decision Makers' Average Expected Payoff")
@@ -365,12 +374,15 @@ fig_to_save.savefig('Decision maker average expected payoff.png', bbox_inches='t
 verbal = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
 numerical = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
 num_only = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
+both = [85, 71, 50, 42, 78, 78, 84, 78, 57, 71]
 index = list(range(1, 11))
 decision_data = pd.DataFrame({f'Verbal: average percentage: {sum(verbal)/ len(verbal)}': verbal,
                               f'Numerical: average percentage: {sum(numerical)/ len(numerical)}': numerical,
-                              f'Only Numeric: average percentage: {sum(num_only)/ len(num_only)}': num_only}, index=index)
+                              f'Only Numeric: average percentage: {sum(num_only)/ len(num_only)}': num_only,
+                              f'Numeric + Verbal: average percentage: {sum(both)/ len(both)}': both}, index=index)
 plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=['forestgreen', 'darkblue', 'crimson'])
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
+                         color=['forestgreen', 'darkblue', 'crimson', 'pink'])
 plt.title("Percentage of Decision Makers that Chose the Hotel Option Throughout the Experiment", fontsize=15)
 plt.xlabel('Round Number', fontsize=15)
 plt.ylabel("% Decision Makers", fontsize=15)

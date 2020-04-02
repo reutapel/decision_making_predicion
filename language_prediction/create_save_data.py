@@ -30,12 +30,13 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.0
-alpha_global = 0.0
+alpha_text = 0.5
+alpha_global = 0.5
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
 global_saifa = 'saifa'
+crf_label_col_name = 'labels'
 
 
 def rename_review_features_column(review_data: pd.DataFrame, prefix_column_name: str):
@@ -121,7 +122,7 @@ def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list
         id_curr_round = data.loc[data.subsession_round_number == round_num][columns_to_drop[0]]
         id_curr_round.index = ['review_id']
         # this features are not relevant for the last round because they are post treatment features
-        data_to_flat = data.copy()
+        data_to_flat = data.copy(deep=True)
         data_to_flat = data_to_flat.reset_index(drop=True)
         # the last round is not relevant for the history of any other rounds
         data_to_flat = data_to_flat.loc[data_to_flat.subsession_round_number <= last_round_to_use]
@@ -203,13 +204,15 @@ class CreateSaveData:
                  use_all_history_text: bool=False, use_all_history_average: bool = False, use_crf_raisha: bool=False,
                  predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None,
                  string_labels: bool=False, saifa_average_text: bool=False, no_saifa_text: bool=False,
-                 saifa_only_prev_rounds_text: bool=False):
+                 saifa_only_prev_rounds_text: bool=False, use_prev_round_label: bool=False,
+                 non_nn_turn_model: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
         :param label: the name of the label
         :param use_seq: if to create a sample which is a seq or a single round
         :param use_prev_round: if to use the previous round data: review, decision, lottery result
+        :param use_prev_round_label: if to use the previous round decision
         :param use_manual_features: if we use manual features - need to get the review id
         :param features_file: if using fix features- the name of the features file
         :param features_file_type: the type of file for the fix features
@@ -229,6 +232,7 @@ class CreateSaveData:
         :param saifa_average_text:  if we want to add the saifa average text features
         :param no_saifa_text: if we don't want to use the text of the saifa rounds
         :param saifa_only_prev_rounds_text: if we want to use only the previous rounds in the saifa
+        :param non_nn_turn_model: non neural networks models that predict a label for each round
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -315,6 +319,8 @@ class CreateSaveData:
         self.saifa_average_text = saifa_average_text
         self.no_saifa_text = no_saifa_text
         self.saifa_only_prev_rounds_text = saifa_only_prev_rounds_text
+        self.use_prev_round_label = use_prev_round_label
+        self.non_nn_turn_model = non_nn_turn_model
         # if we use the history average -> don't predict the first round because there is no history
         # if self.use_all_history_text_average or self.use_all_history_average:
         #     self.predict_first_round = False
@@ -329,8 +335,10 @@ class CreateSaveData:
                                'crf_' if use_crf else '',
                                'crf_raisha_' if use_crf_raisha else '',
                                'string_labels_' if string_labels else '',
+                               'non_nn_turn_model_' if self.non_nn_turn_model else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
+                               'prev_round_label_' if self.use_prev_round_label else '',
                                f'all_history_features_' if self.use_all_history else '',
                                f'all_history_features_average_with_global_alpha_{alpha_global}_'
                                if self.use_all_history_average else '',
@@ -338,7 +346,7 @@ class CreateSaveData:
                                self.use_all_history_text_average else '',
                                f'no_saifa_text_' if self.no_saifa_text else '',
                                f'all_saifa_text_average_' if self.saifa_average_text else '',
-                               'saifa_only_prev_rounds_text' if self.saifa_only_prev_rounds_text else '',
+                               'saifa_only_prev_rounds_text_' if self.saifa_only_prev_rounds_text else '',
                                f'all_history_text_' if self.use_all_history_text else '',
                                'no_text_' if self.no_text else '',
                                f'{self.features_file}_' if self.use_manual_features and not self.no_text else '',
@@ -493,7 +501,7 @@ class CreateSaveData:
 
             # first merge for the review_id for the current round
             if not self.no_text:  # use test features
-                temp_reviews = data[['review_id', 'subsession_round_number']].copy()
+                temp_reviews = data[['review_id', 'subsession_round_number']].copy(deep=True)
                 temp_reviews = temp_reviews.merge(self.reviews_features, on='review_id', how='left')
                 if self.use_all_history_text_average:
                     data = self.set_text_average(rounds, temp_reviews, data)
@@ -525,18 +533,22 @@ class CreateSaveData:
 
             # add metadata
             # raisha
-            data[meta_data_columns[0]] = data['subsession_round_number']-1
+            data[meta_data_columns[0]] = data['subsession_round_number'] - 1
+            self.data['sample_id'] = self.data[meta_data_columns[1]] + '_' + (
+                        self.data['subsession_round_number'] - 1).map(str)
             # add sample ID column
             data[meta_data_columns[1]] = pair
             data[meta_data_columns[2]] = data[meta_data_columns[1]] + '_' + data[meta_data_columns[0]].map(str)
             if self.label == 'single_round':
                 # the label is the exp_payoff of the current round - 1 or -1
-                if 1 not in data.subsession_round_number.values:
-                    data[self.label] =\
-                        self.data.loc[(self.data.pair_id == pair) & (self.data.subsession_round_number > 1)][
-                            'exp_payoff'].reset_index(drop=True)
-                else:
-                    data[self.label] = self.data.loc[(self.data.pair_id == pair)]['exp_payoff'].reset_index(drop=True)
+                data = data.merge(self.data[['exp_payoff', 'sample_id']], how='left', on='sample_id')
+                data.rename(columns={'exp_payoff': self.label}, inplace=True)
+                # if 1 not in data.subsession_round_number.values:
+                #     data[self.label] =\
+                #         self.data.loc[(self.data.pair_id == pair) & (self.data.subsession_round_number > 1)][
+                #             'exp_payoff'].reset_index(drop=True)
+                # else:
+                #     data[self.label] = self.data.loc[(self.data.pair_id == pair)]['exp_payoff'].reset_index(drop=True)
                 data[self.label] = np.where(data[self.label] == 1, 1, -1)
 
             else:  # the label is the total payoff
@@ -550,8 +562,8 @@ class CreateSaveData:
                     rounds = list(range(1, 11))
                 else:
                     rounds = list(range(2, 11))
-                for i in rounds:
-                    data.loc[data.raisha == i, self.label] =\
+                for i in rounds:  # the raishas are 0-9
+                    data.loc[data.raisha == i-1, self.label] =\
                         self.data.loc[(self.data.pair_id == pair) &
                                       (self.data.subsession_round_number >= i)].group_sender_payoff.sum() /\
                         (self.number_of_rounds + 1 - i)
@@ -579,8 +591,12 @@ class CreateSaveData:
 
         # save column names to get the features later
         file_name = f'features_{self.base_file_name}'
-        pd.DataFrame(self.final_data.columns).to_excel(os.path.join(save_data_directory, f'{file_name}.xlsx'),
-                                                       index=True)
+        features_columns = self.final_data.columns.tolist()
+        columns_to_drop = meta_data_columns + ['subsession_round_number', self.label]
+        for column in columns_to_drop:
+            if column in features_columns:
+                features_columns.remove(column)
+        pd.DataFrame(features_columns).to_excel(os.path.join(save_data_directory, f'{file_name}.xlsx'), index=True)
 
         # save final data
         file_name = f'all_data_{self.base_file_name}'
@@ -622,7 +638,7 @@ class CreateSaveData:
 
         if self.reviews_features.shape[1] > 2:  # if the review_features is in one column - no need to create it
             # create features as one column with no.array for NN models
-            temp_features = self.reviews_features.copy().drop('review_id', axis=1)
+            temp_features = self.reviews_features.copy(deep=True).drop('review_id', axis=1)
             self.reviews_features = self.reviews_features.assign(review_features='')
             for i in self.reviews_features.index:
                 self.reviews_features.at[i, 'review_features'] = np.array(temp_features.values)[i]
@@ -750,7 +766,7 @@ class CreateSaveData:
 
         if self.reviews_features.shape[1] > 2:  # if the review_features is in one column - no need to create it
             # create features as one column with no.array for CRF models
-            temp_features = self.reviews_features.copy().drop('review_id', axis=1)
+            temp_features = self.reviews_features.copy(deep=True).drop('review_id', axis=1)
             self.reviews_features = self.reviews_features.assign(review_features='')
             for i in self.reviews_features.index:
                 self.reviews_features.at[i, 'review_features'] = np.array(temp_features.values)[i]
@@ -806,7 +822,7 @@ class CreateSaveData:
                     # single_label = data_pair.subsession_round_number
                     labels = pd.DataFrame(pd.Series(
                         [single_label.iloc[:self.number_of_rounds - i].values.tolist() for i in range(10)]),
-                        columns=['labels'])
+                        columns=[crf_label_col_name])
                     data = data.merge(labels, right_index=True, left_index=True)
 
                 else:  # the label is the total payoff
@@ -827,10 +843,11 @@ class CreateSaveData:
                 for raisha in range(0, 10):
                     # the saifa data is the data of the rounds after the saifa
                     saifa_data_columns = [f'features_{i}' for i in range(raisha+1, 11)]
-                    saifa_data_columns.extend(['labels', 'pair_id'])
+                    saifa_data_columns.extend([crf_label_col_name, 'pair_id'])
                     relevant_data_for_raisha_saifa = data_to_use[saifa_data_columns]
                     relevant_data_for_raisha_saifa[global_raisha] = raisha
-                    relevant_data_for_raisha_saifa['labels'] = relevant_data_for_raisha_saifa['labels'][raisha:]
+                    relevant_data_for_raisha_saifa[crf_label_col_name] =\
+                        relevant_data_for_raisha_saifa[crf_label_col_name][raisha:]
                     if raisha == 0:
                         self.final_data = pd.concat([self.final_data, pd.DataFrame([relevant_data_for_raisha_saifa])],
                                                     axis=0, ignore_index=True)
@@ -882,26 +899,32 @@ class CreateSaveData:
                               list(itertools.product(*[columns_to_flat, list(range(0, 10))]))],
                              key=lambda x: int(x[-1]))
 
+        # labels columns:
+        label_column = ['round_label']
+        label_columns = sorted([f'{column}_{j}' for column, j in
+                                list(itertools.product(*[label_column, list(range(0, 10))]))], key=lambda x: int(x[-1]))
+
         file_name = f'features_{self.base_file_name}'
         pd.DataFrame(all_columns).to_excel(os.path.join(save_data_directory, f'{file_name}.xlsx'), index=True)
 
         # merge the round number features with the review features
         data_for_pairs = self.data.merge(self.reviews_features, on='review_id', how='left')
         columns_to_flat.extend(['pair_id'])
-        data_for_pairs = data_for_pairs[columns_to_flat]
 
-        data_for_pairs.exp_payoff = np.where(data_for_pairs.exp_payoff == 1, 1, -1)
+        data_for_pairs['round_label'] = np.where(data_for_pairs.exp_payoff == 1, 1, -1)
+        data_for_pairs = data_for_pairs[columns_to_flat + label_column]
         for pair in self.pairs:
             print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
-            data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair]
+            data_pair_label = data_for_pairs.loc[data_for_pairs.pair_id == pair].copy(deep=True)
 
             # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
-            data_pair = data_pair.drop('pair_id', axis=1)
-            data_pair = data_pair.reset_index(drop=True)
-            data_pair = data_pair.unstack().to_frame().sort_index(level=1).T
-            data_pair.columns = [f'{str(col)}_{i}' for col, i in zip(data_pair.columns.get_level_values(0),
-                                                                     data_pair.columns.get_level_values(1))]
-            data_pair = data_pair[all_columns]
+            data_pair_label = data_pair_label.drop('pair_id', axis=1)
+            data_pair_label = data_pair_label.reset_index(drop=True)
+            data_pair_label = data_pair_label.unstack().to_frame().sort_index(level=1).T
+            data_pair_label.columns = [f'{str(col)}_{i}' for col, i in zip(data_pair_label.columns.get_level_values(0),
+                                                                           data_pair_label.columns.get_level_values(1))]
+            data_pair = data_pair_label[all_columns].copy(deep=True)
+            label_pair = data_pair_label[label_columns].copy(deep=True)
 
             # create data per raisha with all data of the raisha and all the text of the history in the saifa
             raisha_data_dict = defaultdict(dict)
@@ -913,13 +936,14 @@ class CreateSaveData:
                 raisha_data_dict[raisha]['sample_id'] = f'{pair}_{raisha}'
 
                 if string_labels:
-                    raisha_data_dict[raisha]['labels'] = \
-                        np.where(data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]] == 1,
+                    raisha_data_dict[raisha][crf_label_col_name] = \
+                        np.where(label_pair[[f'round_label_{i}' for i in range(raisha, 10)]] == 1,
                                  'hotel', 'stay_home')[0].tolist()
+
                 else:
                     # only for single_round label
-                    raisha_data_dict[raisha]['labels'] = \
-                        data_pair[[f'exp_payoff_{i}' for i in range(raisha, 10)]].astype(int).values.tolist()[0]
+                    raisha_data_dict[raisha][crf_label_col_name] = \
+                        label_pair[[f'round_label_{i}' for i in range(raisha, 10)]].astype(int).values.tolist()[0]
 
                 # all the saifa decisions and payoffs (raisha=3, so all the decisions of rounds 4-10)
                 raisha_columns_minus_1 = \
@@ -973,12 +997,12 @@ class CreateSaveData:
             self.final_data = pd.concat([self.final_data, pair_raisha_data], axis=0, ignore_index=True)
 
         file_name = f'all_data_{self.base_file_name}'
-        print(f'{time.asctime(time.localtime(time.time()))}: Save all data')
         # save_data = self.final_data.drop(['pair_id'], axis=1)
-        save_data = self.final_data
-        save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
-        joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
-        print(f'Save data: {file_name}.pkl')
+        if not self.non_nn_turn_model:
+            print(f'{time.asctime(time.localtime(time.time()))}: Save all data {file_name}.pkl')
+            save_data = self.final_data
+            save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
+            joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
 
         print(f'{time.asctime(time.localtime(time.time()))}:'
               f'Finish creating sequences with different lengths and concat with manual features for the text')
@@ -1007,17 +1031,19 @@ class CreateSaveData:
         all_columns.extend(['pair_id', 'exp_payoff', 'review_id'])
         if self.use_prev_round_text:
             all_columns.append('previous_review_id')
-        data_for_pairs = self.data[all_columns].copy()
+        data_for_pairs = self.data[all_columns].copy(deep=True)
 
-        data_for_pairs.exp_payoff = np.where(data_for_pairs.exp_payoff == 1, 1, -1)
+        labels_for_pairs = self.data[['exp_payoff', 'pair_id', 'subsession_round_number']].copy(deep=True)
+        labels_for_pairs['round_label'] = np.where(labels_for_pairs.exp_payoff == 1, 1, -1)
         raisha_columns, round_columns, prev_round_columns = list(), list(), list()
 
         for pair in self.pairs:
             print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
-            data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair]
+            data_pair = data_for_pairs.loc[data_for_pairs.pair_id == pair].copy(deep=True)
+            label_pair = labels_for_pairs.loc[labels_for_pairs.pair_id == pair].copy(deep=True)
 
             # use the raisha (and) the saifa average text and the current round text
-            data = self.data.loc[self.data.pair_id == pair][['review_id', 'subsession_round_number']].copy()
+            data = self.data.loc[self.data.pair_id == pair][['review_id', 'subsession_round_number']].copy(deep=True)
             temp_reviews = data.merge(self.reviews_features, on='review_id', how='left')
             # return for each round the curr round features, the history rounds features and the future
             # rounds history (and the review_id, subsession_round_number columns)
@@ -1027,7 +1053,7 @@ class CreateSaveData:
             data_pair = data_pair.merge(avg_text_data, on='review_id', how='left')
 
             if self.use_prev_round_text:  # add the previous round in saifa text
-                prev_round_saifa_text = self.reviews_features.copy()
+                prev_round_saifa_text = self.reviews_features.copy(deep=True)
                 prev_round_saifa_text = rename_review_features_column(prev_round_saifa_text, 'prev_round_feature')
                 data_pair = data_pair.merge(prev_round_saifa_text, left_on='previous_review_id',
                                             right_on='review_id', how='left')
@@ -1043,13 +1069,14 @@ class CreateSaveData:
                 raisha_data_dict[raisha]['sample_id'] = f'{pair}_{raisha}'
 
                 # use the raisha (and) the saifa average text and the current round text
-                saifa_labels = \
-                    data_pair.loc[data_pair.subsession_round_number.isin(list(range(raisha+1, 11)))]['exp_payoff']
+                saifa_labels = label_pair.loc[label_pair.subsession_round_number.isin(
+                    list(range(raisha+1, 11)))].round_label.copy(deep=True)
                 if string_labels:
-                    raisha_data_dict[raisha]['labels'] = np.where(saifa_labels == 1, 'hotel', 'stay_home').tolist()
+                    raisha_data_dict[raisha][crf_label_col_name] =\
+                        np.where(saifa_labels == 1, 'hotel', 'stay_home').tolist()
                 else:
                     # only for single_round label
-                    raisha_data_dict[raisha]['labels'] = saifa_labels.astype(int).values.tolist()
+                    raisha_data_dict[raisha][crf_label_col_name] = saifa_labels.astype(int).values.tolist()
 
                 # the raisha data is the history when subsession_round_number = raisha
                 raisha_saifa_data = data_pair.loc[data_pair.subsession_round_number == raisha+1]
@@ -1067,11 +1094,11 @@ class CreateSaveData:
                     else:
                         round_data = data_pair.loc[data_pair.subsession_round_number == round_num+1]
                         round_columns = [column for column in round_data.columns if 'curr_round_feature' in column]
-                        curr_round_data = round_data[round_columns].copy()
+                        curr_round_data = round_data[round_columns].copy(deep=True)
                         round_data_list = curr_round_data.values.tolist()[0]
                         if self.use_prev_round_text:
                             prev_round_columns = [column for column in round_data.columns if 'prev_round' in column]
-                            prev_round_data = round_data[prev_round_columns].copy()
+                            prev_round_data = round_data[prev_round_columns].copy(deep=True)
                             # the first round in the saifa don't have prev round
                             if round_num == raisha:
                                 prev_round_data[prev_round_columns] = -1
@@ -1092,18 +1119,73 @@ class CreateSaveData:
             os.path.join(save_data_directory, f'{file_name}.xlsx'), index=True)
 
         file_name = f'all_data_{self.base_file_name}'
-        print(f'{time.asctime(time.localtime(time.time()))}: Save all data')
         # save_data = self.final_data.drop(['pair_id'], axis=1)
-        save_data = self.final_data
-        save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
-        joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
-        print(f'Save data: {file_name}.pkl')
+        if not self.non_nn_turn_model:
+            print(f'{time.asctime(time.localtime(time.time()))}: Save all data {file_name}.pkl')
+            save_data = self.final_data
+            save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
+            joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
 
         print(f'{time.asctime(time.localtime(time.time()))}:Finish create_manual_features_crf_raisha_data_avg_features')
         logging.info(f'{time.asctime(time.localtime(time.time()))}:'
                      f'Finish create_manual_features_crf_raisha_data_avg_features')
 
         return
+
+    def create_non_nn_turn_model_features(self):
+        """
+        This function flat the crf raisha data to match it to the non nn turn model features
+        :return:
+        """
+
+        print(f'{time.asctime(time.localtime(time.time()))}: Start create_non_nn_turn_model_features')
+        logging.info(f'{time.asctime(time.localtime(time.time()))}: Start create_non_nn_turn_model_features')
+
+        if self.use_prev_round_label:
+            features_file = pd.read_excel(os.path.join(save_data_directory, f'features_{self.base_file_name}.xlsx'))[0]
+            features_file = features_file.append(pd.Series('prev_round_label', index=[len(features_file.index)]))
+            features_file.to_excel(os.path.join(save_data_directory, f'features_{self.base_file_name}.xlsx'), index=True)
+
+        data_to_flat = self.final_data.copy(deep=True)
+        all_flat_data = defaultdict(dict)
+        for index, row in data_to_flat.iterrows():
+            labels = row[crf_label_col_name]
+            raisha = row[global_raisha]
+            for label_index, round_number in enumerate(range(raisha+1, 11)):
+                # features columns are features_round_1,..., features_round_10
+                row_features = row[f'features_round_{round_number}']
+                if self.use_prev_round_label:
+                    if label_index == 0:
+                        label_to_append = -1
+                    elif labels[label_index-1] == -1:
+                        label_to_append = 0
+                    elif labels[label_index-1] == 1:
+                        label_to_append = 1
+                    else:
+                        print(f'Error: labels[label_index-1] = {labels[label_index-1]}')
+                        return
+                    row_features.append(label_to_append)
+                all_flat_data[f'{index}_{label_index}']['features'] = row_features
+                all_flat_data[f'{index}_{label_index}'][crf_label_col_name] = labels[label_index]
+                all_flat_data[f'{index}_{label_index}'][global_raisha] = raisha
+                all_flat_data[f'{index}_{label_index}']['round_number'] = round_number
+                all_flat_data[f'{index}_{label_index}']['pair_id'] = row.pair_id
+                all_flat_data[f'{index}_{label_index}']['sample_id'] = row['sample_id'] + '_' + str(round_number)
+
+        all_flat_data_df = pd.DataFrame.from_dict(all_flat_data).T.astype({
+            'features': object, crf_label_col_name: int, global_raisha: int, 'round_number': int, 'pair_id': object,
+            'sample_id': object})
+        self.final_data = all_flat_data_df
+
+        file_name = f'all_data_{self.base_file_name}'
+        print(f'{time.asctime(time.localtime(time.time()))}: Save all data {file_name}.pkl')
+        # save_data = self.final_data.drop(['pair_id'], axis=1)
+        save_data = self.final_data
+        save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
+        joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
+
+        print(f'{time.asctime(time.localtime(time.time()))}: Finish create_non_nn_turn_model_features')
+        logging.info(f'{time.asctime(time.localtime(time.time()))}: Finish create_non_nn_turn_model_features')
 
     def create_seq_data(self):
         """
@@ -1268,26 +1350,29 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_binary_features'
-    # label can be single_round or total_payoff
-    # conditions_dict = {
+    features_to_use = 'bert_embedding'
+    # label can be single_round or future_total_payoff
+    conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': True,
+                   'use_prev_round_label': True,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
-                   'use_all_history': True,
-                   'use_all_history_text_average': False,
-                   'use_all_history_text': True,
+                   'use_all_history_average': True,
+                   'use_all_history': False,
+                   'use_all_history_text_average': True,
+                   'use_all_history_text': False,
                    'saifa_average_text': False,
                    'no_saifa_text': False,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
+                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
                    'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
+                    'use_prev_round_label': True,
                     'use_manual_features': False,
                     'use_all_history_average': False,
                     'use_all_history': True,
@@ -1299,6 +1384,7 @@ def main():
                     'no_text': True,
                     'use_score': True,
                     'predict_first_round': True,
+                    'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
                     'label': 'future_total_payoff'
                     }
     }
@@ -1334,7 +1420,10 @@ def main():
                                           features_to_drop=features_to_drop, string_labels=string_labels,
                                           saifa_average_text=conditions_dict[condition]['saifa_average_text'],
                                           no_saifa_text=conditions_dict[condition]['no_saifa_text'],
-                                          saifa_only_prev_rounds_text=conditions_dict[condition]['saifa_only_prev_rounds_text'])
+                                          saifa_only_prev_rounds_text=conditions_dict[condition][
+                                              'saifa_only_prev_rounds_text'],
+                                          use_prev_round_label=conditions_dict[condition]['use_prev_round_label'],
+                                          non_nn_turn_model=conditions_dict[condition]['non_nn_turn_model'])
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:
@@ -1346,6 +1435,9 @@ def main():
                 create_save_data_obj.create_manual_features_crf_raisha_data(string_labels=string_labels)
             else:
                 create_save_data_obj.create_manual_features_crf_raisha_data_avg_features(string_labels=string_labels)
+
+            if create_save_data_obj.non_nn_turn_model:  # flat the crf raisha data for the non_nn_turn_model
+                create_save_data_obj.create_non_nn_turn_model_features()
         else:
             create_save_data_obj.create_manual_features_data()
     else:

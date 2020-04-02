@@ -24,7 +24,7 @@ from allennlp.modules.attention.attention import Attention
 
 
 def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
-                                metadata, epoch: int, is_train: bool, mask: torch.Tensor, hotel_label_0:bool) -> dict:
+                                metadata, epoch: int, is_train: bool, mask: torch.Tensor) -> dict:
     """
     This function get the predictions class and save with the gold labels for sequence models where each sample had a
     list of predictions and labels
@@ -35,7 +35,6 @@ def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, 
     :param epoch: the number of epoch
     :param is_train: if this is train data or not
     :param mask: mask for each sample- which index is a padding
-    :param hotel_label_0: if the label of the hotel option is 0
     :return:
     """
 
@@ -834,14 +833,13 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  metrics_dict_seq: dict,
                  metrics_dict_reg: dict,
                  vocab: Vocabulary,
-                 hotel_label_0: bool,
                  attention: Attention = DotProductAttention(),
                  seq_weight_loss: float=0.5,
                  reg_weight_loss: float=0.5,
                  predict_seq: bool=True,
                  predict_avg_total_payoff: bool=True,
                  batch_size: int=10,
-                 linear_dim: int=None) -> None:
+                 linear_dim=None) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
         if predict_seq:  # need hidden2tag layer
@@ -869,11 +867,10 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         self.reg_weight_loss = reg_weight_loss
         self.predict_seq = predict_seq
         self.predict_avg_total_payoff = predict_avg_total_payoff
-        self.hotel_label_0 = hotel_label_0
 
     def forward(self,
                 sequence_review: torch.Tensor,
-                metadata: list,
+                metadata: dict,
                 seq_labels: torch.Tensor = None,
                 reg_labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
 
@@ -893,8 +890,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,
                                                                predictions=output['decision_logits'],
                                                                gold_labels=seq_labels, metadata=metadata,
-                                                               epoch=self._epoch, is_train=self.training,
-                                                               hotel_label_0=self.hotel_label_0)
+                                                               epoch=self._epoch, is_train=self.training,)
+                                                               # hotel_label_0=self.hotel_label_0)
 
         if self.predict_avg_total_payoff:
             attention_output = self.attention(self.attention_vector, encoder_out, mask)
