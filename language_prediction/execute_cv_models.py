@@ -72,13 +72,14 @@ class ExecuteEvalModel:
         raise NotImplementedError
 
     def save_model_prediction(self, data_to_save: pd.DataFrame, save_model=True, sheet_prefix_name: str='All',
-                              save_fold=None):
+                              save_fold=None, element_to_save: dict=None):
         """
         Save the model predictions and the model itself
         :param data_to_save: the data to save
         :param save_model: whether to save the model
         :param sheet_prefix_name: the sheet prefix name to save
         :param save_fold: the fold we want to save the model in
+        :param element_to_save: if we want to save something that is not the model itself: {element_name: element}
         :return:
         """
         if save_fold is None:
@@ -87,6 +88,10 @@ class ExecuteEvalModel:
         if save_model:
             joblib.dump(self.model, os.path.join(
                 save_fold, f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'))
+        if element_to_save is not None:
+            for element_name, element in element_to_save.items():
+                joblib.dump(element, os.path.join(save_fold, f'{self.model_num}_{element_name}_fold_{self.fold}.pkl'))
+
         utils.write_to_excel(self.table_writer, f'Model_{self.model_num}_{sheet_prefix_name}_predictions',
                              headers=[f'{sheet_prefix_name} predictions for model {self.model_num}: {self.model_name} '
                                       f'of type {self.model_type} in fold {self.fold}'], data=data_to_save)
@@ -149,8 +154,10 @@ class ExecuteEvalModel:
             stack_data = data.stack()
             # get only the relevant rounds --> the saifa rounds
             stack_data = stack_data.loc[stack_data != '-']
-            temp_index = [f'raisha_{r}_round_{ro}' for r, ro in stack_data.index.values]
+            if flat_col_name == label_column_name_per_round:
+                temp_index = [f'raisha_{r}_round_{ro}' for r, ro in stack_data.index.values]
             stack_data = stack_data.reset_index(drop=True)
+            stack_data = stack_data.astype(int)
             # if index_to_use is None:
             #     temp_index = [f'raisha_{r}_round_{ro}' for r, ro in stack_data.index.values]
             #     stack_data = stack_data.reset_index(drop=True)
@@ -161,9 +168,13 @@ class ExecuteEvalModel:
 
         try:
             if (flat_data[per_round_labels_name].index == flat_data[per_round_predictions_name].index).sum() == \
-                    flat_data[per_round_predictions_name].shape[0]:  # if there are index that  are not the same
+                    flat_data[per_round_predictions_name].shape[0]:  # if there are index that are not the same
                 flat_index = pd.DataFrame(temp_index, index=index_to_use)[0].str.split('_', expand=True)
-                flat_index.columns = [1, 'raisha', 2, 3, 'round']
+                if flat_index.shape[1] == 5:
+                    flat_index.columns = [1, 'raisha', 2, 3, 'round']
+                else:
+                    logging.exception(f'flat index in flat_seq_predictions_multiple_columns does not have 5 columns')
+                    raise Exception(f'flat index in flat_seq_predictions_multiple_columns does not have 5 columns')
                 flat_index = flat_index[['raisha', 'round']]
                 flat_data_df = pd.DataFrame.from_dict(flat_data)
                 flat_data_df = flat_data_df.merge(flat_index, left_index=True, right_index=True)
@@ -225,10 +236,11 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         super(ExecuteEvalCRF, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory)
         self.squared_sigma = float(hyper_parameters_dict['squared_sigma'])
-        self.predict_future = bool(hyper_parameters_dict['predict_future'])
-        self.use_forward_backward_fix_history = bool(hyper_parameters_dict['use_forward_backward_fix_history'])
-        self.use_viterbi_fix_history = bool(hyper_parameters_dict['use_viterbi_fix_history'])
-        self.predict_only_last = bool(hyper_parameters_dict['predict_only_last'])
+        self.predict_future = False if hyper_parameters_dict['predict_future'] == 'False' else True
+        self.use_forward_backward_fix_history =\
+            False if hyper_parameters_dict['use_forward_backward_fix_history'] == 'False' else True
+        self.use_viterbi_fix_history = False if hyper_parameters_dict['use_viterbi_fix_history'] == 'False' else True
+        self.predict_only_last = False if hyper_parameters_dict['predict_only_last'] == 'False' else True
         features_file_name = 'features_' + self.data_file_name.split('all_data_', 1)[1].split('.pkl')[0]+'.xlsx'
         self.model = None
         parser = argparse.ArgumentParser()
@@ -268,34 +280,29 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         self.save_model_prediction(data_to_save=self.prediction, save_model=False)
 
     def eval_model(self):
-        try:
-            if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
-                # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
-                results_dict = self.total_payoff_calculate_measures(
-                        final_total_payoff_prediction_column='total_payoff_prediction',
-                        total_payoff_label_column='total_payoff_label')
-                # measures per round
-                flat_seq_predictions = self.flat_seq_predictions_multiple_columns(label_column_name_per_round='y',
-                                                                                  prediction_column_name_per_round='y_prime')
-                results_dict_per_round = calculate_per_round_measures(flat_seq_predictions,
-                                                                      predictions_column=per_round_predictions_name,
-                                                                      label_column=per_round_labels_name,
-                                                                      label_options=['DM chose stay home',
-                                                                                     'DM chose hotel'])
-                results_dict = update_default_dict(results_dict, results_dict_per_round)
+        if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
+            # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+            results_dict = self.total_payoff_calculate_measures(
+                    final_total_payoff_prediction_column='total_payoff_prediction',
+                    total_payoff_label_column='total_payoff_label')
+            # measures per round
+            flat_seq_predictions = self.flat_seq_predictions_multiple_columns(
+                label_column_name_per_round='y', prediction_column_name_per_round='y_prime')
+            results_dict_per_round = calculate_per_round_measures(
+                flat_seq_predictions, predictions_column=per_round_predictions_name,
+                label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'])
+            results_dict = update_default_dict(results_dict, results_dict_per_round)
 
-                if 'raisha' in flat_seq_predictions:
-                    results_dict_per_round_per_raisha =\
-                        calculate_per_round_per_raisha_measures(flat_seq_predictions,
-                                                                predictions_column=per_round_predictions_name,
-                                                                label_column=per_round_labels_name,
-                                                                label_options=['DM chose stay home', 'DM chose hotel'])
-                    results_dict = update_default_dict(results_dict, results_dict_per_round_per_raisha)
+            if 'raisha' in flat_seq_predictions:
+                results_dict_per_round_per_raisha = calculate_per_round_per_raisha_measures(
+                    flat_seq_predictions, predictions_column=per_round_predictions_name,
+                    label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'])
+                results_dict = update_default_dict(results_dict, results_dict_per_round_per_raisha)
 
-                return results_dict
-        except Exception:
+            return results_dict
+        else:
             logging.exception(f'total_payoff_label or total_payoff_prediction not in CRF prediction DF')
-            return
+            raise Exception(f'total_payoff_label or total_payoff_prediction not in CRF prediction DF')
 
 
 class ExecuteEvalSVM(ExecuteEvalModel):
@@ -412,7 +419,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_epochs' in hyper_parameters_dict.keys():
             self.num_epochs = int(hyper_parameters_dict['num_epochs'])
         else:
-            self.num_epochs = 100
+            self.num_epochs = 4
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
         self.all_seq_predictions = pd.DataFrame()
@@ -441,7 +448,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             elif model_type == 'LSTM_turn_linear':
                 self.predict_seq = True
                 self.predict_avg_total_payoff = False
-                self.linear_hidden_dim = float(hyper_parameters_dict['linear_hidden_dim'])
+                self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return
@@ -509,6 +516,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
     def fit_predict(self):
 
         model_dict = self.trainer.train()
+        element_to_save = {'model_dict': model_dict}
 
         # print(f'{self.model_name}: evaluation measures for fold {self.fold} are:')
         # for key, value in model_dict.items():
@@ -516,20 +524,22 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         if self.predict_seq:
             self.all_seq_predictions = pd.DataFrame.from_dict(self.model.seq_predictions, orient='index')
-            self.all_seq_predictions['final_prediction'] = \
-                self.all_seq_predictions[f'predictions_{model_dict["training_epochs"]+1}']
-            self.all_seq_predictions['final_total_payoff_prediction'] = \
-                self.all_seq_predictions[f'total_payoff_prediction_{model_dict["training_epochs"]+1}']
+            max_predict_column = max([column for column in self.all_seq_predictions.columns if 'predictions' in column])
+            self.all_seq_predictions['final_prediction'] = self.all_seq_predictions[max_predict_column]
+            max_total_payoff_predict_column = max([column for column in self.all_seq_predictions.columns
+                                                   if 'total_payoff_prediction' in column])
+            self.all_seq_predictions['final_total_payoff_prediction'] =\
+                self.all_seq_predictions[max_total_payoff_predict_column]
             self.save_model_prediction(data_to_save=self.all_seq_predictions, sheet_prefix_name='seq',
-                                       save_fold=self.run_log_directory)
+                                       save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.prediction = self.all_seq_predictions
 
         if self.predict_avg_total_payoff:
             self.all_reg_predictions = self.model.reg_predictions
-            self.all_reg_predictions['final_total_payoff_prediction'] = \
-                self.all_reg_predictions[f'prediction_{model_dict["training_epochs"]+1}']
+            max_predict_column = max([column for column in self.all_reg_predictions.columns if 'prediction' in column])
+            self.all_reg_predictions['final_total_payoff_prediction'] = self.all_reg_predictions[max_predict_column]
             self.save_model_prediction(data_to_save=self.all_reg_predictions, sheet_prefix_name='reg',
-                                       save_model=False, save_fold=self.run_log_directory)
+                                       save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.prediction = self.all_reg_predictions
 
     def eval_model(self):
@@ -545,7 +555,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                     final_total_payoff_prediction_column='final_total_payoff_prediction',
                     total_payoff_label_column='total_payoff_label')
             # measures per round
-            if self.predict_seq and not self.predict_avg_total_payoff:
+            if self.predict_seq:  # and not self.predict_avg_total_payoff:
                 self.prediction = self.all_seq_predictions
                 flat_seq_predictions = self.flat_seq_predictions_list_column(
                     label_column_name_per_round='labels',

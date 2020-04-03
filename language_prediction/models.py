@@ -79,6 +79,7 @@ def save_predictions(prediction_df: pd.DataFrame, predictions: torch.Tensor, gol
     :return:
     """
 
+    metadata_df = pd.DataFrame(metadata)
     # Create a data frame with the sample ID, the prediction, the label and if the prediction is correct
     if int_label:
         gold_labels = gold_labels.view(gold_labels.shape[0], -1).argmax(1)
@@ -86,13 +87,13 @@ def save_predictions(prediction_df: pd.DataFrame, predictions: torch.Tensor, gol
     else:
         predictions = predictions.view(predictions.shape[0]).tolist()
     label_prediction = \
-        pd.concat([pd.DataFrame(metadata).sample_id,
-                   pd.DataFrame(gold_labels, columns=['label']),
+        pd.concat([metadata_df.sample_id,
+                   pd.DataFrame(gold_labels, columns=['total_payoff_label']),
                    pd.DataFrame(predictions, columns=[f'prediction_{epoch}'])], axis=1)
-    if 'raisha' in metadata.keys():  # TODO: debug this
-        label_prediction = pd.concat([label_prediction,metadata['raisha']], axis=1)
+    if 'raisha' in metadata_df.columns:
+        label_prediction = label_prediction.merge(metadata_df[['sample_id', 'raisha']], how='left', on='sample_id')
     label_prediction[f'correct_{epoch}'] =\
-        np.where(label_prediction[f'prediction_{epoch}'] == label_prediction.label, 1, 0)
+        np.where(label_prediction[f'prediction_{epoch}'] == label_prediction.total_payoff_label, 1, 0)
     if epoch == 0:  # if this is the first epoch - keep the label
         train = pd.DataFrame(pd.Series([is_train], name='is_train').repeat(label_prediction.shape[0]))
         train.index = label_prediction.index
@@ -100,7 +101,7 @@ def save_predictions(prediction_df: pd.DataFrame, predictions: torch.Tensor, gol
         prediction_df = pd.concat([prediction_df, label_prediction])
 
     else:  # if this is not the first label drop the label
-        label_prediction = label_prediction.drop('label', axis=1)
+        label_prediction = label_prediction.drop(['total_payoff_label', 'raisha'], axis=1)
         prediction_df = prediction_df.merge(label_prediction, how='left', on='sample_id')
         if f'prediction_{epoch}_x' in prediction_df.columns:
             prediction_df[f'prediction_{epoch}_x'] = np.where(prediction_df[f'prediction_{epoch}_x'].isnull(),

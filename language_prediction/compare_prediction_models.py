@@ -16,6 +16,9 @@ condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
 
+# TODO: debug model_types: CRF
+# TODO: add baseline models
+
 
 # @ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int):
@@ -45,16 +48,16 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                         format='%(asctime)s: %(levelname)s %(message)s',
                         datefmt='%H:%M:%S',
                         )
-    all_model_types = models_to_compare.model_type.unique()
-    # all_model_types = ['SVMTotal', 'LSTM_turn']
+    # all_model_types = models_to_compare.model_type.unique()
+    all_model_types = ['CRF']
     all_models_results = pd.DataFrame()
     for model_type in all_model_types:  # compare all versions of each model type
         model_type_versions = models_to_compare.loc[models_to_compare.model_type == model_type]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            # if model_num not in [1, 2, 25, 26]:
-            #     continue
+            if model_num not in [148, 149]:
+                continue
             model_type = row['model_type']
             model_name = row['model_name']
             function_to_run = row['function_to_run']

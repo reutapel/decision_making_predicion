@@ -121,7 +121,7 @@ def calculate_per_round_measures(all_predictions: pd.DataFrame, predictions_colu
 
     # create the results to return
     for measure, measure_name in [[precision, 'precision'], [recall, 'recall'], [fbeta_score, 'Fbeta_score']]:
-        for i, label in enumerate(label_options):
+        for i, label in enumerate(final_labels):
             results_dict[raisha][f'Per_round_{measure_name}_{label}'] = round(measure[i]*100, 2)
     results_dict[raisha][f'Per_round_Accuracy'] = round(accuracy*100, 2)
 
