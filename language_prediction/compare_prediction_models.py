@@ -49,14 +49,14 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                         datefmt='%H:%M:%S',
                         )
     # all_model_types = models_to_compare.model_type.unique()
-    all_model_types = ['CRF']
+    all_model_types = ['LSTM_turn']
     all_models_results = pd.DataFrame()
     for model_type in all_model_types:  # compare all versions of each model type
         model_type_versions = models_to_compare.loc[models_to_compare.model_type == model_type]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            if model_num not in [148, 149]:
+            if model_num not in [33]:  # TODO: debug model num 33
                 continue
             model_type = row['model_type']
             model_name = row['model_name']
@@ -88,9 +88,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             results_df = metadata_df.join(results_df)
             all_models_results = pd.concat([all_models_results, results_df], sort='False')
 
-    utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
-    logging.info('Save fold results')
-    table_writer.save()
+        utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
+        logging.info('Save Results')
+        table_writer.save()
 
     return f'fold {fold} finish compare models'
 

@@ -249,3 +249,77 @@ class LSTMDatasetReader(DatasetReader):
             labels = row[self._label_column]
             metadata_dict = {column: row[column] for column in metadata_columns}
             yield self.text_to_instance(text_list, labels, metadata_dict)
+
+
+class TransformerDatasetReader(DatasetReader):
+    """
+    DatasetReader for LSTM models that predict for each round the DM's decision
+    """
+    def __init__(self,
+                 lazy: bool = False,
+                 label_column: Optional[str] = 'labels',
+                 pair_ids: list = None) -> None:
+        super().__init__(lazy)
+        self._label_column = label_column
+        self.num_features = 0
+        self.num_labels = 2
+        self.pair_ids = pair_ids
+
+    @overrides
+    def text_to_instance(self, saifa_text_list: List[ArrayField], raisha_text_list: List[ArrayField],
+                         labels: List[str] = None, metadata: Dict=None) -> Instance:
+        raisha_text_list = ListField(raisha_text_list)
+        fields = {'source': raisha_text_list}
+
+        saifa_text_list = ListField(saifa_text_list)
+        fields['target'] = saifa_text_list
+
+        if labels:
+            seq_labels_field = SequenceLabelField(labels=labels, sequence_field=saifa_text_list)
+            fields['seq_labels'] = seq_labels_field
+            reg_labels = [0 if label == 'hotel' else 1 for label in labels]
+            reg_label_field = FloatLabelField(sum(reg_labels) / len(reg_labels))
+            fields['reg_labels'] = reg_label_field
+
+        if metadata is not None:
+            fields['metadata'] = MetadataField(metadata)
+
+        return Instance(fields)
+
+    @overrides
+    def _read(self, file_path: str) -> Iterator[Instance]:
+        """
+        This function takes a filename, read the data and produces a stream of Instances
+        :param str file_path: the path to the file with the data
+        :return:
+        """
+        # Load the data
+        if 'csv' in file_path:
+            df = pd.read_csv(file_path)
+        else:
+            df = joblib.load(file_path)
+
+        # if we run with CV we need the pair ids to use
+        if self.pair_ids is not None:
+            df = df.loc[df.pair_id.isin(self.pair_ids)]
+
+        # get the reviews and label columns -> no metadata, and metadata columns
+        metadata_columns = ['raisha', 'pair_id', 'sample_id']
+        rounds = list(range(1, 11))  # rounds 1-10
+
+        for i, row in tqdm.tqdm(df.iterrows()):
+            raisha = row.raisha  # raisha is between 0 to 9 (the rounds in the raisha are rounds <= raisha)
+            saifa_text_list, raisha_text_list = list(), list()
+            for round_num in rounds:
+                # use only available rounds
+                if row[f'features_round_{round_num}'] is not None:
+                    if self.num_features == 0:
+                        self.num_features = len(row[f'features_round_{round_num}'])
+                    if round_num <= raisha:  # rounds in raisha
+                        raisha_text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+                    else:
+                        saifa_text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+            labels = row[self._label_column]
+            metadata_dict = {column: row[column] for column in metadata_columns}
+            yield self.text_to_instance(saifa_text_list=saifa_text_list, raisha_text_list=raisha_text_list,
+                                        labels=labels, metadata=metadata_dict)

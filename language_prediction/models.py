@@ -17,10 +17,15 @@ import pandas as pd
 import numpy as np
 import joblib
 from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
-from allennlp.modules.seq2seq_encoders import Seq2SeqEncoder, PytorchSeq2SeqWrapper
+from allennlp.modules.seq2seq_encoders import Seq2SeqEncoder
 from collections import defaultdict
 from allennlp.modules.attention.dot_product_attention import DotProductAttention
 from allennlp.modules.attention.attention import Attention
+from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder,\
+    TransformerDecoderLayer
+from torch.nn.modules.normalization import LayerNorm
+from torch.nn.init import xavier_uniform_
+from allennlp.nn.util import add_positional_features
 
 
 def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
@@ -905,12 +910,12 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
 
         if seq_labels is not None or reg_labels is not None:
             temp_loss = 0
-            if self.predict_seq:
+            if self.predict_seq and seq_labels is not None:
                 for metric_name, metric in self.metrics_dict_seq.items():
                     metric(decision_logits, seq_labels, mask)
                 output['seq_loss'] = sequence_cross_entropy_with_logits(decision_logits, seq_labels, mask)
                 temp_loss += self.seq_weight_loss * output['seq_loss']
-            if self.predict_avg_total_payoff:
+            if self.predict_avg_total_payoff and reg_labels is not None:
                 for metric_name, metric in self.metrics_dict_reg.items():
                     metric(regression_output, reg_labels, mask)
                 output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
@@ -920,10 +925,9 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
 
         return output
 
-    def get_metrics(self, train=True, reset: bool = False) -> Dict[str, float]:
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         """
         merge the 2 metrics to get all the metrics
-        :param train:
         :param reset:
         :return:
         """
@@ -964,3 +968,233 @@ class LinearLayer(nn.Module):
         if self.activation:
             linear_out = self.activation(linear_out)
         return linear_out
+
+
+@Seq2SeqEncoder.register("TransformerFixTextFeaturesDecisionResultModel")
+class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
+    """Implement encoder-decoder transformer. The architecture
+    is based on the paper "Attention Is All You Need". Ashish Vaswani, Noam Shazeer,
+    Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Lukasz Kaiser, and
+    Illia Polosukhin. 2017. Attention is all you need. """
+    def __init__(self,
+                 vocab: Vocabulary,
+                 metrics_dict_seq: dict,
+                 metrics_dict_reg: dict,
+                 input_dim=512,
+                 num_attention_heads=8,
+                 num_encoder_layers=6,
+                 num_decoder_layers=6,
+                 feedforward_hidden_dim=2048,
+                 dropout=0.1,
+                 activation="relu",
+                 custom_encoder=None,
+                 custom_decoder=None,
+                 positional_encoding: Optional[str] = None,
+                 predict_avg_total_payoff: bool=True,
+                 attention: Attention = DotProductAttention(),
+                 seq_weight_loss: float = 0.5,
+                 reg_weight_loss: float = 0.5,
+                 batch_size: int = 10,
+                 linear_dim: int=None
+                 ):
+        super(TransformerFixTextFeaturesDecisionResultModel, self).__init__()
+        if custom_encoder is not None:
+            self.encoder = custom_encoder
+        else:
+            encoder_layer = TransformerEncoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim, dropout,
+                                                    activation)
+            encoder_norm = LayerNorm(input_dim)
+            self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
+
+        if custom_decoder is not None:
+            self.decoder = custom_decoder
+        else:
+            decoder_layer = TransformerDecoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim, dropout,
+                                                    activation)
+            decoder_norm = LayerNorm(input_dim)
+            self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
+
+        self._reset_parameters()
+
+        self._input_dim = input_dim
+        self.num_attention_heads = num_attention_heads
+
+        if positional_encoding is None:
+            self._sinusoidal_positional_encoding = False
+            self._positional_embedding = None
+        elif positional_encoding == "sinusoidal":
+            self._sinusoidal_positional_encoding = True
+            self._positional_embedding = None
+        else:
+            raise ValueError(
+                "positional_encoding must be one of None, 'sinusoidal', or 'embedding'"
+            )
+
+        if predict_avg_total_payoff:  # need attention and regression layer
+            self.attention = attention
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1)
+            self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
+            self.mse_loss = nn.MSELoss()
+
+        if linear_dim is not None:  # add linear layer before hidden2tag
+            self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim)
+            hidden2tag_input_size = linear_dim
+        else:
+            self.linear_layer = None
+            hidden2tag_input_size = input_dim
+        self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
+
+        self.metrics_dict_seq = metrics_dict_seq
+        self.metrics_dict_reg = metrics_dict_reg
+        self.seq_predictions = defaultdict(dict)
+        self.reg_predictions = pd.DataFrame()
+        self._epoch = 0
+        self._first_pair = None
+        self.seq_weight_loss = seq_weight_loss
+        self.reg_weight_loss = reg_weight_loss
+        self.predict_avg_total_payoff = predict_avg_total_payoff
+
+    def get_input_dim(self) -> int:
+        return self._input_dim
+
+    def get_output_dim(self) -> int:
+        return 1
+
+    def is_bidirectional(self):
+        return False
+
+    def forward(self, source: torch.Tensor, target: torch.Tensor, metadata: dict, seq_labels: torch.Tensor = None,
+                reg_labels: torch.Tensor = None, source_mask: Optional[torch.Tensor]=None,
+                target_mask: Optional[torch.Tensor]=None, memory_mask: Optional[torch.Tensor]=None,
+                src_key_padding_mask: Optional[torch.Tensor]=None, tgt_key_padding_mask: Optional[torch.Tensor]=None,
+                memory_key_padding_mask: Optional[torch.Tensor]=None) -> Dict[str, torch.Tensor]:
+        r"""Take in and process masked source/target sequences.
+        Args:
+            source: the sequence to the encoder (required).
+            target: the sequence to the decoder (required).
+            metadata: the metadata of the samples (required).
+            seq_labels: the labels of each round (optional).
+            reg_labels: the labels of the total future payoff (optional).
+            source_mask: the additive mask for the src sequence (optional).
+            target_mask: the additive mask for the tgt sequence (optional).
+            memory_mask: the additive mask for the encoder output (optional).
+            src_key_padding_mask: the ByteTensor mask for src keys per batch (optional).
+            tgt_key_padding_mask: the ByteTensor mask for tgt keys per batch (optional).
+            memory_key_padding_mask: the ByteTensor mask for memory keys per batch (optional).
+        Shape:
+            - source: :math:`(S, N, E)`.
+            - target: :math:`(T, N, E)`.
+            - source_mask: :math:`(S, S)`.
+            - target_mask: :math:`(T, T)`.
+            - memory_mask: :math:`(T, S)`.
+            - src_key_padding_mask: :math:`(N, S)`.
+            - tgt_key_padding_mask: :math:`(N, T)`.
+            - memory_key_padding_mask: :math:`(N, S)`.
+            Note: [src/tgt/memory]_mask should be filled with
+            float('-inf') for the masked positions and float(0.0) else. These masks
+            ensure that predictions for position i depend only on the unmasked positions
+            j and are applied identically for each sequence in a batch.
+            [src/tgt/memory]_key_padding_mask should be a ByteTensor where True values are positions
+            that should be masked with float('-inf') and False values will be unchanged.
+            This mask ensures that no information will be taken from position i if
+            it is masked, and has a separate mask for each sequence in a batch.
+            - output: :math:`(T, N, E)`.
+            Note: Due to the multi-head attention architecture in the transformer model,
+            the output sequence length of a transformer is same as the input sequence
+            (i.e. target) length of the decode.
+            where S is the source sequence length, T is the target sequence length, N is the
+            batch size, E is the feature number
+        """
+        output = dict()
+        if self._sinusoidal_positional_encoding:
+            source = add_positional_features(source)
+            target = add_positional_features(target)
+
+        # The torch transformer expects the shape (sequence, batch, features), not the more
+        # familiar (batch, sequence, features), so we have to fix it.
+        source = source.permute(1, 0, 2)
+        target = target.permute(1, 0, 2)
+
+        if source.size(1) != target.size(1):
+            raise RuntimeError("the batch number of src and tgt must be equal")
+
+        if source.size(2) != self.d_model or target.size(2) != self.d_model:
+            raise RuntimeError("the feature number of src and tgt must be equal to d_model")
+
+        src_key_padding_mask = get_text_field_mask({'tokens': source})
+        tgt_key_padding_mask = get_text_field_mask({'tokens': target})
+        # The torch transformer takes the mask backwards.
+        src_key_padding_mask_byte = ~src_key_padding_mask.byte()
+        tgt_key_padding_mask_byte = ~tgt_key_padding_mask.byte()
+
+        encoder_out = self.encoder(source, src_key_padding_mask=src_key_padding_mask_byte)
+        decoder_output = self.decoder(target, encoder_out, tgt_key_padding_mask=tgt_key_padding_mask_byte,
+                                      memory_key_padding_mask=src_key_padding_mask_byte)
+
+        if self.linear_layer is not None:
+            decoder_output = self.linear_layer(decoder_output)  # add linear layer before hidden2tag
+        decision_logits = self.hidden2tag(decoder_output)
+        output['decision_logits'] = decision_logits
+        self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions,
+                                                           mask=tgt_key_padding_mask,
+                                                           predictions=decoder_output['decision_logits'],
+                                                           gold_labels=seq_labels, metadata=metadata,
+                                                           epoch=self._epoch, is_train=self.training,)
+
+        if self.predict_avg_total_payoff:
+            attention_output = self.attention(self.attention_vector, encoder_out, tgt_key_padding_mask)
+            regression_output = self.regressor(attention_output)
+            output['regression_output'] = regression_output
+            self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
+                                                    predictions=output['regression_output'], gold_labels=reg_labels,
+                                                    metadata=metadata, epoch=self._epoch, is_train=self.training,
+                                                    int_label=False)
+
+        if seq_labels is not None or reg_labels is not None:
+            temp_loss = 0
+            if self.predict_seq and seq_labels is not None:
+                for metric_name, metric in self.metrics_dict_seq.items():
+                    metric(decision_logits, seq_labels, tgt_key_padding_mask)
+                output['seq_loss'] = sequence_cross_entropy_with_logits(decision_logits, seq_labels,
+                                                                        tgt_key_padding_mask)
+                temp_loss += self.seq_weight_loss * output['seq_loss']
+            if self.predict_avg_total_payoff and reg_labels is not None:
+                for metric_name, metric in self.metrics_dict_reg.items():
+                    metric(regression_output, reg_labels, tgt_key_padding_mask)
+                output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
+                temp_loss += self.reg_weight_loss * output['reg_loss']
+
+            decoder_output['loss'] = temp_loss
+
+        return decoder_output
+
+    def _reset_parameters(self):
+        r"""Initiate parameters in the transformer model."""
+        for p in self.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        """
+        merge the 2 metrics to get all the metrics
+        :param reset:
+        :return:
+        """
+        return_metrics = dict()
+        if self.predict_seq:
+            seq_metrics = dict()
+            for metric_name, metric in self.metrics_dict_seq.items():
+                if metric_name == 'F1measure_hotel_label':
+                    seq_metrics['precision_hotel_label'], seq_metrics['recall_hotel_label'],\
+                        seq_metrics['fscore_hotel_label'] = metric.get_metric(reset)
+                elif metric_name == 'F1measure_home_label':
+                    seq_metrics['precision_home_label'], seq_metrics['recall_home_label'],\
+                        seq_metrics['fscore_home_label'] = metric.get_metric(reset)
+                else:
+                    seq_metrics[metric_name] = metric.get_metric(reset)
+            return_metrics.update(seq_metrics)
+        if self.predict_avg_total_payoff:
+            reg_metrics =\
+                {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics_dict_reg.items()}
+            return_metrics.update(reg_metrics)
+        return return_metrics

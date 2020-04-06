@@ -15,7 +15,10 @@ def write_to_excel(table_writer: pd.ExcelWriter, sheet_name: str, headers: list,
     :return:
     """
     workbook = table_writer.book
-    worksheet = workbook.add_worksheet(sheet_name)
+    if sheet_name not in table_writer.sheets:
+        worksheet = workbook.add_worksheet(sheet_name)
+    else:
+        worksheet = workbook.get_worksheet_by_name(sheet_name)
     table_writer.sheets[sheet_name] = worksheet
 
     data.to_excel(table_writer, sheet_name=sheet_name, startrow=len(headers), startcol=0)

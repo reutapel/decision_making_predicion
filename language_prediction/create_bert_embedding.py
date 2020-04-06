@@ -180,7 +180,7 @@ class BertTransformer:
             if split_id in input_ids:
 
                 input_ids_list = split_text_by_max_size(text=input_ids, max_size=max_size, split_token=split_id,
-                                                             is_list=True)
+                                                        is_list=True)
             else:
                 # splitting just by max size since there is no split_id in
                 # TODO: validate list of lists
