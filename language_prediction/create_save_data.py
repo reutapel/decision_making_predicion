@@ -205,7 +205,7 @@ class CreateSaveData:
                  predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None,
                  string_labels: bool=False, saifa_average_text: bool=False, no_saifa_text: bool=False,
                  saifa_only_prev_rounds_text: bool=False, use_prev_round_label: bool=False,
-                 non_nn_turn_model: bool=False):
+                 non_nn_turn_model: bool=False, transformer_model: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -233,6 +233,7 @@ class CreateSaveData:
         :param no_saifa_text: if we don't want to use the text of the saifa rounds
         :param saifa_only_prev_rounds_text: if we want to use only the previous rounds in the saifa
         :param non_nn_turn_model: non neural networks models that predict a label for each round
+        :param transformer_model: create data for transformer model --> create features for raisha rounds too
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -321,6 +322,7 @@ class CreateSaveData:
         self.saifa_only_prev_rounds_text = saifa_only_prev_rounds_text
         self.use_prev_round_label = use_prev_round_label
         self.non_nn_turn_model = non_nn_turn_model
+        self.transformer_model = transformer_model
         # if we use the history average -> don't predict the first round because there is no history
         # if self.use_all_history_text_average or self.use_all_history_average:
         #     self.predict_first_round = False
@@ -336,6 +338,7 @@ class CreateSaveData:
                                'crf_raisha_' if use_crf_raisha else '',
                                'string_labels_' if string_labels else '',
                                'non_nn_turn_model_' if self.non_nn_turn_model else '',
+                               'transformer_model_' if self.transformer_model else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
                                'prev_round_label_' if self.use_prev_round_label else '',
@@ -894,37 +897,65 @@ class CreateSaveData:
         decisions_payoffs_columns = ['exp_payoff', 'lottery_result_high', 'lottery_result_low',
                                      'lottery_result_med1', 'chose_lose', 'chose_earn', 'not_chose_lose',
                                      'not_chose_earn']
+        if self.non_nn_turn_model:
+            decisions_payoffs_columns.remove('exp_payoff')
         columns_to_flat = decisions_payoffs_columns + text_columns
         all_columns = sorted([f'{column}_{j}' for column, j in
                               list(itertools.product(*[columns_to_flat, list(range(0, 10))]))],
                              key=lambda x: int(x[-1]))
-
         # labels columns:
         label_column = ['round_label']
         label_columns = sorted([f'{column}_{j}' for column, j in
                                 list(itertools.product(*[label_column, list(range(0, 10))]))], key=lambda x: int(x[-1]))
 
-        file_name = f'features_{self.base_file_name}'
-        pd.DataFrame(all_columns).to_excel(os.path.join(save_data_directory, f'{file_name}.xlsx'), index=True)
-
         # merge the round number features with the review features
         data_for_pairs = self.data.merge(self.reviews_features, on='review_id', how='left')
-        columns_to_flat.extend(['pair_id'])
+
+        prev_round_text_columns = list()
+        prev_round_columns = list()
+        if not self.use_all_history and not self.use_all_history_average and \
+                not self.use_all_history_text and not self.use_all_history_text_average:  # no history at all
+            all_columns = [f'curr_round_{column}' for column in text_columns]
+        if self.use_prev_round_text:
+            prev_round_text_columns.extend([f'prev_round_{column}' for column in text_columns])
+        if self.use_prev_round:
+            prev_round_columns.extend([f'prev_round_{column}' for column in decisions_payoffs_columns])
+        prev_round_data = data_for_pairs[decisions_payoffs_columns + ['pair_id']].copy(deep=True)
+
+        file_name = f'features_{self.base_file_name}'
+        pd.DataFrame(prev_round_columns + prev_round_text_columns + all_columns).to_excel(
+            os.path.join(save_data_directory, f'{file_name}.xlsx'), index=True)
 
         data_for_pairs['round_label'] = np.where(data_for_pairs.exp_payoff == 1, 1, -1)
-        data_for_pairs = data_for_pairs[columns_to_flat + label_column]
+        data_for_pairs = data_for_pairs[columns_to_flat + label_column + ['pair_id']]
         for pair in self.pairs:
             print(f'{time.asctime(time.localtime(time.time()))}: Start create data for pair {pair}')
             data_pair_label = data_for_pairs.loc[data_for_pairs.pair_id == pair].copy(deep=True)
+            prev_round_data_pair = prev_round_data.loc[prev_round_data.pair_id == pair].copy(deep=True)
+            prev_round_data_pair = prev_round_data_pair.drop('pair_id', axis=1)
 
-            # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
-            data_pair_label = data_pair_label.drop('pair_id', axis=1)
-            data_pair_label = data_pair_label.reset_index(drop=True)
-            data_pair_label = data_pair_label.unstack().to_frame().sort_index(level=1).T
-            data_pair_label.columns = [f'{str(col)}_{i}' for col, i in zip(data_pair_label.columns.get_level_values(0),
-                                                                           data_pair_label.columns.get_level_values(1))]
-            data_pair = data_pair_label[all_columns].copy(deep=True)
-            label_pair = data_pair_label[label_columns].copy(deep=True)
+            if not self.use_all_history and not self.use_all_history_average and \
+                    not self.use_all_history_text and not self.use_all_history_text_average:  # no history at all
+                # create the labels
+                label_pair = data_pair_label[['round_label']].copy(deep=True)
+                label_pair = label_pair.reset_index(drop=True)
+                label_pair = label_pair.unstack().to_frame().sort_index(level=1).T
+                label_pair.columns = [f'{str(col)}_{i}' for col, i in zip(label_pair.columns.get_level_values(0),
+                                                                          label_pair.columns.get_level_values(1))]
+                # create the data
+                data_pair_label.columns = [f'curr_round_{column}' for column in data_pair_label.columns]
+                data_pair = data_pair_label[all_columns].copy(deep=True)
+
+            else:
+                # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
+                data_pair_label = data_pair_label.drop('pair_id', axis=1)
+                data_pair_label = data_pair_label.reset_index(drop=True)
+                data_pair_label = data_pair_label.unstack().to_frame().sort_index(level=1).T
+                data_pair_label.columns =\
+                    [f'{str(col)}_{i}' for col, i in zip(data_pair_label.columns.get_level_values(0),
+                                                         data_pair_label.columns.get_level_values(1))]
+                data_pair = data_pair_label[all_columns].copy(deep=True)
+                label_pair = data_pair_label[label_columns].copy(deep=True)
 
             # create data per raisha with all data of the raisha and all the text of the history in the saifa
             raisha_data_dict = defaultdict(dict)
@@ -952,40 +983,70 @@ class CreateSaveData:
                            key=lambda x: int(x[-1]))
                 for round_num in range(0, 10):
                     # the raisha data --> no need to put because we don't predict these rounds
-                    if round_num < raisha:
+                    if round_num < raisha and not self.transformer_model:
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = None
-                    # the saifa data --> put all the raisha data + the history in the saifa text + the curr
-                    # round text
+                    elif round_num < raisha and self.transformer_model:
+                        raisha_columns = [f'{column}_{round_num}' for column in columns_to_flat]
+                        round_raisha_data = copy.deepcopy(data_pair)
+                        round_raisha_data = round_raisha_data[raisha_columns]
+                        round_raisha_data = round_raisha_data.values.tolist()[0]
+                        raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
+
                     else:
-                        if self.saifa_only_prev_rounds_text:
-                            # all the future of the saifa text (round=5 --> so we don't use the text of rounds 6-10)
-                            round_columns_minus_1 = \
-                                sorted([f'{column}_{j}' for column, j in
-                                        list(itertools.product(*[text_columns, list(range(round_num+1, 10))]))],
-                                       key=lambda x: int(x[-1]))
-                        # if we want to use only one previous round text in the saifa
-                        elif self.use_prev_round_text:
-                            round_columns_minus_1 = \
-                                sorted([f'{column}_{j}' for column, j in
-                                        list(itertools.product(*[
-                                            text_columns,
-                                            # range(raisha, round_num-1) --> the rounds in the saifa that are not
-                                            # the current round and the one previous round
-                                            # range(round_num, 10) --> the future rounds in the saifa
-                                            list(range(raisha, round_num-1)) + list(range(round_num+1, 10))]))],
-                                       key=lambda x: int(x[-1]))
-                        elif self.no_saifa_text:  # use only the raisha rounds and the current round text data
-                            round_columns_minus_1 = \
-                                sorted([f'{column}_{j}' for column, j in
-                                        list(itertools.product(*[
-                                            text_columns,
-                                            # range(raisha, round_num-1) --> the rounds in the saifa that are not
-                                            # the current round
-                                            # range(round_num+1, 10) --> the future rounds in the saifa
-                                            list(range(raisha, round_num)) + list(range(round_num+1, 10))]))],
-                                       key=lambda x: int(x[-1]))
-                        else:  # use all the saifa rounds text
-                            round_columns_minus_1 = list()
+                        if not self.use_all_history and not self.use_all_history_average and \
+                                not self.use_all_history_text and not self.use_all_history_text_average:  # no -1 need
+                            # round_raisha_data = copy.deepcopy(data_pair)
+                            round_raisha_data = round_raisha_data.values.tolist()[round_num]
+
+                            if self.use_prev_round_text:
+                                if round_num == 0:  # just get list of -1
+                                    prev_round_text = [-1] * data_pair.shape[1]
+                                else:
+                                    prev_round_text = copy.deepcopy(data_pair)
+                                    prev_round_text = prev_round_text.values.tolist()[round_num-1]
+                                round_raisha_data = prev_round_text + round_raisha_data
+                            if self.use_prev_round:
+                                if round_num == 0:
+                                    prev_round_num = [-1] * prev_round_data_pair.shape[1]
+                                else:
+                                    prev_round_num = copy.deepcopy(prev_round_data_pair)
+                                    prev_round_num = prev_round_num.values.tolist()[round_num - 1]
+                                round_raisha_data = prev_round_num + round_raisha_data
+
+                            raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
+                            continue
+                        # the saifa data --> put all the raisha data + the history in the saifa text + the curr
+                        # round text
+                        else:
+                            if self.saifa_only_prev_rounds_text:
+                                # all the future of the saifa text (round=5 --> so we don't use the text of rounds 6-10)
+                                round_columns_minus_1 = \
+                                    sorted([f'{column}_{j}' for column, j in
+                                            list(itertools.product(*[text_columns, list(range(round_num+1, 10))]))],
+                                           key=lambda x: int(x[-1]))
+                            # if we want to use only one previous round text in the saifa
+                            elif self.use_prev_round_text:
+                                round_columns_minus_1 = \
+                                    sorted([f'{column}_{j}' for column, j in
+                                            list(itertools.product(*[
+                                                text_columns,
+                                                # range(raisha, round_num-1) --> the rounds in the saifa that are not
+                                                # the current round and the one previous round
+                                                # range(round_num, 10) --> the future rounds in the saifa
+                                                list(range(raisha, round_num-1)) + list(range(round_num+1, 10))]))],
+                                           key=lambda x: int(x[-1]))
+                            elif self.no_saifa_text:  # use only the raisha rounds and the current round text data
+                                round_columns_minus_1 = \
+                                    sorted([f'{column}_{j}' for column, j in
+                                            list(itertools.product(*[
+                                                text_columns,
+                                                # range(raisha, round_num) --> the rounds in the saifa that are not
+                                                # the current round
+                                                # range(round_num+1, 10) --> the future rounds in the saifa
+                                                list(range(raisha, round_num)) + list(range(round_num+1, 10))]))],
+                                           key=lambda x: int(x[-1]))
+                            else:  # use all the saifa rounds text
+                                round_columns_minus_1 = list()
                         round_columns_minus_1.extend(raisha_columns_minus_1)
                         # put -1 in these columns
                         round_raisha_data = copy.deepcopy(data_pair)
@@ -1004,9 +1065,9 @@ class CreateSaveData:
             save_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
             joblib.dump(save_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
 
-        print(f'{time.asctime(time.localtime(time.time()))}:'
+        print(f'{time.asctime(time.localtime(time.time()))}: '
               f'Finish creating sequences with different lengths and concat with manual features for the text')
-        logging.info(f'{time.asctime(time.localtime(time.time()))}:'
+        logging.info(f'{time.asctime(time.localtime(time.time()))}: '
                      f'Finish creating sequences with different lengths and concat features for the text')
 
         return
@@ -1350,24 +1411,25 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'bert_embedding'
+    features_to_use = 'manual_binary_features'
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
-                   'use_prev_round_text': True,
+                   'use_prev_round_text': False,
                    'use_prev_round_label': True,
                    'use_manual_features': True,
-                   'use_all_history_average': True,
-                   'use_all_history': False,
-                   'use_all_history_text_average': True,
-                   'use_all_history_text': False,
+                   'use_all_history_average': False,
+                   'use_all_history': True,
+                   'use_all_history_text_average': False,
+                   'use_all_history_text': True,
                    'saifa_average_text': False,
-                   'no_saifa_text': False,
+                   'no_saifa_text': True,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
                    'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
+                   'transformer_model': True,   # for transformer models-we need to create features also for the raisha
                    'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,
@@ -1385,13 +1447,14 @@ def main():
                     'use_score': True,
                     'predict_first_round': True,
                     'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
+                    'transformer_model': True,  # for transformer models-we need to create features also for the raisha
                     'label': 'future_total_payoff'
                     }
     }
     use_seq = False
     use_crf = False
     use_crf_raisha = True
-    string_labels = False  # labels are string --> for LSTM model
+    string_labels = True  # labels are string --> for LSTM model
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
@@ -1423,7 +1486,8 @@ def main():
                                           saifa_only_prev_rounds_text=conditions_dict[condition][
                                               'saifa_only_prev_rounds_text'],
                                           use_prev_round_label=conditions_dict[condition]['use_prev_round_label'],
-                                          non_nn_turn_model=conditions_dict[condition]['non_nn_turn_model'])
+                                          non_nn_turn_model=conditions_dict[condition]['non_nn_turn_model'],
+                                          transformer_model=conditions_dict[condition]['transformer_model'])
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:

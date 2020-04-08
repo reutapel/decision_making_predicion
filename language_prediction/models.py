@@ -970,7 +970,6 @@ class LinearLayer(nn.Module):
         return linear_out
 
 
-@Seq2SeqEncoder.register("TransformerFixTextFeaturesDecisionResultModel")
 class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
     """Implement encoder-decoder transformer. The architecture
     is based on the paper "Attention Is All You Need". Ashish Vaswani, Noam Shazeer,

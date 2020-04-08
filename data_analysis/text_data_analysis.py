@@ -17,7 +17,7 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'both'
+condition_directory = 'numeric'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -50,6 +50,32 @@ alpha = 1
 score_eval_data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
                                 'data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
                                 sheet_name='data_to_plot')
+
+
+def linear_score(row: pd.Series, condition_column: str='subsession_round_number'):
+    """Create LinPay =-9Pay1 -7Pay2 -5Pay3 -3Pay4 -1Pay5 +1Pay6 + 3Pay7 +5Pay8 +7Pay9 +9Pay10"""
+    if row[condition_column] == 1:
+        return -9
+    elif row[condition_column] == 2:
+        return -7
+    elif row[condition_column] == 3:
+        return -5
+    elif row[condition_column] == 4:
+        return -3
+    elif row[condition_column] == 5:
+        return -1
+    elif row[condition_column] == 6:
+        return 9
+    elif row[condition_column] == 7:
+        return 7
+    elif row[condition_column] == 8:
+        return 5
+    elif row[condition_column] == 9:
+        return 3
+    elif row[condition_column] == 10:
+        return 1
+    else:
+        raise Exception(f'{condition_column} not in 1-10')
 
 
 def compare_positive_negative_first(data: pd.DataFrame):
@@ -1856,6 +1882,29 @@ class DataAnalysis:
 
         return
 
+    def calculate_linear_score(self):
+        """
+        This function caclculate for each pair the DM EV linear score and the sum (expert+DM EV) linear score
+        :return:
+        """
+        data_to_use = self.results_payments.loc[
+            (self.results_payments.player_id_in_group == 1) & (self.results_payments.status == 'play')][
+            ['dm_expected_payoff', 'subsession_round_number', 'pair_id', 'group_sender_payoff']]
+        data_to_use['sum_payoff'] = data_to_use.dm_expected_payoff + data_to_use.group_sender_payoff
+        data_to_use['coefficient'] = data_to_use.apply(linear_score, axis=1)
+        data_to_use['linear_score_dm_ev'] = data_to_use.dm_expected_payoff * data_to_use.coefficient
+        data_to_use['linear_sum'] = data_to_use.sum_payoff * data_to_use.coefficient
+        data_to_use['linear_expert_payoff'] = data_to_use.group_sender_payoff * data_to_use.coefficient
+
+        linear_score_dm_ev = data_to_use.groupby(by='pair_id').linear_score_dm_ev.sum()
+        linear_sum = data_to_use.groupby(by='pair_id').linear_sum.sum()
+        linear_expert_payoff = data_to_use.groupby(by='pair_id').linear_expert_payoff.sum()
+
+        to_save = pd.concat([linear_score_dm_ev, linear_expert_payoff, linear_sum], axis=1)
+        to_save.to_csv(os.path.join(data_analysis_directory, 'linear_scores.csv'))
+
+        return
+
 
 def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj = DataAnalysis(main_gender, main_condition)
@@ -1863,6 +1912,7 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_current_round_measures()
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
+    data_analysis_obj.calculate_linear_score()
     data_analysis_obj.eval_real_score_analysis()
     data_analysis_obj.average_most_close_hotel_id()
     data_analysis_obj.dm_entered_per_review_features()

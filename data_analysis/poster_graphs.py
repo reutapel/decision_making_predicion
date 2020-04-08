@@ -7,6 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 import math
 from data_analysis import autolabel
 import os
+import scipy.stats
 
 
 """Onlu Num text experiment initial results analysis"""
@@ -290,15 +291,15 @@ markers = [".", "x", "+", "1"]
 fig1, ax1 = plt.subplots()
 ax1.axis([4, 10, 4, 10])
 x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
-num = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
-verbal = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
-num_only = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
-both = [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]
+num_cl = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
+verbal_cl = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
+num_only_cl = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
+both_cl = [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]
 
-ax1.plot(x, verbal, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
-ax1.plot(x, num, color=colors[1], label='Numerical', marker=markers[0], linestyle='-')
-ax1.plot(x, num_only, color=colors[2], label='Only Numeric', marker=markers[0], linestyle='-')
-ax1.plot(x, both, color=colors[3], label='Numeric + Verbal', marker=markers[0], linestyle='-')
+ax1.plot(x, verbal_cl, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
+ax1.plot(x, num_cl, color=colors[1], label='Numerical', marker=markers[0], linestyle='-')
+ax1.plot(x, num_only_cl, color=colors[2], label='Only Numeric', marker=markers[0], linestyle='-')
+ax1.plot(x, both_cl, color=colors[3], label='Numeric + Verbal', marker=markers[0], linestyle='-')
 
 ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
 
@@ -321,17 +322,17 @@ plt.show()
 fig1.savefig('The Communication Type Effect on the Experts Cheating Level.png', bbox_inches='tight')
 
 """Decision maker average payoff"""
-verbal = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
-numerical = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
-num_only = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
-both = [0.01, 0.36, 0.14, 0.36, 0.46, 0.46, 0.31, -0.21, 0.24, 0.55]
+verbal_dmap = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
+numerical_dmap = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
+num_only_dmap = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
+both_dmap = [0.01, 0.36, 0.14, 0.36, 0.46, 0.46, 0.31, -0.21, 0.24, 0.55]
 
 index = list(range(1, 11))
-decision_data = pd.DataFrame({f'Verbal: average payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
-                              f'Numerical: average payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
-                              f'Only Numeric: average payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only,
-                              f'Numeric + Verbal: {round(sum(both)/ len(both), 2)}': both},
-                             index=index)
+decision_data = pd.DataFrame(
+    {f'Verbal: average payoff: {round(sum(verbal_dmap)/ len(verbal_dmap), 2)}': verbal_dmap,
+     f'Numerical: average payoff: {round(sum(numerical_dmap)/ len(numerical_dmap), 2)}': numerical_dmap,
+     f'Only Numeric: average payoff: {round(sum(num_only_dmap)/ len(num_only_dmap), 2)}': num_only_dmap,
+     f'Numeric + Verbal: {round(sum(both_dmap)/ len(both_dmap), 2)}': both_dmap}, index=index)
 plt.figure(figsize=(10, 5))
 ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
                          color=['forestgreen', 'darkblue', 'crimson', 'pink'])
@@ -346,17 +347,18 @@ fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Decision maker average payoff.png', bbox_inches='tight')
 
 """Decision maker average expected payoff"""
-verbal = [0.31, 0.11, 0.38, 0.47, 0.2, 0.3, 0.32, 0.28, 0.21, 0.12]
-numerical = [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04]
-num_only = [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2]
-both = [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]
+verbal_dmaep = [0.31, 0.11, 0.38, 0.47, 0.2, 0.3, 0.32, 0.28, 0.21, 0.12]
+numerical_dmaep = [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04]
+num_only_dmaep = [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2]
+both_dmaep = [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]
 
 index = list(range(1, 11))
 decision_data = pd.DataFrame({
-    f'Verbal: average expected payoff: {round(sum(verbal)/ len(verbal), 2)}': verbal,
-    f'Numerical: average expected payoff: {round(sum(numerical)/ len(numerical), 2)}': numerical,
-    f'Only Numeric: average expected payoff: {round(sum(num_only)/ len(num_only), 2)}': num_only,
-    f'Numeric + Verbal: average expected payoff: {round(sum(both)/ len(both), 2)}': both}, index=index)
+    f'Verbal: average expected payoff: {round(sum(verbal_dmaep)/ len(verbal_dmaep), 2)}': verbal_dmaep,
+    f'Numerical: average expected payoff: {round(sum(numerical_dmaep)/ len(numerical_dmaep), 2)}': numerical_dmaep,
+    f'Only Numeric: average expected payoff: {round(sum(num_only_dmaep)/ len(num_only_dmaep), 2)}': num_only_dmaep,
+    f'Numeric + Verbal: average expected payoff: {round(sum(both_dmaep)/ len(both_dmaep), 2)}': both_dmaep},
+    index=index)
 plt.figure(figsize=(10, 5))
 ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
                          color=['forestgreen', 'darkblue', 'crimson', 'pink'])
@@ -371,15 +373,16 @@ fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Decision maker average expected payoff.png', bbox_inches='tight')
 
 """Expert average payoff"""
-verbal = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
-numerical = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
-num_only = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
-both = [79, 73, 64, 69, 65, 78, 86, 72, 79, 73]
+verbal_eap = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
+numerical_eap = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
+num_only_eap = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
+both_eap = [79, 73, 64, 69, 65, 78, 86, 72, 79, 73]
 index = list(range(1, 11))
-decision_data = pd.DataFrame({f'Verbal: average percentage: {sum(verbal)/ len(verbal)}': verbal,
-                              f'Numerical: average percentage: {sum(numerical)/ len(numerical)}': numerical,
-                              f'Only Numeric: average percentage: {sum(num_only)/ len(num_only)}': num_only,
-                              f'Numeric + Verbal: average percentage: {sum(both)/ len(both)}': both}, index=index)
+decision_data = pd.DataFrame({f'Verbal: average percentage: {sum(verbal_eap)/ len(verbal_eap)}': verbal_eap,
+                              f'Numerical: average percentage: {sum(numerical_eap)/ len(numerical_eap)}': numerical_eap,
+                              f'Only Numeric: average percentage: {sum(num_only_eap)/ len(num_only_eap)}': num_only_eap,
+                              f'Numeric + Verbal: average percentage: {sum(both_eap)/ len(both_eap)}': both_eap},
+                             index=index)
 plt.figure(figsize=(10, 5))
 ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
                          color=['forestgreen', 'darkblue', 'crimson', 'pink'])
@@ -393,6 +396,78 @@ ax2.set_yticks([0, 20, 40, 60, 80, 100])
 plt.show()
 fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Expert average payoff.png', bbox_inches='tight')
+
+
+"""Linear Regression num-num_only"""
+fig4, ax4 = plt.subplots()
+fig5, ax5 = plt.subplots()
+
+Coefficients_dmaep = list()
+rsqrt_dmeap = list()
+Coefficients_sum = list()
+rsqrt_sum = list()
+for name, dmaep, eap, color in [['Numerical', numerical_dmaep, numerical_eap, 'darkblue'],
+                                ['Numeric + Verbal', both_dmaep, both_eap, 'pink']]:
+    cond_sum = [i + j for i, j in zip(dmaep, eap)]
+    linear_dmaep = LinearRegression()
+    index_np = np.array(index)
+    index_np = index_np.reshape(-1, 1)
+    linear_dmaep.fit(index_np, dmaep)
+    # Make predictions using the testing set
+    pred = linear_dmaep.predict(index_np)
+    # The coefficients
+    Coefficients_dmaep.append(round(linear_dmaep.coef_[0], 2))
+    # The mean squared error
+    rsqrt_dmeap.append(round(math.sqrt(mean_squared_error(dmaep, pred)), 2))
+    # The coefficient of determination: 1 is perfect prediction
+    # r2_score = r2_score(dmaep, pred)
+
+    linear_sum = LinearRegression()
+    linear_sum.fit(index_np, cond_sum)
+    # Make predictions using the testing set
+    pred_sum = linear_sum.predict(index_np)
+    # The coefficients
+    Coefficients_sum.append(round(linear_sum.coef_[0], 2))
+    # The mean squared error
+    rsqrt_sum.append(round(math.sqrt(mean_squared_error(cond_sum, pred_sum)), 2))
+
+    # Plot outputs
+    ax4.scatter(index, dmaep, color=color)
+    ax4.plot(index, pred, color=color, linewidth=3, label=name)
+
+    ax5.scatter(index, cond_sum, color=color)
+    ax5.plot(index, pred_sum, color=color, linewidth=3, label=name)
+
+sum_text_list = list()
+dmaep_text_list = list()
+
+for i, name in enumerate(['Numerical', 'Numeric + Verbal']):
+    dmaep_text_list.append(f'{name}: Coefficients: {Coefficients_dmaep[i]}, RMSE: {rsqrt_dmeap[i]}')
+    sum_text_list.append(f'{name}: Coefficients: {Coefficients_sum[i]}, RMSE: {rsqrt_sum[i]}')
+
+sum_my_text = '\n'.join(sum_text_list)
+dmaep_my_text = '\n'.join(dmaep_text_list)
+
+ax4.text(0.01, 0.95, dmaep_my_text, verticalalignment='top', horizontalalignment='left', transform=ax.transAxes,
+         color='black', fontsize=10)
+ax5.text(0.95, 0.01, sum_my_text, verticalalignment='bottom', horizontalalignment='right', transform=ax.transAxes,
+         color='black', fontsize=10)
+ax4.legend()
+ax5.legend()
+ax4.set_xticks(index)
+ax5.set_xticks(index)
+
+ax4.set_yticks(list(np.arange(0, 0.8, 0.1)))
+ax5.set_yticks(list(range(50, 101, 10)))
+
+ax4.set_title('DM EV Linear Trend')
+ax5.set_title('Sum of profit (Expert+DM EV) EV Linear Trend')
+
+plt.show()
+fig_to_save = ax4.get_figure()
+fig_to_save.savefig('DM EV Linear Trend.png', bbox_inches='tight')
+fig_to_save = ax5.get_figure()
+fig_to_save.savefig('Sum of profit (Expert+DM EV) EV Linear Trend.png', bbox_inches='tight')
 
 
 """Performance graph"""
@@ -421,3 +496,28 @@ ax3.set_yticks([0, 20, 40, 60, 80, 100])
 plt.show()
 fig_to_save = ax3.get_figure()
 fig_to_save.savefig('predictions performances.png', bbox_inches='tight')
+
+
+"""Check significant"""
+numeric_data = pd.read_csv('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
+                           'analysis/text_exp_2_tests/numeric/linear_scores.csv')
+both_data = pd.read_csv('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
+                        'analysis/text_exp_2_tests/both/linear_scores.csv')
+
+linear_score_dm_ev_statistic = scipy.stats.f_oneway(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
+print('linear_score_dm_ev')
+print(np.var(numeric_data.linear_score_dm_ev), np.var(both_data.linear_score_dm_ev))
+linear_score_dm_ev_kruskal = scipy.stats.kruskal(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
+print(f'ANOVA test: {linear_score_dm_ev_statistic},\nKruskal test: {linear_score_dm_ev_kruskal}')
+
+linear_expert_payoff_statistic = scipy.stats.f_oneway(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
+print('linear_expert_payoff')
+print(np.var(numeric_data.linear_expert_payoff), np.var(both_data.linear_expert_payoff))
+linear_expert_payoff_kruskal = scipy.stats.kruskal(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
+print(f'ANOVA test: {linear_expert_payoff_statistic},\nKruskal test: {linear_expert_payoff_kruskal}')
+
+linear_sum_statistic = scipy.stats.f_oneway(numeric_data.linear_sum, both_data.linear_sum)
+print('linear_sum')
+print(np.var(numeric_data.linear_sum), np.var(both_data.linear_sum))
+linear_sum_kruskal = scipy.stats.kruskal(numeric_data.linear_sum, both_data.linear_sum)
+print(f'ANOVA test: {linear_sum_statistic},\nKruskal test: {linear_sum_kruskal}')
