@@ -1095,6 +1095,13 @@ class CreateSaveData:
             print('CRF raisha function works only with single_round label!')
             return
 
+        decisions_payoffs_columns = ['exp_payoff', 'lottery_result_high', 'lottery_result_low',
+                                     'lottery_result_med1', 'chose_lose', 'chose_earn', 'not_chose_lose',
+                                     'not_chose_earn', 'pair_id', 'subsession_round_number']
+        decisions_payoffs_data = self.data[decisions_payoffs_columns].copy(deep=True)
+        decisions_payoffs_columns.remove('pair_id')
+        decisions_payoffs_columns.remove('subsession_round_number')
+
         # columns for raisha data
         all_columns = [column for column in self.data.columns if 'history' in column]
         all_columns.extend(['pair_id', 'exp_payoff', 'review_id'])
@@ -1158,8 +1165,18 @@ class CreateSaveData:
                 raisha_saifa_data_list = raisha_saifa_data.values.tolist()[0]
                 for round_num in range(0, 10):
                     # the raisha data --> no need to put because we don't predict these rounds
-                    if round_num < raisha:
+                    if round_num < raisha and not self.transformer_model:
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = None
+                    elif round_num < raisha and self.transformer_model:
+                        # raisha features will be the columns_to_flat of the current round
+                        round_data = data_pair.loc[data_pair.subsession_round_number == round_num+1]
+                        raisha_columns = [column for column in round_data.columns if 'curr_round_feature' in column]
+                        round_raisha_data = copy.deepcopy(round_data)
+                        round_raisha_data = round_raisha_data.merge(
+                            decisions_payoffs_data, on=['subsession_round_number', 'pair_id', 'exp_payoff'])
+                        round_raisha_data = round_raisha_data[raisha_columns + decisions_payoffs_columns]
+                        round_raisha_data = round_raisha_data.values.tolist()[0]
+                        raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
                     else:
                         round_data = data_pair.loc[data_pair.subsession_round_number == round_num+1]
                         round_columns = [column for column in round_data.columns if 'curr_round_feature' in column]
@@ -1198,6 +1215,9 @@ class CreateSaveData:
         print(f'{time.asctime(time.localtime(time.time()))}:Finish create_manual_features_crf_raisha_data_avg_features')
         logging.info(f'{time.asctime(time.localtime(time.time()))}:'
                      f'Finish create_manual_features_crf_raisha_data_avg_features')
+
+        print(f'max features num is: '
+              f'{max([max(pair_raisha_data[f"features_round_{i}"].str.len()) for i in range(1, 11)])}')
 
         return
 
@@ -1426,9 +1446,9 @@ def main():
                    'use_prev_round_text': False,
                    'use_prev_round_label': True,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
+                   'use_all_history_average': True,
                    'use_all_history': False,
-                   'use_all_history_text_average': False,
+                   'use_all_history_text_average': True,
                    'use_all_history_text': False,
                    'saifa_average_text': False,
                    'no_saifa_text': True,
