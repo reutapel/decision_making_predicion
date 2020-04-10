@@ -970,7 +970,7 @@ class LinearLayer(nn.Module):
         return linear_out
 
 
-class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
+class TransformerFixTextFeaturesDecisionResultModel(Model):
     """Implement encoder-decoder transformer. The architecture
     is based on the paper "Attention Is All You Need". Ashish Vaswani, Noam Shazeer,
     Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Lukasz Kaiser, and
@@ -990,26 +990,27 @@ class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
                  custom_decoder=None,
                  positional_encoding: Optional[str] = None,
                  predict_avg_total_payoff: bool=True,
+                 predict_seq: bool = True,
                  attention: Attention = DotProductAttention(),
                  seq_weight_loss: float = 0.5,
                  reg_weight_loss: float = 0.5,
-                 batch_size: int = 10,
+                 batch_size: int = 9,
                  linear_dim: int=None
                  ):
-        super(TransformerFixTextFeaturesDecisionResultModel, self).__init__()
+        super(TransformerFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         if custom_encoder is not None:
             self.encoder = custom_encoder
         else:
-            encoder_layer = TransformerEncoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim, dropout,
-                                                    activation)
+            encoder_layer = TransformerEncoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim,
+                                                    dropout, activation)
             encoder_norm = LayerNorm(input_dim)
             self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
 
         if custom_decoder is not None:
             self.decoder = custom_decoder
         else:
-            decoder_layer = TransformerDecoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim, dropout,
-                                                    activation)
+            decoder_layer = TransformerDecoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim,
+                                                    dropout, activation)
             decoder_norm = LayerNorm(input_dim)
             self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
 
@@ -1052,15 +1053,13 @@ class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
         self.seq_weight_loss = seq_weight_loss
         self.reg_weight_loss = reg_weight_loss
         self.predict_avg_total_payoff = predict_avg_total_payoff
+        self.predict_seq = predict_seq
 
     def get_input_dim(self) -> int:
         return self._input_dim
 
     def get_output_dim(self) -> int:
         return 1
-
-    def is_bidirectional(self):
-        return False
 
     def forward(self, source: torch.Tensor, target: torch.Tensor, metadata: dict, seq_labels: torch.Tensor = None,
                 reg_labels: torch.Tensor = None, source_mask: Optional[torch.Tensor]=None,
@@ -1117,31 +1116,33 @@ class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
         if source.size(1) != target.size(1):
             raise RuntimeError("the batch number of src and tgt must be equal")
 
-        if source.size(2) != self.d_model or target.size(2) != self.d_model:
+        if source.size(2) != self._input_dim or target.size(2) != self._input_dim:
             raise RuntimeError("the feature number of src and tgt must be equal to d_model")
 
         src_key_padding_mask = get_text_field_mask({'tokens': source})
         tgt_key_padding_mask = get_text_field_mask({'tokens': target})
         # The torch transformer takes the mask backwards.
-        src_key_padding_mask_byte = ~src_key_padding_mask.byte()
-        tgt_key_padding_mask_byte = ~tgt_key_padding_mask.byte()
+        src_key_padding_mask_byte = ~src_key_padding_mask.bool()
+        tgt_key_padding_mask_byte = ~tgt_key_padding_mask.bool()
 
         encoder_out = self.encoder(source, src_key_padding_mask=src_key_padding_mask_byte)
         decoder_output = self.decoder(target, encoder_out, tgt_key_padding_mask=tgt_key_padding_mask_byte,
                                       memory_key_padding_mask=src_key_padding_mask_byte)
+        decoder_output = decoder_output.permute(1, 0, 2)
 
-        if self.linear_layer is not None:
-            decoder_output = self.linear_layer(decoder_output)  # add linear layer before hidden2tag
-        decision_logits = self.hidden2tag(decoder_output)
-        output['decision_logits'] = decision_logits
-        self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions,
-                                                           mask=tgt_key_padding_mask,
-                                                           predictions=decoder_output['decision_logits'],
-                                                           gold_labels=seq_labels, metadata=metadata,
-                                                           epoch=self._epoch, is_train=self.training,)
+        if self.predict_seq:
+            if self.linear_layer is not None:
+                decoder_output = self.linear_layer(decoder_output)  # add linear layer before hidden2tag
+            decision_logits = self.hidden2tag(decoder_output)
+            output['decision_logits'] = decision_logits
+            self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions,
+                                                               mask=tgt_key_padding_mask,
+                                                               predictions=output['decision_logits'],
+                                                               gold_labels=seq_labels, metadata=metadata,
+                                                               epoch=self._epoch, is_train=self.training,)
 
         if self.predict_avg_total_payoff:
-            attention_output = self.attention(self.attention_vector, encoder_out, tgt_key_padding_mask)
+            attention_output = self.attention(self.attention_vector, decoder_output, tgt_key_padding_mask)
             regression_output = self.regressor(attention_output)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
@@ -1163,9 +1164,9 @@ class TransformerFixTextFeaturesDecisionResultModel(Seq2VecEncoder):
                 output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
                 temp_loss += self.reg_weight_loss * output['reg_loss']
 
-            decoder_output['loss'] = temp_loss
+            output['loss'] = temp_loss
 
-        return decoder_output
+        return output
 
     def _reset_parameters(self):
         r"""Initiate parameters in the transformer model."""

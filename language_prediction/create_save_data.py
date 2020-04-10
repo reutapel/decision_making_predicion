@@ -913,9 +913,9 @@ class CreateSaveData:
 
         prev_round_text_columns = list()
         prev_round_columns = list()
-        if not self.use_all_history and not self.use_all_history_average and \
-                not self.use_all_history_text and not self.use_all_history_text_average:  # no history at all
-            all_columns = [f'curr_round_{column}' for column in text_columns]
+        # if not self.use_all_history and not self.use_all_history_average and \
+        #         not self.use_all_history_text and not self.use_all_history_text_average:  # no history at all
+        no_history_all_columns = [f'curr_round_{column}' for column in text_columns]
         if self.use_prev_round_text:
             prev_round_text_columns.extend([f'prev_round_{column}' for column in text_columns])
         if self.use_prev_round:
@@ -934,28 +934,32 @@ class CreateSaveData:
             prev_round_data_pair = prev_round_data.loc[prev_round_data.pair_id == pair].copy(deep=True)
             prev_round_data_pair = prev_round_data_pair.drop('pair_id', axis=1)
 
+            # create the data for no history:
+            data_pair_label_no_history = data_pair_label.copy(deep=True)
+            data_pair_label_no_history.columns = [f'curr_round_{column}' for column in
+                                                  data_pair_label_no_history.columns]
+            data_pair_no_history = data_pair_label_no_history[no_history_all_columns].copy(deep=True)
+
+            # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
+            data_pair_label = data_pair_label.drop('pair_id', axis=1)
+            data_pair_label = data_pair_label.reset_index(drop=True)
+            data_pair_label = data_pair_label.unstack().to_frame().sort_index(level=1).T
+            data_pair_label.columns = \
+                [f'{str(col)}_{i}' for col, i in zip(data_pair_label.columns.get_level_values(0),
+                                                     data_pair_label.columns.get_level_values(1))]
+            label_pair = data_pair_label[label_columns].copy(deep=True)
+            # create data for use history
+            data_pair = data_pair_label[all_columns].copy(deep=True)
+
             if not self.use_all_history and not self.use_all_history_average and \
                     not self.use_all_history_text and not self.use_all_history_text_average:  # no history at all
                 # create the labels
-                label_pair = data_pair_label[['round_label']].copy(deep=True)
+                label_pair = data_pair_label_no_history[['curr_round_round_label']].copy(deep=True)
+                label_pair.columns = ['round_label']
                 label_pair = label_pair.reset_index(drop=True)
                 label_pair = label_pair.unstack().to_frame().sort_index(level=1).T
                 label_pair.columns = [f'{str(col)}_{i}' for col, i in zip(label_pair.columns.get_level_values(0),
                                                                           label_pair.columns.get_level_values(1))]
-                # create the data
-                data_pair_label.columns = [f'curr_round_{column}' for column in data_pair_label.columns]
-                data_pair = data_pair_label[all_columns].copy(deep=True)
-
-            else:
-                # create a vector for each pair with the text of all the rounds and the decision of rounds 1-9
-                data_pair_label = data_pair_label.drop('pair_id', axis=1)
-                data_pair_label = data_pair_label.reset_index(drop=True)
-                data_pair_label = data_pair_label.unstack().to_frame().sort_index(level=1).T
-                data_pair_label.columns =\
-                    [f'{str(col)}_{i}' for col, i in zip(data_pair_label.columns.get_level_values(0),
-                                                         data_pair_label.columns.get_level_values(1))]
-                data_pair = data_pair_label[all_columns].copy(deep=True)
-                label_pair = data_pair_label[label_columns].copy(deep=True)
 
             # create data per raisha with all data of the raisha and all the text of the history in the saifa
             raisha_data_dict = defaultdict(dict)
@@ -986,6 +990,7 @@ class CreateSaveData:
                     if round_num < raisha and not self.transformer_model:
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = None
                     elif round_num < raisha and self.transformer_model:
+                        # raisha features will be the columns_to_flat of the current round
                         raisha_columns = [f'{column}_{round_num}' for column in columns_to_flat]
                         round_raisha_data = copy.deepcopy(data_pair)
                         round_raisha_data = round_raisha_data[raisha_columns]
@@ -995,7 +1000,7 @@ class CreateSaveData:
                     else:
                         if not self.use_all_history and not self.use_all_history_average and \
                                 not self.use_all_history_text and not self.use_all_history_text_average:  # no -1 need
-                            # round_raisha_data = copy.deepcopy(data_pair)
+                            round_raisha_data = copy.deepcopy(data_pair_no_history)
                             round_raisha_data = round_raisha_data.values.tolist()[round_num]
 
                             if self.use_prev_round_text:
@@ -1069,6 +1074,9 @@ class CreateSaveData:
               f'Finish creating sequences with different lengths and concat with manual features for the text')
         logging.info(f'{time.asctime(time.localtime(time.time()))}: '
                      f'Finish creating sequences with different lengths and concat features for the text')
+
+        print(f'max features num is: '
+              f'{max([max(pair_raisha_data[f"features_round_{i}"].str.len()) for i in range(1, 11)])}')
 
         return
 
@@ -1419,16 +1427,16 @@ def main():
                    'use_prev_round_label': True,
                    'use_manual_features': True,
                    'use_all_history_average': False,
-                   'use_all_history': True,
+                   'use_all_history': False,
                    'use_all_history_text_average': False,
-                   'use_all_history_text': True,
+                   'use_all_history_text': False,
                    'saifa_average_text': False,
                    'no_saifa_text': True,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
-                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
+                   'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
                    'transformer_model': True,   # for transformer models-we need to create features also for the raisha
                    'label': 'single_round',
                    },

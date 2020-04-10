@@ -256,14 +256,19 @@ class TransformerDatasetReader(DatasetReader):
     DatasetReader for LSTM models that predict for each round the DM's decision
     """
     def __init__(self,
+                 features_max_size: int,
+                 num_attention_heads: int=8,
                  lazy: bool = False,
                  label_column: Optional[str] = 'labels',
                  pair_ids: list = None) -> None:
         super().__init__(lazy)
         self._label_column = label_column
-        self.num_features = 0
         self.num_labels = 2
         self.pair_ids = pair_ids
+        self.input_dim = None
+        check = features_max_size // num_attention_heads
+        if check * num_attention_heads != features_max_size:
+            self.input_dim = (check + 1) * num_attention_heads
 
     @overrides
     def text_to_instance(self, saifa_text_list: List[ArrayField], raisha_text_list: List[ArrayField],
@@ -309,16 +314,20 @@ class TransformerDatasetReader(DatasetReader):
 
         for i, row in tqdm.tqdm(df.iterrows()):
             raisha = row.raisha  # raisha is between 0 to 9 (the rounds in the raisha are rounds <= raisha)
+            if raisha == 0:
+                continue
             saifa_text_list, raisha_text_list = list(), list()
             for round_num in rounds:
                 # use only available rounds
                 if row[f'features_round_{round_num}'] is not None:
-                    if self.num_features == 0:
-                        self.num_features = len(row[f'features_round_{round_num}'])
                     if round_num <= raisha:  # rounds in raisha
-                        raisha_text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+                        extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
+                        raisha_data = row[f'features_round_{round_num}'] + extra_columns
+                        raisha_text_list.append(ArrayField(np.array(raisha_data), padding_value=-1))
                     else:
-                        saifa_text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+                        extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
+                        saifa_data = row[f'features_round_{round_num}'] + extra_columns
+                        saifa_text_list.append(ArrayField(np.array(saifa_data), padding_value=-1))
             labels = row[self._label_column]
             metadata_dict = {column: row[column] for column in metadata_columns}
             yield self.text_to_instance(saifa_text_list=saifa_text_list, raisha_text_list=raisha_text_list,

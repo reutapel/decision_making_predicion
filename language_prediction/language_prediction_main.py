@@ -150,10 +150,15 @@ def main():
         #                                      '_features_average_with_global_alpha_0.9_all_history_text_average_with_'
         #                                      'alpha_0.8_manual_features_predict_first_round_verbal_data.pkl',
         #                                      backward_search=False, label='future_total_payoff'),
-        'LSTMDatasetReader': train_valid_lstm_text_decision_fix_text_features_model(
-            model_name='LSTMDatasetReader',
-            all_data_file_name='all_data_single_round_label_crf_raisha_string_labels_all_history_features_all_history_'
-                               'text_manual_binary_features_predict_first_round_verbal_data.pkl')
+        # 'LSTM': train_valid_lstm_text_decision_fix_text_features_model(
+        #     model_name='LSTM',
+        #     all_data_file_name='all_data_single_round_label_crf_raisha_string_labels_all_history_features_all_history_'
+        #                        'text_manual_binary_features_predict_first_round_verbal_data.pkl'),
+        'Transformer': train_valid_transformer_text_decision_fix_text_features_model(
+            model_name='Transformer', features_max_size=43,
+            all_data_file_name='all_data_single_round_label_crf_raisha_string_labels_transformer_model_prev_round_label'
+                               '_no_saifa_text_manual_binary_features_predict_first_round_verbal_data.pkl')
+
         # 'BasicModelSentimentAnalysis':
         #     train_valid_base_text_decision_fix_text_features_model(
         #         model_name='BasicModelSentimentAnalysis',

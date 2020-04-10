@@ -7,7 +7,7 @@ from allennlp.modules.token_embedders import ElmoTokenEmbedder
 from allennlp.modules.elmo import Elmo
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
-from language_prediction.dataset_readers import TextExpDataSetReader, LSTMDatasetReader
+from language_prediction.dataset_readers import TextExpDataSetReader, LSTMDatasetReader, TransformerDatasetReader
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 from allennlp.modules.seq2vec_encoders import PytorchSeq2VecWrapper, Seq2VecEncoder
 from allennlp.modules.matrix_attention import BilinearMatrixAttention, DotProductMatrixAttention
@@ -643,6 +643,154 @@ def train_valid_lstm_text_decision_fix_text_features_model(model_name: str, all_
         model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
             encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
             predict_seq=predict_seq, predict_avg_total_payoff=predict_avg_total_payoff)
+        print(model)
+        if torch.cuda.is_available():
+            cuda_device = 0
+            model = model.cuda(cuda_device)
+        else:
+            cuda_device = -1
+        optimizer = optim.SGD(model.parameters(), lr=0.1)
+
+        validation_metric = '+Accuracy' if predict_seq else '-loss'
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            iterator=iterator,
+            train_dataset=train_instances,
+            validation_dataset=validation_instances,
+            num_epochs=num_epochs,
+            shuffle=False,
+            serialization_dir=run_log_directory_fold,
+            patience=10,
+            histogram_interval=10,
+            cuda_device=cuda_device,
+            validation_metric=validation_metric,
+        )
+
+        model_dict = trainer.train()
+
+        print(f'{model_name}: evaluation measures for fold {fold} are:')
+        for key, value in model_dict.items():
+            print(f'{key}: {value}')
+
+        if predict_seq:
+            fold_seq_predictions = pd.DataFrame.from_dict(model.seq_predictions, orient='index')
+            fold_seq_predictions = fold_seq_predictions.assign(fold=fold)
+            fold_seq_predictions['final_prediction'] =\
+                fold_seq_predictions[f'predictions_{model_dict["training_epochs"]+1}']
+            fold_seq_predictions['final_total_payoff_prediction'] =\
+                fold_seq_predictions[f'total_payoff_prediction_{model_dict["training_epochs"]+1}']
+            all_seq_predictions = pd.concat([all_seq_predictions, fold_seq_predictions], sort=True)
+
+            calc_print_measures(fold_seq_predictions)
+            all_validation_accuracy.append(model_dict['validation_Accuracy'])
+            all_train_accuracy.append(model_dict['training_Accuracy'])
+
+        if predict_avg_total_payoff:
+            fold_reg_predictions = model.reg_predictions
+            fold_reg_predictions = fold_reg_predictions.assign(fold=fold)
+            fold_reg_predictions['final_total_payoff_prediction'] =\
+                fold_reg_predictions[f'prediction_{model_dict["training_epochs"]+1}']
+            all_reg_predictions = pd.concat([all_reg_predictions, fold_reg_predictions], sort=True)
+
+    # save the model predictions
+    all_seq_predictions.to_csv(os.path.join(run_log_directory, 'seq_predictions.csv'))
+    all_reg_predictions.to_csv(os.path.join(run_log_directory, 'reg_predictions.csv'))
+
+    print(f'All folds measures:')
+    calc_print_measures(all_seq_predictions)
+    print(f'Train accuracy per round: {sum(all_train_accuracy)/len(all_train_accuracy)}, '
+          f'Validation accuracy per round: {sum(all_validation_accuracy)/len(all_validation_accuracy)}')
+
+    results = calculate_measures_for_continues_labels(
+        all_seq_predictions, 'final_total_payoff_prediction', 'total_payoff_label',
+        label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3', 'total future payoff > 2/3'])
+    results.to_csv(os.path.join(run_log_directory, 'results.csv'))
+
+
+def train_valid_transformer_text_decision_fix_text_features_model(model_name: str, all_data_file_name: str,
+                                                                  features_max_size: int,
+                                                                  func_batch_size: int = 9, predict_seq: bool=True,
+                                                                  predict_avg_total_payoff: bool=True):
+    """
+    This function train and validate model that use fix texts features only. It use LSTM model to predict the label of
+    each round in the saifa given a saifa.
+    The labels of this model is 0 for hotel and 1 for stay at home
+    :param model_name: the full model name
+    :param all_data_file_name: the name of the data file to use
+    :param features_max_size: the max number of features per round
+    :param func_batch_size: the batch size to use
+    :param predict_seq: if we want to predict the seq
+    :param predict_avg_total_payoff: if we want to predict the final average total payoff of the saifa
+    :return:
+    """
+
+    all_data_file_inner_path = os.path.join(data_directory, all_data_file_name)
+    # split data to 5 folds
+    num_folds = 5
+    num_epochs = 100
+
+    all_validation_accuracy = list()
+    all_train_accuracy = list()
+    HIDDEN_DIM = 100
+
+    run_log_directory = utils.set_folder(
+        datetime.now().strftime(f'{model_name}_{num_epochs}_epochs_{num_folds}_folds_{HIDDEN_DIM}_hidden_dim_'
+                                f'%d_%m_%Y_%H_%M_%S'), 'logs')
+    print(f'run_log_directory is: {run_log_directory}')
+    all_seq_predictions = pd.DataFrame()
+    all_reg_predictions = pd.DataFrame()
+
+    if 'csv' in all_data_file_inner_path:
+        data_df = pd.read_csv(all_data_file_inner_path)
+    elif 'xlsx' in all_data_file_inner_path:
+        data_df = pd.read_excel(all_data_file_inner_path)
+    elif 'pkl' in all_data_file_inner_path:
+        data_df = joblib.load(all_data_file_inner_path)
+    else:
+        print('Data format is not csv or csv or pkl')
+        return
+    folds = get_folds_per_participant(data=data_df, k_folds=num_folds, col_to_group='pair_id',
+                                      col_to_group_in_df=True)
+    if num_folds == 2:  # train-test --> the fold to test is 1.
+        num_folds = [1]
+    for fold in range(num_folds):
+        run_log_directory_fold = utils.set_folder(f'fold_{fold}', run_log_directory)
+        train_pair_ids = folds.loc[folds.fold_number != fold].pair_id.tolist()
+        test_pair_ids = folds.loc[folds.fold_number == fold].pair_id.tolist()
+        # load train data
+        train_reader = TransformerDatasetReader(pair_ids=train_pair_ids, features_max_size=features_max_size)
+        test_reader = TransformerDatasetReader(pair_ids=test_pair_ids, features_max_size=features_max_size)
+
+        train_instances = train_reader.read(all_data_file_inner_path)
+        validation_instances = test_reader.read(all_data_file_inner_path)
+        vocab = Vocabulary.from_instances(train_instances + validation_instances)
+
+        # hotel_label_0 = True if vocab._index_to_token['labels'][0] == 'hotel' else False
+
+        metrics_dict_seq = {
+            'Accuracy': CategoricalAccuracy(),  # BooleanAccuracy(),
+            # 'auc': Auc(),
+            'F1measure_hotel_label': F1Measure(positive_label=vocab._token_to_index['labels']['hotel']),
+            'F1measure_home_label': F1Measure(positive_label=vocab._token_to_index['labels']['stay_home']),
+        }
+
+        metrics_dict_reg = {
+            'mean_absolute_error': MeanAbsoluteError(),
+        }
+
+        # TODO: change this if necessary
+        # batch_size should be: 10 or 9 depends on the input
+        # and not shuffle so all the data of the same pair will be in the same batch
+        iterator = BasicIterator(batch_size=func_batch_size)  # , instances_per_epoch=10)
+        iterator.index_with(vocab)
+        model = models.TransformerFixTextFeaturesDecisionResultModel(
+            vocab=vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
+            predict_avg_total_payoff=predict_avg_total_payoff, linear_dim=None, batch_size=func_batch_size,
+            input_dim=train_reader.input_dim, feedforward_hidden_dim=int(0.5*train_reader.input_dim),
+        )
+
         print(model)
         if torch.cuda.is_available():
             cuda_device = 0
