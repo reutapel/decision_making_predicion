@@ -16,7 +16,6 @@ condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
 
-# TODO: debug model_types: CRF
 # TODO: add baseline models
 
 

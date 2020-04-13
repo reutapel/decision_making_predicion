@@ -3,11 +3,21 @@ import numpy as np
 import pandas as pd
 from language_prediction.utils import *
 import logging
+from sklearn.dummy import DummyClassifier, DummyRegressor
 
 
 class SVMTotal:
-    def __init__(self, features):
-        self.model = SVR(gamma='scale')
+    def __init__(self, features, model_name):
+        if 'svm' in model_name:
+            self.model = SVR(gamma='scale')
+        elif 'stratified' in model_name:
+            self.model = DummyClassifier(strategy='stratified')
+        elif 'most_frequent' in model_name:
+            self.model = DummyClassifier(strategy='most_frequent')
+        else:
+            logging.error('Model name not in: svm, stratified, most_frequent')
+            print('Model name not in: svm, stratified, most_frequent')
+            raise Exception('Model name not in: svm, stratified, most_frequent')
         self.features = features
 
     def fit(self, train_x: pd.DataFrame, train_y: pd.Series):
@@ -30,14 +40,22 @@ class SVMTotal:
 
 
 class SVMTurn:
-    def __init__(self, features):
-        self.model = SVC(gamma='scale')
+    def __init__(self, features, model_name):
+        if 'svm' in model_name:
+            self.model = SVC(gamma='scale')
+        elif 'average' in model_name:
+            self.model = DummyRegressor(strategy='mean')
+        elif 'median' in model_name:
+            DummyRegressor(strategy='median')
+        else:
+            logging.error('Model name not in: svm, stratified, most_frequent')
+            print('Model name not in: svm, stratified, most_frequent')
+            raise Exception('Model name not in: svm, stratified, most_frequent')
         self.features = features
 
     def fit(self, train_x: pd.DataFrame, train_y: pd.Series):
         if 'features' in train_x.columns:
             train_x = pd.DataFrame(train_x['features'].values.tolist(), columns=self.features)
-
             self.model = self.model.fit(train_x, train_y)
         else:
             logging.exception('No features column when running SVMTurn model --> can not run it')

@@ -10,7 +10,7 @@ import language_prediction.SVM_models as SVM_models
 from language_prediction.utils import *
 from allennlp.data.iterators import BasicIterator
 from allennlp.training.trainer import Trainer
-from language_prediction.dataset_readers import TextExpDataSetReader, LSTMDatasetReader
+from language_prediction.dataset_readers import TextExpDataSetReader, LSTMDatasetReader, TransformerDatasetReader
 import torch.optim as optim
 import language_prediction.models as models
 from allennlp.training.metrics import *
@@ -338,7 +338,7 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         features = features[0].tolist()
 
         # create model
-        self.model = getattr(SVM_models, self.model_type)(features)
+        self.model = getattr(SVM_models, self.model_type)(features, self.model_name)
 
     def fit_predict(self):
         self.model.fit(self.train_x, self.train_y)
@@ -415,16 +415,44 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict):
         super(ExecuteEvalLSTM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                               fold_split_dict, table_writer, data_directory)
-        self.lstm_hidden_dim = int(hyper_parameters_dict['lstm_hidden_dim'])
+        if 'lstm_hidden_dim' in hyper_parameters_dict.keys():
+            self.lstm_hidden_dim = int(hyper_parameters_dict['lstm_hidden_dim'])
+        else:
+            if 'LSTM' in model_type:
+                logging.exception(f'LSTM model type must have lstm_hidden_dim in its hyper_parameters_dict')
+                print(f'LSTM model type must have lstm_hidden_dim in its hyper_parameters_dict')
+                raise Exception(f'LSTM model type must have lstm_hidden_dim in its hyper_parameters_dict')
+            else:
+                self.lstm_hidden_dim = 0
         if 'num_epochs' in hyper_parameters_dict.keys():
             self.num_epochs = int(hyper_parameters_dict['num_epochs'])
         else:
             self.num_epochs = 4
+        if 'batch_size' in hyper_parameters_dict.keys():
+            self.batch_size = int(hyper_parameters_dict['batch_size'])
+        else:
+            self.batch_size = 10
+        if 'features_max_size' in hyper_parameters_dict.keys():
+            self.features_max_size = int(hyper_parameters_dict['features_max_size'])
+        else:
+            self.features_max_size = 0
+        if 'num_encoder_layers' in hyper_parameters_dict.keys():
+            self.num_encoder_layers = int(hyper_parameters_dict['num_encoder_layers'])
+        else:
+            self.num_encoder_layers = 0
+        if 'num_decoder_layers' in hyper_parameters_dict.keys():
+            self.num_decoder_layers = int(hyper_parameters_dict['num_decoder_layers'])
+        else:
+            self.num_decoder_layers = 0
+        if 'positional_encoding' in hyper_parameters_dict.keys():
+            self.positional_encoding = hyper_parameters_dict['positional_encoding']
+        else:
+            self.positional_encoding = None
+
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
         self.all_seq_predictions = pd.DataFrame()
         self.all_reg_predictions = pd.DataFrame()
-        self.batch_size = 10
         self.trainer = None
         self.linear_hidden_dim = None
         self.avg_loss = 1.0  # if we don't use 2 losses - the weight of each of them should be 1
@@ -434,13 +462,13 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_{self.fold}_folds_'
             f'{self.lstm_hidden_dim}_hidden_dim_%d_%m_%Y_%H_%M_%S'), self.fold_dir)
         try:
-            if model_type == 'LSTM_turn':
+            if 'turn' in model_type and 'avg' not in model_type:
                 self.predict_seq = True
                 self.predict_avg_total_payoff = False
-            elif model_type == 'LSTM_avg':
+            elif'avg' in model_type and 'turn' not in model_type:
                 self.predict_seq = False
                 self.predict_avg_total_payoff = True
-            elif model_type == 'LSTM_avg_turn':
+            elif 'turn' in model_type and 'avg' in model_type:
                 self.predict_seq = True
                 self.predict_avg_total_payoff = True
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
@@ -456,8 +484,18 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
     def load_data_create_model(self):
         all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
         # load train data
-        train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids)
-        test_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
+        if 'LSTM' in self.model_type:
+            train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids)
+            test_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
+        elif 'Transformer' in self.model_type:
+            train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids,
+                                                    features_max_size=self.features_max_size)
+            test_reader = TransformerDatasetReader(pair_ids=self.val_pair_ids,
+                                                   features_max_size=self.features_max_size)
+        else:
+            logging.exception(f'Model type should include LSTM or Transformer to use this class')
+            print(f'Model type should include LSTM or Transformer to use this class')
+            raise Exception(f'Model type should include LSTM or Transformer to use this class')
 
         train_instances = train_reader.read(all_data_file_path)
         validation_instances = test_reader.read(all_data_file_path)
@@ -481,13 +519,28 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         # and not shuffle so all the data of the same pair will be in the same batch
         iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
         iterator.index_with(vocab)
-        lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim, batch_first=True,
-                                                   num_layers=1, dropout=0.0))
-        self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
-            encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
-            predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
-            linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
-            reg_weight_loss=self.avg_loss)
+        if 'LSTM' in self.model_type:
+            lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
+                                                       batch_first=True, num_layers=1, dropout=0.0))
+            self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
+                encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
+                predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
+                linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
+                reg_weight_loss=self.avg_loss)
+        elif 'Transformer' in self.model_type:
+            self.model = models.TransformerFixTextFeaturesDecisionResultModel(
+                vocab=vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
+                predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=None, batch_size=self.batch_size,
+                input_dim=train_reader.input_dim, feedforward_hidden_dim=int(0.5 * train_reader.input_dim),
+                num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
+                seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss,
+                positional_encoding=self.positional_encoding,
+            )
+        else:
+            logging.exception(f'Model type should include LSTM or Transformer to use this class')
+            print(f'Model type should include LSTM or Transformer to use this class')
+            raise Exception(f'Model type should include LSTM or Transformer to use this class')
+
         print(self.model)
         if torch.cuda.is_available():
             cuda_device = 0
