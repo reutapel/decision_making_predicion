@@ -515,6 +515,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         }
 
         # TODO: change this if necessary
+        check = 1
         # batch_size should be: 10 or 9 depends on the input
         # and not shuffle so all the data of the same pair will be in the same batch
         iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
