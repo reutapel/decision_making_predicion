@@ -439,15 +439,15 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_encoder_layers' in hyper_parameters_dict.keys():
             self.num_encoder_layers = int(hyper_parameters_dict['num_encoder_layers'])
         else:
-            self.num_encoder_layers = 0
+            self.num_encoder_layers = 6
         if 'num_decoder_layers' in hyper_parameters_dict.keys():
             self.num_decoder_layers = int(hyper_parameters_dict['num_decoder_layers'])
         else:
-            self.num_decoder_layers = 0
+            self.num_decoder_layers = 6
         if 'positional_encoding' in hyper_parameters_dict.keys():
             self.positional_encoding = hyper_parameters_dict['positional_encoding']
         else:
-            self.positional_encoding = None
+            self.positional_encoding = 'sinusoidal'
 
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
@@ -473,10 +473,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.predict_avg_total_payoff = True
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
                 self.turn_loss = float(hyper_parameters_dict['turn_loss'])
-            elif model_type == 'LSTM_turn_linear':
+            elif 'turn_linear' in model_type:
                 self.predict_seq = True
                 self.predict_avg_total_payoff = False
-                self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
+                if 'linear_hidden_dim' in hyper_parameters_dict.keys():
+                    self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return
@@ -515,7 +516,6 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         }
 
         # TODO: change this if necessary
-        check = 1
         # batch_size should be: 10 or 9 depends on the input
         # and not shuffle so all the data of the same pair will be in the same batch
         iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
@@ -529,13 +529,15 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
                 reg_weight_loss=self.avg_loss)
         elif 'Transformer' in self.model_type:
+            if 'turn_linear' in self.model_type:
+                self.linear_hidden_dim = int(0.5 * train_reader.input_dim)
             self.model = models.TransformerFixTextFeaturesDecisionResultModel(
                 vocab=vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
-                predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=None, batch_size=self.batch_size,
-                input_dim=train_reader.input_dim, feedforward_hidden_dim=int(0.5 * train_reader.input_dim),
-                num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
-                seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss,
-                positional_encoding=self.positional_encoding,
+                predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=self.linear_hidden_dim,
+                batch_size=self.batch_size, input_dim=train_reader.input_dim,
+                feedforward_hidden_dim=int(4 * train_reader.input_dim), num_decoder_layers=self.num_decoder_layers,
+                num_encoder_layers=self.num_encoder_layers, seq_weight_loss=self.turn_loss,
+                reg_weight_loss=self.avg_loss, positional_encoding=self.positional_encoding,
             )
         else:
             logging.exception(f'Model type should include LSTM or Transformer to use this class')

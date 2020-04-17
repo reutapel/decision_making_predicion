@@ -30,8 +30,8 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.5
-alpha_global = 0.5
+alpha_text = 0.0
+alpha_global = 0.0
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
@@ -1005,9 +1005,9 @@ class CreateSaveData:
 
                             if self.use_prev_round_text:
                                 if round_num == 0:  # just get list of -1
-                                    prev_round_text = [-1] * data_pair.shape[1]
+                                    prev_round_text = [-1] * data_pair_no_history.shape[1]
                                 else:
-                                    prev_round_text = copy.deepcopy(data_pair)
+                                    prev_round_text = copy.deepcopy(data_pair_no_history)
                                     prev_round_text = prev_round_text.values.tolist()[round_num-1]
                                 round_raisha_data = prev_round_text + round_raisha_data
                             if self.use_prev_round:
@@ -1017,6 +1017,16 @@ class CreateSaveData:
                                     prev_round_num = copy.deepcopy(prev_round_data_pair)
                                     prev_round_num = prev_round_num.values.tolist()[round_num - 1]
                                 round_raisha_data = prev_round_num + round_raisha_data
+                            if not self.no_saifa_text:  # use all saifa text
+                                saifa_text =\
+                                    list(itertools.chain.from_iterable(data_pair_no_history.values.tolist()[
+                                                                       round_num+1:]))
+                                round_raisha_data = round_raisha_data + saifa_text
+                            if self.saifa_only_prev_rounds_text:
+                                # all the future of the saifa text (round=5 --> so we don't use the text of rounds 6-10)
+                                saifa_text = list(itertools.chain.from_iterable(data_pair_no_history.values.tolist()[
+                                                                                raisha:round_num]))
+                                round_raisha_data = round_raisha_data + saifa_text
 
                             raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
                             continue
@@ -1439,19 +1449,20 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_binary_features'
-    # label can be single_round or future_total_payoff
+    features_to_use = 'bert_embedding'
+    # label can be single_round or future_t
+    # otal_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
-                   'use_prev_round_text': False,
-                   'use_prev_round_label': True,
+                   'use_prev_round_text': True,
+                   'use_prev_round_label': False,
                    'use_manual_features': True,
                    'use_all_history_average': True,
                    'use_all_history': False,
                    'use_all_history_text_average': True,
                    'use_all_history_text': False,
                    'saifa_average_text': False,
-                   'no_saifa_text': True,
+                   'no_saifa_text': False,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
