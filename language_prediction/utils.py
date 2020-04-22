@@ -75,14 +75,38 @@ def create_bin_columns(predictions: pd.Series, validation_y: pd.Series, hotel_la
     return bin_prediction, bin_test_y
 
 
+def per_round_analysis(all_predictions: pd.DataFrame, predictions_column: str, label_column: str, label_options: list,
+                       function_to_run):
+    """
+    Analyze per round results: calculate measures for all rounds and per round
+    :param all_predictions: the predictions and the labels to calculate the measures on
+    :param predictions_column: the name of the prediction column
+    :param label_column: the name of the label column
+    :param label_options: the list of the options to labels
+    :param function_to_run: the function to run: calculate_per_round_per_raisha_measures or calculate_per_round_measures
+    :return:
+    """
+    results_dict = globals()[function_to_run](all_predictions, predictions_column, label_column, label_options)
+
+    if 'round_number' in all_predictions.columns:  # analyze the results per round
+        for current_round_number in all_predictions.round_number.unique():
+            data = all_predictions.loc[all_predictions.round_number == current_round_number].copy(deep=True)
+            results = globals()[function_to_run](data, predictions_column, label_column, label_options,
+                                                 round_number=f'round_{int(current_round_number)}')
+            results_dict = update_default_dict(results_dict, results)
+
+    return results_dict
+
+
 def calculate_per_round_per_raisha_measures(all_predictions: pd.DataFrame, predictions_column: str, label_column: str,
-                                            label_options: list):
+                                            label_options: list, round_number: str='All_rounds'):
     """
 
     :param all_predictions: the predictions and the labels to calculate the measures on
     :param predictions_column: the name of the prediction column
     :param label_column: the name of the label column
     :param label_options: the list of the options to labels
+    :param round_number: if we analyze specific round number
     :return:
     """
     raishas = all_predictions.raisha.unique()
@@ -90,14 +114,14 @@ def calculate_per_round_per_raisha_measures(all_predictions: pd.DataFrame, predi
     for raisha in raishas:
         data = copy.deepcopy(all_predictions.loc[all_predictions.raisha == raisha])
         results = calculate_per_round_measures(data, predictions_column, label_column, label_options,
-                                               raisha=f'raisha_{raisha}')
+                                               raisha=f'raisha_{int(raisha)}', round_number=round_number)
         results_dict.update(results)
 
     return results_dict
 
 
 def calculate_per_round_measures(all_predictions: pd.DataFrame, predictions_column: str, label_column: str,
-                                 label_options: list, raisha: str='All'):
+                                 label_options: list, raisha: str='All_raishas', round_number: str='All_rounds'):
     """
 
     :param all_predictions: the predictions and the labels to calculate the measures on
@@ -105,9 +129,11 @@ def calculate_per_round_measures(all_predictions: pd.DataFrame, predictions_colu
     :param label_column: the name of the label column
     :param label_options: the list of the options to labels
     :param raisha: the suffix for the columns in raisha analysis
+    :param round_number: if we analyze specific round number
     :return:
     """
     results_dict = defaultdict(dict)
+    dict_key = f'{raisha} {round_number}'
     precision, recall, fbeta_score, support =\
         metrics.precision_recall_fscore_support(all_predictions[label_column], all_predictions[predictions_column])
     accuracy = metrics.accuracy_score(all_predictions[label_column], all_predictions[predictions_column])
@@ -126,15 +152,16 @@ def calculate_per_round_measures(all_predictions: pd.DataFrame, predictions_colu
     # create the results to return
     for measure, measure_name in [[precision, 'precision'], [recall, 'recall'], [fbeta_score, 'Fbeta_score']]:
         for i, label in enumerate(final_labels):
-            results_dict[raisha][f'Per_round_{measure_name}_{label}'] = round(measure[i]*100, 2)
-    results_dict[raisha][f'Per_round_Accuracy'] = round(accuracy*100, 2)
+            results_dict[dict_key][f'Per_round_{measure_name}_{label}'] = round(measure[i]*100, 2)
+    results_dict[dict_key][f'Per_round_Accuracy'] = round(accuracy*100, 2)
 
     return results_dict
 
 
 def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final_total_payoff_prediction_column: str,
                                             total_payoff_label_column: str, label_options: list,
-                                            raisha: str='All') -> (pd.DataFrame, dict):
+                                            raisha: str = 'All_raishas', round_number: str = 'All_rounds') ->\
+        (pd.DataFrame, dict):
     """
     Calc and print the regression measures, including bin analysis
     :param all_predictions:
@@ -142,9 +169,10 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     :param final_total_payoff_prediction_column: the name of the prediction label
     :param label_options: list of the label option names
     :param raisha: if we run a raisha analysis this is the raisha we worked with
+    :param round_number: for per round analysis
     :return:
     """
-
+    dict_key = f'{raisha} {round_number}'
     if 'is_train' in all_predictions.columns:
         data = all_predictions.loc[all_predictions.is_train == False]
     else:
@@ -173,19 +201,19 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
                     final_labels[index_in_support] = label_options[bin]
 
             accuracy = metrics.accuracy_score(all_predictions.bin_label, all_predictions.bin_predictions)
-            results_dict[raisha][f'Bin_Accuracy'] = round(accuracy * 100, 2)
+            results_dict[dict_key][f'Bin_Accuracy'] = round(accuracy * 100, 2)
 
             # create the results to return
             for measure, measure_name in [[precision, 'precision'], [recall, 'recall'], [fbeta_score, 'Fbeta_score']]:
                 for i in range(len(measure)):
-                    results_dict[raisha][f'Bin_{measure_name}_{final_labels[i]}'] = round(measure[i]*100, 2)
+                    results_dict[dict_key][f'Bin_{measure_name}_{final_labels[i]}'] = round(measure[i]*100, 2)
     except Exception:
         logging.exception(f'No bin analysis because the bin columns has not created')
         return
 
-    results_dict[raisha][f'MSE'] = mse
-    results_dict[raisha][f'RMSE'] = rmse
-    results_dict[raisha][f'MAE'] = mae
+    results_dict[dict_key][f'MSE'] = mse
+    results_dict[dict_key][f'RMSE'] = rmse
+    results_dict[dict_key][f'MAE'] = mae
 
     results_pd = pd.DataFrame.from_dict(results_dict, orient='index')
 

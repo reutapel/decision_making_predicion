@@ -128,7 +128,7 @@ class ExecuteEvalModel:
                     raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                     total_payoff_label_column=total_payoff_label_column,
                     label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
-                                   'total future payoff > 2/3'], raisha=f'raisha_{str(raisha)}')
+                                   'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
                 all_raisha_dict.update(results_dict_raisha)
             results_dict = utils.update_default_dict(results_dict, all_raisha_dict)
 
@@ -157,7 +157,8 @@ class ExecuteEvalModel:
             # get only the relevant rounds --> the saifa rounds
             stack_data = stack_data.loc[stack_data != '-']
             if flat_col_name == label_column_name_per_round:
-                temp_index = [f'raisha_{r}_round_{ro}' for r, ro in stack_data.index.values]
+                # rounds: 1-10
+                temp_index = [f'raisha_{r}_round_{int(ro.split("_")[1])+1}' for r, ro in stack_data.index.values]
             stack_data = stack_data.reset_index(drop=True)
             stack_data = stack_data.astype(int)
             # if index_to_use is None:
@@ -172,12 +173,12 @@ class ExecuteEvalModel:
             if (flat_data[per_round_labels_name].index == flat_data[per_round_predictions_name].index).sum() == \
                     flat_data[per_round_predictions_name].shape[0]:  # if there are index that are not the same
                 flat_index = pd.DataFrame(temp_index, index=index_to_use)[0].str.split('_', expand=True)
-                if flat_index.shape[1] == 5:
-                    flat_index.columns = [1, 'raisha', 2, 3, 'round']
+                if flat_index.shape[1] == 4:
+                    flat_index.columns = [1, 'raisha', 2, 'round_number']
                 else:
-                    logging.exception(f'flat index in flat_seq_predictions_multiple_columns does not have 5 columns')
-                    raise Exception(f'flat index in flat_seq_predictions_multiple_columns does not have 5 columns')
-                flat_index = flat_index[['raisha', 'round']]
+                    logging.exception(f'flat index in flat_seq_predictions_multiple_columns does not have 4 columns')
+                    raise Exception(f'flat index in flat_seq_predictions_multiple_columns does not have 4 columns')
+                flat_index = flat_index[['raisha', 'round_number']]
                 flat_data_df = pd.DataFrame.from_dict(flat_data)
                 flat_data_df = flat_data_df.merge(flat_index, left_index=True, right_index=True)
                 # save the flat data
@@ -301,15 +302,17 @@ class ExecuteEvalCRF(ExecuteEvalModel):
             # measures per round
             flat_seq_predictions = self.flat_seq_predictions_multiple_columns(
                 label_column_name_per_round='y', prediction_column_name_per_round='y_prime')
-            results_dict_per_round = utils.calculate_per_round_measures(
+            results_dict_per_round = utils.per_round_analysis(
                 flat_seq_predictions, predictions_column=per_round_predictions_name,
-                label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'])
+                label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'],
+                function_to_run='calculate_per_round_measures')
             results_dict = utils.update_default_dict(results_dict, results_dict_per_round)
 
             if 'raisha' in flat_seq_predictions:
-                results_dict_per_round_per_raisha = utils.calculate_per_round_per_raisha_measures(
+                results_dict_per_round_per_raisha = utils.per_round_analysis(
                     flat_seq_predictions, predictions_column=per_round_predictions_name,
-                    label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'])
+                    label_column=per_round_labels_name, label_options=['DM chose stay home', 'DM chose hotel'],
+                    function_to_run='calculate_per_round_per_raisha_measures')
                 results_dict = utils.update_default_dict(results_dict, results_dict_per_round_per_raisha)
 
             return results_dict
@@ -383,13 +386,14 @@ class ExecuteEvalSVM(ExecuteEvalModel):
 
         elif self.model_type == 'SVMTurn':
             # measures per round
-            results_dict = utils.calculate_per_round_measures(
+            results_dict = utils.per_round_analysis(
                 self.prediction, predictions_column='predictions', label_column='labels',
-                label_options=['DM chose stay home', 'DM chose hotel'])
+                label_options=['DM chose stay home', 'DM chose hotel'], function_to_run='calculate_per_round_measures')
             if 'raisha' in self.prediction:
-                results_dict_per_round_per_raisha = utils.calculate_per_round_per_raisha_measures(
+                results_dict_per_round_per_raisha = utils.per_round_analysis(
                     self.prediction, predictions_column='predictions', label_column='labels',
-                    label_options=['DM chose stay home', 'DM chose hotel'])
+                    label_options=['DM chose stay home', 'DM chose hotel'],
+                    function_to_run='calculate_per_round_per_raisha_measures')
                 results_dict = utils.update_default_dict(results_dict, results_dict_per_round_per_raisha)
 
             # create the total payoff label and calculate calculate_measures_for_continues_labels
@@ -647,15 +651,17 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                     prediction_column_name_per_round='final_prediction')
                 label_options = ['DM chose hotel', 'DM chose stay home'] if self.hotel_label_0\
                     else ['DM chose stay home', 'DM chose hotel']
-                results_dict_per_round = utils.calculate_per_round_measures(
+                results_dict_per_round = utils.per_round_analysis(
                     flat_seq_predictions, predictions_column=per_round_predictions_name,
-                    label_column=per_round_labels_name, label_options=label_options)
+                    label_column=per_round_labels_name, label_options=label_options,
+                    function_to_run='calculate_per_round_measures')
                 results_dict = utils.update_default_dict(results_dict, results_dict_per_round)
 
                 if 'raisha' in flat_seq_predictions:
-                    results_dict_per_round_per_raisha = utils.calculate_per_round_per_raisha_measures(
+                    results_dict_per_round_per_raisha = utils.per_round_analysis(
                         flat_seq_predictions, predictions_column=per_round_predictions_name,
-                        label_column=per_round_labels_name, label_options=label_options)
+                        label_column=per_round_labels_name, label_options=label_options,
+                        function_to_run='calculate_per_round_per_raisha_measures')
                     results_dict = utils.update_default_dict(results_dict, results_dict_per_round_per_raisha)
 
             return results_dict

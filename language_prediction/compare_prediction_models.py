@@ -56,7 +56,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            if model_num not in [13, 29, 4]:
+            if model_num not in [1, 13, 29]:
                 continue
             model_type = row['model_type']
             model_name = row['model_name']
@@ -75,6 +75,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             if hyper_parameters_dict is not None and 'features_max_size' in hyper_parameters_dict.keys():
                 if int(hyper_parameters_dict['features_max_size']) > 1000:
                     continue
+            # elif hyper_parameters_dict is not None and 'features_max_size' not in hyper_parameters_dict.keys():
+            #     continue
             # each function need to get: model_num, fold, fold_dir, model_type, model_name, data_file_name,
             # fold_split_dict, table_writer, data_directory, hyper_parameters_dict.
             # During running it needs to write the predictions to the table_writer and save the trained model with
@@ -87,14 +89,16 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             model_class.fit_predict()
             results_dict = model_class.eval_model()
             results_df = pd.DataFrame.from_dict(results_dict).T
-            results_df['raisha'] = results_df.index
+            results_df['raisha_round'] = results_df.index
+            results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
+            results_df = results_df.drop('raisha_round', axis=1)
             results_df.index = np.zeros(shape=(results_df.shape[0],))
             results_df = metadata_df.join(results_df)
             all_models_results = pd.concat([all_models_results, results_df], sort='False')
             utils.write_to_excel(model_class.model_table_writer, 'Model results', ['Model results'], results_df)
             model_class.model_table_writer.save()
             del model_class
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
     utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
     table_writer.save()

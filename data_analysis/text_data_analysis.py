@@ -17,7 +17,7 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'numeric'
+condition_directory = 'both'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
