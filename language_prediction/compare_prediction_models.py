@@ -18,7 +18,7 @@ data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
 
 
-# @ray.remote
+@ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int):
     """
     This function get a dict that split the participant to train-val-test (for this fold) and run all the models
@@ -56,8 +56,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            if model_num not in [1, 13, 29]:
-                continue
+            # if model_num not in [382, 383, 384, 385]:
+            #     continue
             model_type = row['model_type']
             model_name = row['model_name']
             function_to_run = row['function_to_run']
@@ -118,15 +118,15 @@ def parallel_main():
     # the values will be train/test/validation
     participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
     participants_fold_split.index = participants_fold_split.pair_id
-    participants_fold_split = participants_fold_split.iloc[:50]
-    # ray.init()
-    # all_ready_lng =\
-    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
+    # participants_fold_split = participants_fold_split.iloc[:50]
+    ray.init()
+    all_ready_lng =\
+        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
 
-    execute_fold_parallel(participants_fold_split[f'fold_0'], fold=0)
+    # execute_fold_parallel(participants_fold_split[f'fold_0'], fold=0)
 
-    # print(f'Done! {all_ready_lng}')
-    # logging.info(f'Done! {all_ready_lng}')
+    print(f'Done! {all_ready_lng}')
+    logging.info(f'Done! {all_ready_lng}')
 
     return
 

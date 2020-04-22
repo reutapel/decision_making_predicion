@@ -10,14 +10,14 @@ class SVMTotal:
     def __init__(self, features, model_name):
         if 'svm' in str.lower(model_name):
             self.model = SVR(gamma='scale')
-        elif 'stratified' in str.lower(model_name):
-            self.model = DummyClassifier(strategy='stratified')
-        elif 'most_frequent' in str.lower(model_name):
-            self.model = DummyClassifier(strategy='most_frequent')
+        elif 'average' in str.lower(model_name):
+            self.model = DummyRegressor(strategy='mean')
+        elif 'median' in str.lower(model_name):
+            self.model = DummyRegressor(strategy='median')
         else:
-            logging.error('Model name not in: svm, stratified, most_frequent')
-            print('Model name not in: svm, stratified, most_frequent')
-            raise Exception('Model name not in: svm, stratified, most_frequent')
+            logging.error('Model name not in: svm, average, median')
+            print('Model name not in: svm, average, median')
+            raise Exception('Model name not in: svm, average, median')
         self.features = features
 
     def fit(self, train_x: pd.DataFrame, train_y: pd.Series):
@@ -43,15 +43,16 @@ class SVMTurn:
     def __init__(self, features, model_name):
         if 'svm' in str.lower(model_name):
             self.model = SVC(gamma='scale')
-        elif 'average' in str.lower(model_name):
-            self.model = DummyRegressor(strategy='mean')
-        elif 'median' in str.lower(model_name):
-            DummyRegressor(strategy='median')
+        elif 'stratified' in str.lower(model_name):
+            self.model = DummyClassifier(strategy='stratified')
+        elif 'most_frequent' in str.lower(model_name):
+            self.model = DummyClassifier(strategy='most_frequent')
         else:
-            logging.error('Model name not in: svm, average, median')
-            print('Model name not in: svm, average, median')
-            raise Exception('Model name not in: svm, average, median')
+            logging.error('Model name not in: svm, stratified, most_frequent, average, median')
+            print('Model name not in: svm, stratified, most_frequent, average, median')
+            raise Exception('Model name not in: svm, stratified, most_frequent')
         self.features = features
+        self.model_name = model_name
 
     def fit(self, train_x: pd.DataFrame, train_y: pd.Series):
         if 'features' in train_x.columns:
@@ -61,39 +62,52 @@ class SVMTurn:
             logging.exception('No features column when running SVMTurn model --> can not run it')
 
     def predict(self, validation_x: pd.DataFrame, validation_y: pd.Series):
-        all_predictions = pd.Series()
-        predictions_pair_id = pd.DataFrame()
-        validation_x.index = validation_x.sample_id
-        if 'features' in validation_x.columns and 'round_number' in validation_x.columns and\
-                'raisha' in validation_x.columns and 'prev_round_label' in self.features:
-            raisha_options = validation_x.raisha.unique()
-            for raisha in raisha_options:
-                for round_num in range(raisha+1, 11):
-                    validation_round = validation_x.loc[(validation_x.round_number == round_num) &
-                                                        (validation_x.raisha == raisha)].copy(deep=True)
-                    validation_round_features = pd.DataFrame(validation_round['features'].values.tolist(),
-                                                             columns=self.features, index=validation_round.sample_id)
-                    if round_num > raisha + 1:  # the first round in the saifa --> no prediction for prev round
-                        # merge with the previous round precdiction
-                        validation_round = validation_round.merge(predictions_pair_id, on=['pair_id', 'raisha']).\
-                            set_index(validation_round.index)
-                        # remove prev_round_label and put the prediction instead
-                        validation_round_features = validation_round_features.drop('prev_round_label', axis=1)
-                        prev_round_prediction = validation_round[['prev_round_label']].copy(deep=True)
-                        validation_round_features = validation_round_features.merge(prev_round_prediction,
-                                                                                    left_index=True, right_index=True)
-                        
-                    predictions = self.model.predict(validation_round_features)
-                    predictions = pd.Series(predictions, name='prev_round_label', index=validation_round.sample_id)
-                    all_predictions = pd.concat([all_predictions, predictions])
-                    predictions_pair_id = validation_round[['pair_id', 'raisha']].merge(predictions, left_index=True,
-                                                                                        right_index=True)
+        if 'svm' in str.lower(self.model_name):
+            all_predictions = pd.Series()
+            predictions_pair_id = pd.DataFrame()
+            validation_x.index = validation_x.sample_id
+            if 'features' in validation_x.columns and 'round_number' in validation_x.columns and\
+                    'raisha' in validation_x.columns and 'prev_round_label' in self.features:
+                raisha_options = validation_x.raisha.unique()
+                for raisha in raisha_options:
+                    for round_num in range(raisha+1, 11):
+                        validation_round = validation_x.loc[(validation_x.round_number == round_num) &
+                                                            (validation_x.raisha == raisha)].copy(deep=True)
+                        validation_round_features = pd.DataFrame(validation_round['features'].values.tolist(),
+                                                                 columns=self.features, index=validation_round.sample_id)
+                        if round_num > raisha + 1:  # the first round in the saifa --> no prediction for prev round
+                            # merge with the previous round precdiction
+                            validation_round = validation_round.merge(predictions_pair_id, on=['pair_id', 'raisha']).\
+                                set_index(validation_round.index)
+                            # remove prev_round_label and put the prediction instead
+                            validation_round_features = validation_round_features.drop('prev_round_label', axis=1)
+                            prev_round_prediction = validation_round[['prev_round_label']].copy(deep=True)
+                            validation_round_features = validation_round_features.merge(prev_round_prediction,
+                                                                                        left_index=True, right_index=True)
 
+                        predictions = self.model.predict(validation_round_features)
+                        predictions = pd.Series(predictions, name='prev_round_label', index=validation_round.sample_id)
+                        all_predictions = pd.concat([all_predictions, predictions])
+                        predictions_pair_id = validation_round[['pair_id', 'raisha']].merge(predictions, left_index=True,
+                                                                                            right_index=True)
+
+                predictions = validation_x[['raisha', 'pair_id', 'round_number']].\
+                    join(pd.Series(all_predictions, name='predictions')). join(pd.Series(validation_y, name='labels'))
+                return predictions
+
+            else:
+                logging.exception('No features or round_number or raisha column when running SVMTurn model '
+                                  '--> can not run it')
+                return
+        elif 'stratified' in str.lower(self.model_name) or 'most_frequent' in str.lower(self.model_name):
+            data = validation_x[validation_x.columns[1]].copy(deep=True)
+            predictions = self.model.predict(data)
+            validation_x.index = validation_x.sample_id
             predictions = validation_x[['raisha', 'pair_id', 'round_number']].\
-                join(pd.Series(all_predictions, name='predictions')). join(pd.Series(validation_y, name='labels'))
+                join(pd.Series(predictions, name='predictions', index=validation_x.index)).\
+                join(pd.Series(validation_y, name='labels'))
             return predictions
-
         else:
-            logging.exception('No features or round_number or raisha column when running SVMTurn model '
-                              '--> can not run it')
-            return
+            logging.error('Model name not in: svm, stratified, most_frequent, average, median')
+            print('Model name not in: svm, stratified, most_frequent, average, median')
+            raise Exception('Model name not in: svm, stratified, most_frequent')
