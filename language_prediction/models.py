@@ -861,6 +861,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             self.attention = attention
             self.regressor = LinearLayer(input_size=10, output_size=1)
             self.attention_vector = torch.randn((batch_size, encoder.get_output_dim()), requires_grad=True)
+            if torch.cuda.is_available():
+                self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
 
         self.metrics_dict_seq = metrics_dict_seq
@@ -885,8 +887,17 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                 self._epoch += 1
         else:
             self._first_pair = metadata[0]['pair_id']
+
         output = dict()
         mask = get_text_field_mask({'tokens': sequence_review})
+        if torch.cuda.is_available():  # change to cuda
+            mask = mask.cuda()
+            sequence_review = sequence_review.cuda()
+            if seq_labels is not None:
+                seq_labels = seq_labels.cuda()
+            if reg_labels is not None:
+                reg_labels = reg_labels.cuda()
+
         encoder_out = self.encoder(sequence_review, mask)
         if self.predict_seq:
             if self.linear_layer is not None:
@@ -1034,15 +1045,18 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             self.attention = attention
             self.regressor = LinearLayer(input_size=batch_size, output_size=1)
             self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
+            if torch.cuda.is_available():
+                self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
 
-        if linear_dim is not None:  # add linear layer before hidden2tag
-            self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim)
-            hidden2tag_input_size = linear_dim
-        else:
-            self.linear_layer = None
-            hidden2tag_input_size = input_dim
-        self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
+        if predict_seq:  # need hidden2tag layer
+            if linear_dim is not None:  # add linear layer before hidden2tag
+                self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim)
+                hidden2tag_input_size = linear_dim
+            else:
+                self.linear_layer = None
+                hidden2tag_input_size = input_dim
+            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg
@@ -1107,6 +1121,14 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         if self._sinusoidal_positional_encoding:
             source = add_positional_features(source)
             target = add_positional_features(target)
+
+        if torch.cuda.is_available():  # change to cuda
+            source = source.cuda()
+            target = target.cuda()
+            if seq_labels is not None:
+                seq_labels = seq_labels.cuda()
+            if reg_labels is not None:
+                reg_labels = reg_labels.cuda()
 
         # The torch transformer expects the shape (sequence, batch, features), not the more
         # familiar (batch, sequence, features), so we have to fix it.

@@ -47,9 +47,9 @@ batch_size = 5
 number_of_rounds = 10
 alpha = 1
 
-score_eval_data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
-                                'data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
-                                sheet_name='data_to_plot')
+score_eval_data = pd.read_excel(
+    os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
+    sheet_name='data_to_plot')
 
 
 def linear_score(row: pd.Series, condition_column: str='subsession_round_number'):
@@ -1810,8 +1810,10 @@ class DataAnalysis:
         text features I extracted from the reviws
         :return:
         """
-        manual_features = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
-                                        'language_prediction/data/verbal/manual_binary_features.xlsx')
+        os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
+        manual_features = pd.read_excel('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+                                        'experiment/decision_prediction/language_prediction/data/verbal/'
+                                        'manual_binary_features.xlsx')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][

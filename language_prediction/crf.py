@@ -13,8 +13,8 @@ Copyright (c) 2015 Seong-Jin Kim
 """
 
 
-from language_prediction.read_corpus import read_conll_corpus, read_verbal_exp_data, read_feature_names
-from language_prediction.feature import FeatureSet, STARTING_LABEL_INDEX
+from read_corpus import read_conll_corpus, read_verbal_exp_data, read_feature_names
+from feature import FeatureSet, STARTING_LABEL_INDEX
 
 from math import exp, log
 import numpy as np
@@ -30,7 +30,7 @@ import os
 import logging
 from sklearn import metrics
 
-from .feature import VectorRepresentationInput
+from feature import VectorRepresentationInput
 
 from collections import Counter
 

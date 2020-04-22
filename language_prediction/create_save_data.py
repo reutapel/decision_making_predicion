@@ -30,8 +30,8 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.0
-alpha_global = 0.0
+alpha_text = 0.5
+alpha_global = 0.5
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
@@ -87,6 +87,11 @@ def create_average_history_text(rounds: list, temp_reviews: pd.DataFrame, prefix
             history_mean = history.mul(history_weights, axis=0).sum()
             future_mean = future.mul(future_weights, axis=0).sum()
         # concat the review_id of the current round
+        if history.empty:  # round=1, no history
+            history_mean = pd.Series(np.repeat(-1, history.shape[1]), index=history.columns)
+        if future.empty:
+            # print(f'future is empty for round number {round_num}')
+            future_mean = pd.Series(np.repeat(-1, future.shape[1]), index=future.columns)
         history_mean = history_mean.append(review_id_curr_round)
         history_reviews = pd.concat([history_reviews, history_mean], axis=1, ignore_index=True, sort=False)
         future_mean = future_mean.append(review_id_curr_round)
@@ -1450,12 +1455,11 @@ def main():
         'manual_features_minus_1': 'xlsx',
     }
     features_to_use = 'bert_embedding'
-    # label can be single_round or future_t
-    # otal_payoff
+    # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': True,
-                   'use_prev_round_label': False,
+                   'use_prev_round_label': True,
                    'use_manual_features': True,
                    'use_all_history_average': True,
                    'use_all_history': False,
@@ -1467,8 +1471,8 @@ def main():
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
-                   'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
-                   'transformer_model': True,   # for transformer models-we need to create features also for the raisha
+                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
+                   'transformer_model': False,   # for transformer models-we need to create features also for the raisha
                    'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,
@@ -1493,7 +1497,7 @@ def main():
     use_seq = False
     use_crf = False
     use_crf_raisha = True
-    string_labels = True  # labels are string --> for LSTM model
+    string_labels = False  # labels are string --> for LSTM model
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']

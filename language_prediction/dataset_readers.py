@@ -265,7 +265,7 @@ class TransformerDatasetReader(DatasetReader):
         self._label_column = label_column
         self.num_labels = 2
         self.pair_ids = pair_ids
-        self.input_dim = None
+        self.input_dim = features_max_size
         check = features_max_size // num_attention_heads
         if check * num_attention_heads != features_max_size:
             self.input_dim = (check + 1) * num_attention_heads

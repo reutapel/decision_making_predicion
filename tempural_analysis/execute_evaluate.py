@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import logging
-import tempural_analysis.split_data as split_data
-import tempural_analysis.simulation as simulation
+from tempural_analysis import split_data, simulation
 from sklearn import metrics
 import tempural_analysis.utils as utils
 import copy
