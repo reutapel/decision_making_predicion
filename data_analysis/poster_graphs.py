@@ -134,8 +134,8 @@ import scipy.stats
 
 
 """score evaluation task"""
-score_eval_data = pd.read_excel('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
-                                'data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
+score_eval_data = pd.read_excel('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/decision_prediction'
+                                '/data_analysis/results/text_exp_2_tests/score evaluation task.xlsx',
                                 sheet_name='data_to_plot')
 reviews = score_eval_data.review_id.unique()
 colors = (list(mcolors.BASE_COLORS.keys()) + list(mcolors.TABLEAU_COLORS.keys()))
@@ -286,8 +286,8 @@ plt.yticks(())
 plt.show()
 
 """The Communication Type Effect on the Experts Cheating Level"""
-colors = ['forestgreen', 'darkblue', 'crimson', 'pink']
-markers = [".", "x", "+", "1"]
+colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
+markers = [".", "x", "v", "1"]
 fig1, ax1 = plt.subplots()
 ax1.axis([4, 10, 4, 10])
 x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
@@ -296,10 +296,10 @@ verbal_cl = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
 num_only_cl = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
 both_cl = [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]
 
-ax1.plot(x, verbal_cl, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
-ax1.plot(x, num_cl, color=colors[1], label='Numerical', marker=markers[0], linestyle='-')
-ax1.plot(x, num_only_cl, color=colors[2], label='Only Numeric', marker=markers[0], linestyle='-')
-ax1.plot(x, both_cl, color=colors[3], label='Numeric + Verbal', marker=markers[0], linestyle='-')
+# ax1.plot(x, verbal_cl, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
+ax1.plot(x, num_cl, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
+ax1.plot(x, num_only_cl, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
+ax1.plot(x, both_cl, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
 
 ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
 
@@ -312,14 +312,14 @@ ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Trut
 #     ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
 #              {'fontsize': 8})
 
-plt.title("The Experts' Cheating Level in All Experiment Conditions")
+# plt.title("The Selected Score as a Function of the Hotels' Average Score by Condition")
 plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
 plt.ylabel('Expert Average Signal', fontsize=15)
 ax1.legend(loc='upper left', shadow=True, fontsize=8)
 plt.xticks(range(4, 11))
 plt.yticks(range(4, 11))
 plt.show()
-fig1.savefig('The Communication Type Effect on the Experts Cheating Level.png', bbox_inches='tight')
+fig1.savefig('The_Communication_Type_Effect_on_the_Experts_Cheating_Level.png', bbox_inches='tight')
 
 """Decision maker average payoff"""
 verbal_dmap = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
@@ -372,6 +372,23 @@ plt.show()
 fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Decision maker average expected payoff.png', bbox_inches='tight')
 
+
+# plot
+fig1, ax10 = plt.subplots()
+# ax10.axis([4, 10, 4, 10])
+ax10.plot(index, numerical_dmaep, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
+ax10.plot(index, num_only_dmaep, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
+ax10.plot(index, both_dmaep, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
+
+# plt.title("The Decision Makers' Average Expected Payoff Throughout the Experiment")
+plt.xlabel('Round Number', fontsize=10)
+plt.ylabel("Decision Makers' Average Expected Payoff", fontsize=10)
+ax10.legend(loc='upper right', shadow=True, fontsize=8)
+# plt.xticks(range(4, 11))
+plt.xticks(index)
+plt.show()
+fig1.savefig('Decision_maker_average_expected_payoff_graph.png', bbox_inches='tight')
+
 """Expert average payoff"""
 verbal_eap = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
 numerical_eap = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
@@ -387,7 +404,7 @@ plt.figure(figsize=(10, 5))
 ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
                          color=['forestgreen', 'darkblue', 'crimson', 'pink'])
 plt.title("Percentage of Decision Makers that Chose the Hotel Option Throughout the Experiment", fontsize=15)
-plt.xlabel('Round Number', fontsize=15)
+plt.xlabel('Trial Number', fontsize=15)
 plt.ylabel("% Decision Makers", fontsize=15)
 rects = ax2.patches
 ax2.legend(loc='lower center', shadow=True)
@@ -396,6 +413,24 @@ ax2.set_yticks([0, 20, 40, 60, 80, 100])
 plt.show()
 fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Expert average payoff.png', bbox_inches='tight')
+
+# plot
+fig1, ax20 = plt.subplots()
+numerical_eap = [value/100 for value in numerical_eap]
+num_only_eap = [value/100 for value in num_only_eap]
+both_eap = [value/100 for value in both_eap]
+ax20.plot(index, numerical_eap, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
+ax20.plot(index, num_only_eap, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
+ax20.plot(index, both_eap, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
+
+# plt.title("The Experts Average Payoff Throughout the Experiment")
+plt.xlabel('Round Number', fontsize=10)
+plt.ylabel("Experts Average Payoff", fontsize=10)
+ax20.legend(loc='upper right', shadow=True, fontsize=8)
+# plt.xticks(range(4, 11))
+plt.xticks(index)
+plt.show()
+fig1.savefig('Expert_average_payoff_graph.png', bbox_inches='tight')
 
 
 """Linear Regression num-num_only"""

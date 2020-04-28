@@ -101,7 +101,8 @@ class ExecuteEvalModel:
                          f'{self.model_type} in fold {self.fold}'], data=data_to_save)
 
     def total_payoff_calculate_measures(self, final_total_payoff_prediction_column: str, total_payoff_label_column: str,
-                                        raisha_column_name: str = 'raisha', prediction_df: pd.DataFrame=None):
+                                        raisha_column_name: str = 'raisha', prediction_df: pd.DataFrame=None,
+                                        bin_label: pd.Series = None, bin_predictions: pd.Series = None):
         """
         Calculate the measures for seq models per raisha
         :param total_payoff_label_column: the name of the label column
@@ -117,6 +118,7 @@ class ExecuteEvalModel:
         _, results_dict = utils.calculate_measures_for_continues_labels(
                 prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                 total_payoff_label_column=total_payoff_label_column,
+                bin_label=bin_label, bin_predictions=bin_predictions,
                 label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                'total future payoff > 2/3'])
         if raisha_column_name in prediction_df.columns:  # do the raisha analysis
@@ -127,6 +129,7 @@ class ExecuteEvalModel:
                 _, results_dict_raisha = utils.calculate_measures_for_continues_labels(
                     raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                     total_payoff_label_column=total_payoff_label_column,
+                    bin_label=bin_label, bin_predictions=bin_predictions,
                     label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                    'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
                 all_raisha_dict.update(results_dict_raisha)
@@ -452,7 +455,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_epochs' in hyper_parameters_dict.keys():
             self.num_epochs = int(hyper_parameters_dict['num_epochs'])
         else:
-            self.num_epochs = 2
+            self.num_epochs = 100
         if 'batch_size' in hyper_parameters_dict.keys():
             self.batch_size = int(hyper_parameters_dict['batch_size'])
         else:
@@ -619,6 +622,9 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.all_seq_predictions[max_total_payoff_predict_column]
             self.save_model_prediction(data_to_save=self.all_seq_predictions, sheet_prefix_name='seq',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
+            self.all_seq_predictions = self.all_seq_predictions[['is_train', 'labels', 'total_payoff_label', 'raisha',
+                                                                 'final_prediction', 'final_total_payoff_prediction']]
+            self.all_seq_predictions = self.all_seq_predictions.loc[self.all_seq_predictions.is_train==False]
             self.prediction = self.all_seq_predictions
 
         if self.predict_avg_total_payoff:
@@ -627,6 +633,9 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.all_reg_predictions['final_total_payoff_prediction'] = self.all_reg_predictions[max_predict_column]
             self.save_model_prediction(data_to_save=self.all_reg_predictions, sheet_prefix_name='reg',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
+            self.all_reg_predictions = self.all_reg_predictions[['is_train', 'sample_id', 'total_payoff_label',
+                                                                 'raisha', 'final_total_payoff_prediction']]
+            self.all_reg_predictions = self.all_reg_predictions.loc[self.all_reg_predictions.is_train==False]
             self.prediction = self.all_reg_predictions
 
     def eval_model(self):
@@ -638,11 +647,13 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.final_total_payoff_prediction,
                                                                   self.prediction.total_payoff_label,
                                                                   hotel_label_0=self.hotel_label_0)
-            self.prediction = self.prediction.join(bin_test_y).join(bin_prediction)
+            # self.prediction = self.prediction.merge(bin_test_y, left_index=True, right_index=True)
+            # self.prediction = self.prediction.merge(bin_prediction, left_index=True, right_index=True)
             # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
             results_dict = self.total_payoff_calculate_measures(
                     final_total_payoff_prediction_column='final_total_payoff_prediction',
-                    total_payoff_label_column='total_payoff_label')
+                    total_payoff_label_column='total_payoff_label',
+                    bin_label=bin_test_y, bin_predictions=bin_prediction)
             # measures per round
             if self.predict_seq:  # and not self.predict_avg_total_payoff:
                 self.prediction = self.all_seq_predictions
