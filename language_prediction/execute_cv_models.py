@@ -372,8 +372,8 @@ class ExecuteEvalSVM(ExecuteEvalModel):
     def eval_model(self):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
-        if self.model_type == 'SVMTotal':
-            if 'raisha' in self.validation_x.columns:
+        if self.model_type == 'SVMTotal' or 'proportion' in self.model_name:
+            if 'raisha' in self.validation_x.columns and 'proportion' not in self.model_name:  # only relevant for svm
                 self.prediction = self.prediction.join(self.validation_x.raisha)
             try:
                 if 'labels' in self.prediction.columns and 'predictions' in self.prediction.columns:
@@ -387,7 +387,7 @@ class ExecuteEvalSVM(ExecuteEvalModel):
                 logging.exception(f'labels or predictions not in SVMTotal prediction DF')
                 return
 
-        elif self.model_type == 'SVMTurn':
+        elif self.model_type == 'SVMTurn' or 'per_round' in self.model_name:
             # measures per round
             results_dict = utils.per_round_analysis(
                 self.prediction, predictions_column='predictions', label_column='labels',

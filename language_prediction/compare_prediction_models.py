@@ -18,7 +18,7 @@ data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
 
 
-@ray.remote
+# @ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int):
     """
     This function get a dict that split the participant to train-val-test (for this fold) and run all the models
@@ -49,16 +49,16 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                         format='%(asctime)s: %(levelname)s %(message)s',
                         datefmt='%H:%M:%S',
                         )
-    # all_model_types = models_to_compare.model_type.unique()
-    all_model_types = ['Transformer_avg', 'Transformer_avg_turn']
+    all_model_types = models_to_compare.model_type.unique()
+    # all_model_types = ['Transformer_avg', 'Transformer_avg_turn']
     all_models_results = pd.DataFrame()
     for model_type in all_model_types:  # compare all versions of each model type
         model_type_versions = models_to_compare.loc[models_to_compare.model_type == model_type]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            # if model_num < 200:
-            #     continue
+            if model_num not in [386, 387]:
+                continue
             model_type = row['model_type']
             model_name = row['model_name']
             function_to_run = row['function_to_run']
@@ -120,15 +120,15 @@ def parallel_main():
     participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
     participants_fold_split.index = participants_fold_split.pair_id
     # participants_fold_split = participants_fold_split.iloc[:50]
-    ray.init()
-    all_ready_lng =\
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
+    # ray.init()
+    # all_ready_lng =\
+    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
 
-    # for fold in range(6):
-    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
+    for fold in range(6):
+        execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
 
-    print(f'Done! {all_ready_lng}')
-    logging.info(f'Done! {all_ready_lng}')
+    # print(f'Done! {all_ready_lng}')
+    # logging.info(f'Done! {all_ready_lng}')
 
     return
 
