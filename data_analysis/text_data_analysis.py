@@ -11,13 +11,14 @@ from matplotlib.font_manager import FontProperties
 import math
 from data_analysis import create_chart_bars, create_statistics, create_point_plot, create_histogram, create_bar_from_df
 from collections import defaultdict
+import collections
 
 
 base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'both'
+condition_directory = 'verbal'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -1396,7 +1397,8 @@ class DataAnalysis:
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.status == 'play') &
                                                 (self.results_payments.player_id_in_group == 2)]
-        columns_list = [['previous_round_lottery_result', 'group_sender_answer_scores'],
+        columns_list = ['group_sender_answer_scores',
+            ['previous_round_lottery_result', 'group_sender_answer_scores'],
                         ['previous_round_lottery_result', 'group_sender_answer_index'],
                         ['previous_round_decision', 'previous_round_lottery_result'],
                         ['previous_round_lottery_result_high', 'previous_round_decision'],
@@ -1409,7 +1411,7 @@ class DataAnalysis:
                         'history_lottery_result', 'history_decisions', 'history_lottery_result_high',
                         'history_chose_lose', 'history_chose_earn', 'history_not_chose_lose', 'history_not_chose_earn',
                         'previous_round_lottery_result', 'previous_round_lottery_result_high', 'time_spent_low',
-                        'time_spent_med', 'time_spent_high', 'group_sender_answer_index', 'group_sender_answer_scores',
+                        'time_spent_med', 'time_spent_high', 'group_sender_answer_index',
                         'hotel_id', 'subsession_round_number', 'group_average_score', 'group_median_score',
                         'all_review_len', 'positive_review_len', 'negative_review_len',
                         'positive_negative_review_len_prop', 'previous_round_lottery_result', 'previous_round_decision',
@@ -1484,6 +1486,24 @@ class DataAnalysis:
                                                                   how='outer')
 
                 else:
+                    if column == 'group_sender_answer_scores':  # for poster_graph:
+                        x = [2.5, 3.3, 3.8, 4.2, 5, 5.4, 5.8, 6.3, 7.1, 7.5, 7.9, 8.3, 8.8, 9.2, 9.6, 10]
+                        my_dict = dict()
+                        for inx in data_groupby.index.values:
+                            my_dict[inx] = round(data_groupby.loc[inx, 'pct participant']/100, 2)
+                        for i in x:
+                            if i not in my_dict.keys():
+                                my_dict[i] = None
+                        print(f'Values for condition {self.condition}, column: {column} and rounds {round_number} are: '
+                              f'{collections.OrderedDict(sorted(my_dict.items())).values()}')
+                        my_dict = dict()
+                        for inx in data_groupby.index.values:
+                            my_dict[inx] = data_groupby.loc[inx, 'participant_code']
+                        for i in x:
+                            if i not in my_dict.keys():
+                                my_dict[i] = 0
+                        print(f'Number of experts for condition {self.condition}, column: {column} and rounds '
+                              f'{round_number} are: {collections.OrderedDict(sorted(my_dict.items())).values()}')
                     if column != 'subsession_condition':
                         create_chart_bars(title=f'% DM entered per {column} for condition {self.condition} and '
                                                 f'gender {self.gender} and rounds {round_number}',
@@ -1923,6 +1943,8 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.expert_answer_vs_ep()
     data_analysis_obj.analyze_expert_answer()
     data_analysis_obj.set_all_history_measures()
+    data_analysis_obj.time_spent_analysis()
+    data_analysis_obj.pct_entered_graph()
     data_analysis_obj.print_pairs()
     data_analysis_obj.set_expert_answer_scores_reviews_len_verbal_cond()
     data_analysis_obj.compare_experts_choices_per_condition()
@@ -1932,13 +1954,11 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.how_much_pay()
     data_analysis_obj.sender_answer_analysis()
     data_analysis_obj.bonus_analysis()
-    data_analysis_obj.time_spent_analysis()
     data_analysis_obj.define_total_payoff_no_partner_timeout()
     data_analysis_obj.effectiveness_measure()
     data_analysis_obj.expert_payoff_analysis()
     data_analysis_obj.define_prob_status_for_dm()
     data_analysis_obj.pct_entered_file()
-    data_analysis_obj.pct_entered_graph()
     # data_analysis_obj.plot_expected_analysis()
     # data_analysis_obj.anaylze_zero_one_accurate()
     # data_analysis_obj.not_zero_one_changed_to_zero_one()

@@ -294,11 +294,11 @@ def combine_models_results(folder_list: list):
     """Combine models results to one excel"""
     all_files_results = dict()
     all_models_results = pd.DataFrame()
-    skip = True
+    skip = False
     if not skip:
         for folder in folder_list:
             folder_path = os.path.join(base_directory, 'logs', folder)
-            for inner_folder in listdir(folder_path):
+            for inner_folder in listdir(folder_path):  # fold_number
                 if inner_folder == '.DS_Store':
                     continue
                 files_path = join(folder_path, inner_folder, 'excel_models_results')
@@ -307,11 +307,12 @@ def combine_models_results(folder_list: list):
                     print(f'load file {file}')
                     df = pd.read_excel(os.path.join(files_path, file), sheet_name='Model results', skiprows=[0],
                                        index_col=0)
+                    df = df.assign(fold=inner_folder)
                     all_files_results[f'{folder}_{file}'] = df
 
-        joblib.dump(all_files_results, os.path.join(base_directory, 'logs', 'all_server_results.pkl'))
+        joblib.dump(all_files_results, os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.pkl'))
     else:
-        all_files_results = joblib.load(os.path.join(base_directory, 'logs', 'all_server_results.pkl'))
+        all_files_results = joblib.load(os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.pkl'))
 
     for key, value in all_files_results.items():
         value.index = [key]*value.shape[0]
@@ -319,7 +320,38 @@ def combine_models_results(folder_list: list):
 
     # all_files_results = pd.DataFrame.from_dict(all_files_results, orient='index')
     # all_files_results = all_files_results.drop_duplicates()
-    all_models_results.to_csv(os.path.join(base_directory, 'logs', 'all_server_results.csv'))
+    all_models_results.to_csv(os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.csv'))
+
+
+def combine_models_all_results(folder_list: list):
+    """Combine models results to one excel"""
+    all_files_results = dict()
+    all_models_results = pd.DataFrame()
+    skip = False
+    if not skip:
+        for folder in folder_list:
+            folder_path = os.path.join(base_directory, 'logs', folder)
+            for inner_folder in listdir(folder_path):
+                if inner_folder == '.DS_Store':
+                    continue
+                files_path = join(folder_path, inner_folder, 'excel_models_results')
+                print(f'load file {files_path}')
+                df = pd.read_excel(os.path.join(files_path, f'Results_{inner_folder}_all_models.xlsx'),
+                                   sheet_name='All models results', skiprows=[0], index_col=0)
+                df = df.assign(fold=inner_folder)
+                all_files_results[f'{folder}_{inner_folder}_all_models'] = df
+
+        joblib.dump(all_files_results, os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.pkl'))
+    else:
+        all_files_results = joblib.load(os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.pkl'))
+
+    for key, value in all_files_results.items():
+        value.index = [key]*value.shape[0]
+        all_models_results = pd.concat([all_models_results, value], sort='False')
+
+    # all_files_results = pd.DataFrame.from_dict(all_files_results, orient='index')
+    # all_files_results = all_files_results.drop_duplicates()
+    all_models_results.to_csv(os.path.join(base_directory, 'logs', f'all_server_results_{folder_list}.csv'))
 
 
 # @ray.remote
@@ -374,6 +406,33 @@ def eval_model(folder_list: list, fold_num: int):
     return all_models_results
 
 
+def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measure: str, sheet_name: str='Sheet1'):
+    all_results = pd.read_excel(file_name, sheet_name=sheet_name)
+    all_rounds_all_raisha = all_results.loc[(all_results.Raisha == raishas) & (all_results.Round == rounds)]
+    all_rounds_all_raisha = all_rounds_all_raisha.loc[~all_rounds_all_raisha.model_num.isin([181, 187])]
+    all_model_types = all_rounds_all_raisha.model_type.unique()
+    all_best_results = defaultdict(dict)
+    for fold in range(6):
+        best_results = defaultdict(dict)
+        for model_type in all_model_types:
+            data = all_rounds_all_raisha.loc[(all_rounds_all_raisha.model_type == model_type) &
+                                             (all_rounds_all_raisha.fold == f'fold_{fold}')]
+            if data.empty:
+                print(f'data empty for model_type {model_type} and fold {fold}')
+                continue
+            argmin_index = data[measure].argmin()
+            data = data.loc[argmin_index]
+            best_results[model_type] = {f'Best {measure} for fold {fold}': data[measure],
+                                        f'Best Model number for fold {fold}': data.model_num,
+                                        f'Best Model name for fold {fold}': data.model_name}
+        all_best_results = update_default_dict(all_best_results, best_results)
+
+    all_best_results = pd.DataFrame.from_dict(all_best_results).T
+    all_best_results.index.name = 'model_type'
+    all_best_results.to_excel(os.path.join(base_directory, 'logs', 'best_models.xlsx'))
+    return all_best_results
+
+
 def main(log_directory: str, model_output_file_name: str, final_total_payoff_prediction_column_name: str,
          total_payoff_label_column_name: str):
     if 'csv' in model_output_file_name:
@@ -387,12 +446,15 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 
 if __name__ == '__main__':
-    final_results = pd.DataFrame()
+    main_file_name = (os.path.join(base_directory, 'logs', 'all_results_fix_with_new_03_05.xlsx'))
+    select_best_model_per_type(main_file_name, raishas='All_raishas', rounds='All_rounds', measure='RMSE')
 
-    for fold in range(6):
-        curr_df = eval_model(['compare_prediction_models_22_04_2020_23_32',
-                              'compare_prediction_models_24_04_2020_15_58'], fold)
-        final_results = pd.concat([final_results, curr_df], sort='False')
+    # final_results = pd.DataFrame()
+    #
+    # for fold in range(6):
+    #     curr_df = eval_model(['compare_prediction_models_22_04_2020_23_32',
+    #                           'compare_prediction_models_24_04_2020_15_58'], fold)
+    #     final_results = pd.concat([final_results, curr_df], sort='False')
 
     # ray.init()
     # final_results = pd.DataFrame()
@@ -403,10 +465,12 @@ if __name__ == '__main__':
     # for curr_df in all_ready_lng:
     #     final_results = pd.concat([final_results, curr_df], sort='False')
 
-    final_results.to_csv(os.path.join(base_directory, 'logs', 'per_round_results.csv'))
+    # final_results.to_csv(os.path.join(base_directory, 'logs', 'per_round_results.csv'))
 
-    # combine_models_results(['compare_prediction_models_22_04_2020_23_32',
-    #                         'compare_prediction_models_24_04_2020_15_58'])
+    # combine_models_results([])
+    # combine_models_all_results(['compare_prediction_models_30_04_2020_14_29_new_baseline',
+    #                             'compare_prediction_models_30_04_2020_07_34_new_crf',
+    #                             'compare_prediction_models_29_04_2020_23_59'])
 
     # log_directory_main = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/' \
     #                      'language_prediction/logs/LSTMDatasetReader_100_epochs_5_folds_04_03_2020_11_46_40'

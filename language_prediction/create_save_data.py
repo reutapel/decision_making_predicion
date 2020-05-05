@@ -30,8 +30,8 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.5
-alpha_global = 0.5
+alpha_text = 0.0
+alpha_global = 0.8
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
@@ -566,10 +566,6 @@ class CreateSaveData:
                 #                         (data[columns] > 0).sum(axis=1)) / (self.number_of_rounds+1 -
                 # data[global_raisha])
                 # else:
-                if self.predict_first_round:
-                    rounds = list(range(1, 11))
-                else:
-                    rounds = list(range(2, 11))
                 for i in rounds:  # the raishas are 0-9
                     data.loc[data.raisha == i-1, self.label] =\
                         self.data.loc[(self.data.pair_id == pair) &
@@ -611,7 +607,7 @@ class CreateSaveData:
         self.final_data.to_csv(os.path.join(save_data_directory, f'{file_name}.csv'), index=False)
         joblib.dump(self.final_data, os.path.join(save_data_directory, f'{file_name}.pkl'))
 
-        print(f'Finish creating manual features data: {file_name}')
+        print(f'Finish creating manual features data: {file_name}.pkl')
         logging.info('Finish creating manual features data')
 
         return
@@ -1003,6 +999,7 @@ class CreateSaveData:
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = round_raisha_data
 
                     else:
+                        # no history at all
                         if not self.use_all_history and not self.use_all_history_average and \
                                 not self.use_all_history_text and not self.use_all_history_text_average:  # no -1 need
                             round_raisha_data = copy.deepcopy(data_pair_no_history)
@@ -1454,25 +1451,25 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'bert_embedding'
+    features_to_use = 'manual_binary_features'
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': True,
-                   'use_prev_round_label': True,
+                   'use_prev_round_label': False,
                    'use_manual_features': True,
-                   'use_all_history_average': True,
+                   'use_all_history_average': False,
                    'use_all_history': False,
                    'use_all_history_text_average': True,
                    'use_all_history_text': False,
                    'saifa_average_text': False,
-                   'no_saifa_text': False,
+                   'no_saifa_text': True,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
-                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
-                   'transformer_model': False,   # for transformer models-we need to create features also for the raisha
+                   'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
+                   'transformer_model': True,   # for transformer models-we need to create features also for the raisha
                    'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,
@@ -1497,7 +1494,7 @@ def main():
     use_seq = False
     use_crf = False
     use_crf_raisha = True
-    string_labels = False  # labels are string --> for LSTM model
+    string_labels = True  # labels are string --> for LSTM and transformer model
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']

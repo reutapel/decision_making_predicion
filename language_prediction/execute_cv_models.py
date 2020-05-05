@@ -490,22 +490,22 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_{self.fold}_folds_'
             f'{self.lstm_hidden_dim}_hidden_dim_%d_%m_%Y_%H_%M_%S'), self.fold_dir)
         try:
-            if 'turn' in model_type and 'avg' not in model_type:
+            if 'turn' in model_type:
                 self.predict_seq = True
-                self.predict_avg_total_payoff = False
-            elif'avg' in model_type and 'turn' not in model_type:
+            else:
                 self.predict_seq = False
+
+            if 'avg' in model_type:
                 self.predict_avg_total_payoff = True
-            elif 'turn' in model_type and 'avg' in model_type:
-                self.predict_seq = True
-                self.predict_avg_total_payoff = True
-                self.avg_loss = float(hyper_parameters_dict['avg_loss'])
-                self.turn_loss = float(hyper_parameters_dict['turn_loss'])
-            elif 'turn_linear' in model_type:
-                self.predict_seq = True
+            else:
                 self.predict_avg_total_payoff = False
-                if 'linear_hidden_dim' in hyper_parameters_dict.keys():
-                    self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
+
+            if 'avg_loss' in hyper_parameters_dict.keys():
+                self.avg_loss = float(hyper_parameters_dict['avg_loss'])
+            if 'turn_loss' in hyper_parameters_dict.keys():
+                self.turn_loss = float(hyper_parameters_dict['turn_loss'])
+            if 'linear_hidden_dim' in hyper_parameters_dict.keys():
+                self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return

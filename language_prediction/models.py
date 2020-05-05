@@ -731,105 +731,6 @@ class AttentionSoftMaxLayer(Model):
         return output
 
 
-# class LSTMFixTextFeaturesDecisionResultModel(Model):
-#     """
-#     This is a LSTM model that predict the class for each 't'
-#     """
-#     def __init__(self,
-#                  encoder: Seq2SeqEncoder,
-#                  metrics_dict: dict,
-#                  vocab: Vocabulary) -> None:
-#         super(LSTMFixTextFeaturesDecisionResultModel, self).__init__(vocab)
-#         self.encoder = encoder
-#         self.hidden2tag = LinearLayer(input_size=encoder.get_output_dim(),
-#                                       output_size=vocab.get_vocab_size('labels'))
-#         self.metrics = metrics_dict
-#         self.predictions = defaultdict(dict)
-#         self._epoch = 0
-#         self._first_pair = None
-#
-#     def forward(self,
-#                 sequence_review: torch.Tensor,
-#                 metadata: list,
-#                 labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
-#
-#         if self._first_pair is not None:
-#             if self._first_pair == metadata[0]['pair_id']:
-#                 self._epoch += 1
-#         else:
-#             self._first_pair = metadata[0]['pair_id']
-#
-#         mask = get_text_field_mask({'tokens': sequence_review})
-#         encoder_out = self.encoder(sequence_review, mask)
-#         decision_logits = self.hidden2tag(encoder_out)
-#         output = {'decision_logits': decision_logits}
-#         if labels is not None:
-#             for metric_name, metric in self.metrics.items():
-#                 metric(decision_logits, labels, mask)
-#             output['loss'] = sequence_cross_entropy_with_logits(decision_logits, labels, mask)
-#
-#         self.predictions = save_predictions_seq_models(prediction_df=self.predictions, mask=mask,
-#                                                        predictions=output['decision_logits'], gold_labels=labels,
-#                                                        metadata=metadata, epoch=self._epoch, is_train=self.training)
-#
-#         return output
-#
-#     def get_metrics(self, train=True, reset: bool = False) -> Dict[str, float]:
-#         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
-
-
-# class LSTMAttentionFixTextFeaturesDecisionResultModel(Model):
-#     """
-#     This is a LSTM model that predict the saifa average payoff
-#     """
-#     # TODO:  create dataset reader that its label is the saifa average payoff
-#     def __init__(self,
-#                  encoder: Seq2SeqEncoder,
-#                  metrics_dict: dict,
-#                  vocab: Vocabulary,
-#                  attention: Attention=DotProductAttention) -> None:
-#         super(LSTMAttentionFixTextFeaturesDecisionResultModel, self).__init__(vocab)
-#         self.encoder = encoder
-#         self.attention = attention
-#         self.regressor = LinearLayer(input_size=10, output_size=1)
-#         self.metrics = metrics_dict
-#         self.predictions = pd.DataFrame()
-#         self._epoch = 0
-#         self._first_pair = None
-#         self.attention_vector = torch.randn(encoder.get_output_dim(), requires_grad=True)
-#         self.mse_loss = nn.MSELoss()
-#
-#     def forward(self,
-#                 sequence_review: torch.Tensor,
-#                 metadata: list,
-#                 labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
-#
-#         if self._first_pair is not None:
-#             if self._first_pair == metadata[0]['pair_id']:
-#                 self._epoch += 1
-#         else:
-#             self._first_pair = metadata[0]['pair_id']
-#
-#         mask = get_text_field_mask({'tokens': sequence_review})
-#         encoder_out = self.encoder(sequence_review, mask)
-#         attention_output = self.attention(self.attention_vector, encoder_out, mask)
-#         decision_logits = self.regressor(attention_output)
-#         output = {'decision_logits': decision_logits}
-#         if labels is not None:
-#             for metric_name, metric in self.metrics.items():
-#                 metric(decision_logits, labels, mask)
-#             output['loss'] = self.mse_loss(decision_logits, labels)
-#
-#         self.predictions = save_predictions(prediction_df=self.predictions, predictions=output['decision_logits'],
-#                                             gold_labels=labels, metadata=metadata, epoch=self._epoch,
-#                                             is_train=self.training)
-#
-#         return output
-#
-#     def get_metrics(self, train=True, reset: bool = False) -> Dict[str, float]:
-#         return {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics.items()}
-
-
 class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
     """
     This is a LSTM model that predict the class for each 't' and the average total payoff of the saifa (2 losses)
@@ -901,8 +802,10 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         encoder_out = self.encoder(sequence_review, mask)
         if self.predict_seq:
             if self.linear_layer is not None:
-                encoder_out = self.linear_layer(encoder_out)  # add linear layer before hidden2tag
-            decision_logits = self.hidden2tag(encoder_out)
+                encoder_out_linear = self.linear_layer(encoder_out)  # add linear layer before hidden2tag
+                decision_logits = self.hidden2tag(encoder_out_linear)
+            else:
+                decision_logits = self.hidden2tag(encoder_out)
             output['decision_logits'] = decision_logits
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,
                                                                predictions=output['decision_logits'],
