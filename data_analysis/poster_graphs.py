@@ -133,6 +133,88 @@ import scipy.stats
 #     fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
 
+"""Expert average payoff"""
+colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
+markers = [".", "x", "v", "1"]
+verbal_eap = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
+numerical_eap = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
+num_only_eap = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
+both_eap = [79, 73, 64, 69, 65, 78, 86, 72, 79, 73]
+numerical_eap = [value/100 for value in numerical_eap]
+num_only_eap = [value/100 for value in num_only_eap]
+both_eap = [value/100 for value in both_eap]
+verbal_eap = [value/100 for value in verbal_eap]
+index = list(range(1, 11))
+decision_data = pd.DataFrame({
+    f'Verbal: average percentage: {round(sum(verbal_eap)/ len(verbal_eap), 2)}': verbal_eap,
+    f'Numerical: average percentage: {round(sum(numerical_eap)/ len(numerical_eap), 2)}': numerical_eap,
+    f'Only Numeric: average percentage: {round(sum(num_only_eap)/ len(num_only_eap), 2)}': num_only_eap,
+    f'Numeric + Verbal: average percentage: {round(sum(both_eap)/ len(both_eap), 2)}': both_eap}, index=index)
+plt.figure(figsize=(10, 5))
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5), color=colors)
+plt.title("Expert Payoff Throughout the Experiment", fontsize=15)
+plt.xlabel('Trial Number', fontsize=15)
+plt.ylabel("% Decision Makers", fontsize=15)
+rects = ax2.patches
+ax2.legend(loc='lower center', shadow=True)
+autolabel(rects, ax2, rotation='vertical', max_height=1, convert_to_int=False, fontsize=8)
+ax2.set_yticks([0, 0.20, 0.40, 0.60, 0.80, 0.100])
+plt.show()
+fig_to_save = ax2.get_figure()
+fig_to_save.savefig('Expert average payoff.png', bbox_inches='tight')
+
+# plot
+fig1, ax20 = plt.subplots()
+numerical_eap = [value/100 for value in numerical_eap]
+num_only_eap = [value/100 for value in num_only_eap]
+both_eap = [value/100 for value in both_eap]
+verbal_eap = [value/100 for value in verbal_eap]
+ax20.plot(index, numerical_eap, color=colors[1], label='Expert-both-DM-Number', marker=markers[1], linestyle='-')
+ax20.plot(index, num_only_eap, color=colors[2], label='Expert-Number-DM-Number', marker=markers[2], linestyle='-')
+ax20.plot(index, both_eap, color=colors[3], label='Expert-both-DM-both', marker=markers[3], linestyle='-')
+ax20.plot(index, verbal_eap, color=colors[3], label='Expert-both-DM-Verbal', marker=markers[0], linestyle='-')
+
+
+# plt.title("The Experts Average Payoff Throughout the Experiment")
+plt.xlabel('Round Number', fontsize=10)
+plt.ylabel("Experts Average Payoff", fontsize=10)
+ax20.legend(loc='upper right', shadow=True, fontsize=8)
+# plt.xticks(range(4, 11))
+plt.xticks(index)
+plt.show()
+fig1.savefig('Expert_average_payoff_graph.png', bbox_inches='tight')
+
+
+"""Check significant"""
+numeric_data = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
+                           'data_analysis/analysis/text_exp_2_tests/num_only/linear_scores.csv')
+both_data = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/decision_prediction/'
+                        'data_analysis/analysis/text_exp_2_tests/both/linear_scores.csv')
+
+linear_score_dm_ev_statistic = scipy.stats.f_oneway(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
+print('linear_score_dm_ev')
+print(np.var(numeric_data.linear_score_dm_ev), np.var(both_data.linear_score_dm_ev))
+linear_score_dm_ev_kruskal = scipy.stats.kruskal(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
+linear_score_dm_ev_ttest = scipy.stats.ttest_ind(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
+print(f'ANOVA test: {linear_score_dm_ev_statistic},\nKruskal test: {linear_score_dm_ev_kruskal}\n'
+      f'T_test: {linear_score_dm_ev_ttest}')
+
+linear_expert_payoff_statistic = scipy.stats.f_oneway(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
+print('linear_expert_payoff')
+print(np.var(numeric_data.linear_expert_payoff), np.var(both_data.linear_expert_payoff))
+linear_expert_payoff_kruskal = scipy.stats.kruskal(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
+linear_expert_payoff_ttest = scipy.stats.ttest_ind(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
+print(f'ANOVA test: {linear_expert_payoff_statistic},\nKruskal test: {linear_expert_payoff_kruskal}\n'
+      f'{linear_expert_payoff_ttest}')
+
+linear_sum_statistic = scipy.stats.f_oneway(numeric_data.linear_sum, both_data.linear_sum)
+print('linear_sum')
+print(np.var(numeric_data.linear_sum), np.var(both_data.linear_sum))
+linear_sum_kruskal = scipy.stats.kruskal(numeric_data.linear_sum, both_data.linear_sum)
+linear_sum_ttest = scipy.stats.ttest_ind(numeric_data.linear_sum, both_data.linear_sum)
+print(f'ANOVA test: {linear_sum_statistic},\nKruskal test: {linear_sum_kruskal}\nT_test: {linear_sum_ttest}')
+
+
 """P(Enter) as a function of the experts numerical estimate"""
 x = [2.5, 3.3, 3.8, 4.2, 5, 5.4, 5.8, 6.3, 7.1, 7.5, 7.9, 8.3, 8.8, 9.2, 9.6, 10]
 rounds_dict = {
@@ -142,220 +224,260 @@ rounds_dict = {
         'num_experts': [22, 52, 17, 61, 9, 15, 166, 158, 66, 77, 37, 274, 177, 431, 658, 1669],
         'both_experts': [3, 5, 2, 12, 1, 0, 33, 21, 14, 12, 2, 30, 31, 75, 102, 249],
         'verbal_p_enter': [0.06, 0.08, 0.19, 0.09, 0.09, 0.15, 0.22, 0.19, 0.54, 0.69, 0.34, 0.65, 0.71, 0.8, 0.76, 0.85],
-        'verbal_experts': [17, 37, 16, 55, 11, 26, 187, 189, 67, 55, 29, 237, 156, 430, 717, 1835]},
+        'verbal_experts': [17, 37, 16, 55, 11, 26, 187, 189, 67, 55, 29, 237, 156, 430, 717, 1835],
+        'only_num_p_enter': [0.0, 0.33, 0.29, 0.36, 0.0, 0.0, 0.3, 0.29, 0.5, 0.57, 0.5, 0.73, 0.81, 0.88, 0.85, 0.91],
+        'only_num_experts': [2, 9, 7, 11, 1, 2, 10, 35, 16, 30, 18, 52, 42, 77, 126, 148]},
     'round 1': {
         'num_p_enter': [0.33, 0.0, 0.0, 0.25, 0.5, 0.8, 0.42, 0.62, 1.0, 0.94, 0.62, 0.94, 1.0, 0.91, 0.93, 0.95],
         'both_p_enter': [None, 1.0, None, None, None, None, None, 0.67, 0.5, 0.33, None, 0.78, 1.0, 0.78, 0.75, 0.9],
         'num_experts': [3, 2, 2, 4, 2, 5, 12, 13, 4, 18, 8, 32, 18, 47, 72, 148],
         'both_experts': [0, 1, 0, 0, 0, 0, 0, 3, 2, 3, 0, 9, 4, 9, 8, 20],
         'verbal_p_enter': [0.0, 0.0, 0.4, 0.18, None, 0.0, 0.45, 0.15, 0.33, 1.0, 0.67, 0.7, 0.76, 0.92, 0.86, 0.93],
-        'verbal_experts': [2, 3, 5, 11, 0, 1, 20, 26, 3, 6, 3, 20, 17, 49, 85, 153]},
+        'verbal_experts': [2, 3, 5, 11, 0, 1, 20, 26, 3, 6, 3, 20, 17, 49, 85, 153],
+        'only_num_p_enter': [None, 0.0, 1.0, 0.5, None, None, None, None, 1.0, 0.88, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        'only_num_experts': [0, 1, 1, 2, 0, 0, 0, 0, 2, 8, 1, 5, 5, 5, 14, 15]},
     'round 2': {
         'num_p_enter': [0.0, 0.4, 0.0, 0.12, None, 0.5, 0.56, 0.26, 0.67, 1.0, 1.0, 0.78, 0.86, 0.84, 0.89, 0.92],
         'both_p_enter': [None, None, 0.0, 0.0, None, None, 0.0, 0.5, None, 0.33, 1.0, None, 1.0, 0.75, 0.62, 1.0],
         'num_experts': [1, 5, 5, 8, 0, 2, 18, 19, 9, 3, 3, 32, 21, 45, 65, 155],
         'both_experts': [0, 0, 1, 4, 0, 0, 3, 2, 0, 3, 1, 0, 4, 8, 8, 26],
         'verbal_p_enter': [0.0, 0.25, 0.0, 0.11, None, None, 0.22, 0.27, 0.5, 0.57, 1.0, 0.74, 0.65, 0.74, 0.81, 0.81],
-        'verbal_experts': [2, 4, 3, 9, 0, 0, 32, 33, 12, 7, 1, 34, 20, 31, 78, 143]},
+        'verbal_experts': [2, 4, 3, 9, 0, 0, 32, 33, 12, 7, 1, 34, 20, 31, 78, 143],
+        'only_num_p_enter': [None, None, 0.0, 0.67, None, None, 0.33, 0.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.83, 0.8, 1.0],
+        'only_num_experts': [0, 0, 1, 3, 0, 0, 3, 3, 2, 1, 2, 5, 2, 18, 5, 14]},
+
     'round 3': {
         'num_p_enter': [0.0, 0.5, 0.0, 0.15, None, 0.0, 0.2, 0.18, 0.14, 0.75, 1.0, 0.83, 0.54, 0.87, 0.88, 0.89],
         'both_p_enter': [None, None, None, None, 0.0, None, 0.14, 0.5, None, 0.0, None, 0.57, 0.75, 0.75, 0.62, 0.88],
         'num_experts': [3, 4, 1, 13, 0, 1, 15, 11, 7, 4, 3, 18, 13, 45, 57, 196],
         'both_experts': [0, 0, 0, 0, 1, 0, 7, 2, 0, 1, 0, 7, 4, 12, 8, 17],
         'verbal_p_enter': [0.0, 0.0, None, 0.0, None, 0.2, 0.1, 0.21, 0.67, 0.43, None, 0.86, 0.78, 0.8, 0.79, 0.88],
-        'verbal_experts': [6, 1, 0, 5, 0, 5, 10, 14, 6, 7, 0, 22, 18, 41, 62, 207]},
+        'verbal_experts': [6, 1, 0, 5, 0, 5, 10, 14, 6, 7, 0, 22, 18, 41, 62, 207],
+        'only_num_p_enter': [None, 1.0, None, None, None, None, 0.0, 0.29, 0.0, 0.4, 1.0, 0.71, 1.0, 0.8, 0.64, 0.8],
+        'only_num_experts': [0, 1, 0, 0, 0, 0, 2, 7, 1, 5, 1, 7, 4, 5, 11, 15]},
+
     'round 4': {
         'num_p_enter': [0.0, 0.0, 0.5, 0.25, 0.0, 1.0, 0.41, 0.4, 0.67, 0.67, 1.0, 0.62, 0.78, 0.81, 0.85, 0.9],
         'both_p_enter': [None, None, None, 0.0, None, None, 0.5, 0.0, 0.25, None, None, 0.0, 1.0, 0.78, 0.7, 0.96],
         'num_experts': [1, 6, 2, 4, 2, 1, 17, 10, 6, 6, 5, 26, 32, 47, 67, 158],
         'both_experts': [0, 0, 0, 3, 0, 0, 4, 2, 4, 0, 0, 2, 1, 9, 10, 24],
         'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.09, 0.27, 0.43, 1.0, 0.0, 0.6, 0.85, 0.78, 0.78, 0.85],
-        'verbal_experts': [2, 5, 2, 5, 2, 1, 22, 15, 7, 2, 3, 15, 13, 32, 79, 202]},
+        'verbal_experts': [2, 5, 2, 5, 2, 1, 22, 15, 7, 2, 3, 15, 13, 32, 79, 202],
+        'only_num_p_enter': [None, 0.5, 0.33, 0.0, None, None, 0.5, 0.0, None, 0.5, 1.0, 0.5, 0.5, 1.0, 0.78, 1.0],
+        'only_num_experts': [0, 2, 3, 3, 0, 0, 2, 3, 0, 4, 1, 2, 6, 6, 18, 8]},
+
     'round 5': {
         'num_p_enter': [0.25, 0.17, None, 0.0, 0.0, None, 0.25, 0.27, 0.5, 0.5, 1.0, 0.76, 0.7, 0.86, 0.84, 0.9],
         'both_p_enter': [0.0, 0.0, 0.0, 0.0, None, None, 0.0, None, 0.0, 0.0, None, 1.0, 0.67, 0.8, 0.67, 0.81],
         'num_experts': [4, 6, 0, 5, 3, 0, 20, 15, 6, 10, 1, 34, 23, 35, 76, 152],
         'both_experts': [1, 2, 1, 2, 0, 0, 1, 0, 2, 1, 0, 4, 3, 5, 12, 26],
         'verbal_p_enter': [0.0, 0.11, 0.0, 0.4, None, 0.0, 0.31, 0.21, 0.75, 0.83, 0.0, 0.62, 0.89, 0.85, 0.76, 0.86],
-        'verbal_experts': [1, 9, 1, 5, 0, 2, 16, 19, 4, 6, 4, 24, 9, 53, 71, 180]},
+        'verbal_experts': [1, 9, 1, 5, 0, 2, 16, 19, 4, 6, 4, 24, 9, 53, 71, 180],
+        'only_num_p_enter': [None, 0.0, None, 0.0, None, 0.0, 1.0, 0.67, 0.5, 0.0, 1.0, 1.0, 1.0, 1.0, 0.88, 0.85],
+        'only_num_experts': [0, 3, 0, 2, 0, 1, 1, 3, 2, 1, 2, 5, 3, 7, 8, 20]},
+
     'round 6': {
         'num_p_enter': [0.5, 0.14, 0.0, 0.25, None, None, 0.35, 0.45, 0.71, 0.5, 0.67, 0.7, 0.6, 0.74, 0.85, 0.86],
         'both_p_enter': [0.0, None, None, None, None, None, 0.33, 0.33, 0.67, 1.0, None, 0.0, 1.0, 0.5, 0.85, 0.9],
         'num_experts': [4, 7, 1, 4, 0, 0, 31, 22, 7, 4, 3, 27, 15, 38, 71, 156],
         'both_experts': [1, 0, 0, 0, 0, 0, 3, 3, 3, 1, 0, 1, 4, 2, 13, 29],
         'verbal_p_enter': [0.0, 0.2, None, 0.0, 0.0, 0.0, 0.6, 0.1, 0.62, 0.86, 0.8, 0.45, 0.62, 0.79, 0.67, 0.81],
-        'verbal_experts': [1, 5, 0, 4, 2, 2, 10, 10, 8, 7, 5, 33, 13, 34, 81, 193]},
+        'verbal_experts': [1, 5, 0, 4, 2, 2, 10, 10, 8, 7, 5, 33, 13, 34, 81, 193],
+        'only_num_p_enter': [0.0, None, 0.0, None, None, None, None, 0.0, 0.0, 0.67, 0.0, 0.5, 0.67, 0.83, 0.91, 0.89],
+        'only_num_experts': [1, 0, 1, 0, 0, 0, 0, 6, 1, 3, 1, 6, 3, 6, 11, 19]},
+
     'round 7': {
         'num_p_enter': [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.27, 0.36, 0.33, 0.0, 1.0, 0.65, 0.94, 0.84, 0.83, 0.92],
         'both_p_enter': [None, None, None, 0.0, None, None, 0.5, 0.0, 1.0, 0.0, None, 1.0, 0.5, 1.0, 1.0, 0.93],
         'num_experts': [2, 6, 1, 2, 1, 1, 11, 11, 6, 6, 1, 31, 18, 38, 75, 179],
         'both_experts': [0, 0, 0, 1, 0, 0, 4, 1, 1, 1, 0, 1, 2, 5, 14, 28],
         'verbal_p_enter': [None, 0.0, 0.0, 0.0, 0.0, 0.33, 0.33, 0.18, 0.67, 0.6, 0.0, 0.52, 0.64, 0.91, 0.75, 0.86],
-        'verbal_experts': [0, 4, 1, 4, 2, 3, 9, 17, 3, 5, 3, 21, 14, 47, 73, 200]},
+        'verbal_experts': [0, 4, 1, 4, 2, 3, 9, 17, 3, 5, 3, 21, 14, 47, 73, 200],
+        'only_num_p_enter': [None, 0.0, 0.0, None, 0.0, None, 0.0, 0.33, 0.0, 1.0, 0.5, 0.8, 0.83, 0.92, 0.9, 0.85],
+        'only_num_experts': [0, 1, 1, 0, 1, 0, 1, 3, 1, 1, 4, 5, 6, 12, 10, 13]},
+
     'round 8': {
         'num_p_enter': [None, 0.0, 0.0, 0.29, None, 0.5, 0.25, 0.25, 0.5, 0.69, 0.8, 0.6, 0.58, 0.82, 0.66, 0.91],
         'both_p_enter': [0.0, 0.0, None, 0.0, None, None, 0.0, 0.0, None, 0.0, None, 1.0, 1.0, 1.0, 0.8, 0.88],
         'num_experts': [0, 7, 2, 7, 0, 2, 16, 16, 4, 13, 5, 15, 12, 40, 56, 192],
         'both_experts': [1, 1, 0, 2, 0, 0, 6, 1, 0, 1, 0, 1, 4, 12, 5, 25],
         'verbal_p_enter': [1.0, 0.0, 0.0, 0.0, None, 0.14, 0.15, 0.15, 0.56, 0.8, 0.33, 0.64, 0.62, 0.67, 0.76, 0.82],
-        'verbal_experts': [1, 1, 1, 7, 0, 7, 26, 13, 9, 5, 3, 22, 16, 46, 58, 191]},
+        'verbal_experts': [1, 1, 1, 7, 0, 7, 26, 13, 9, 5, 3, 22, 16, 46, 58, 191],
+        'only_num_p_enter': [None, None, None, 1.0, None, 0.0, None, 0.5, 0.75, 1.0, None, 0.6, 0.83, 1.0, 1.0, 0.87],
+        'only_num_experts': [0, 0, 0, 1, 0, 1, 0, 2, 4, 1, 0, 5, 6, 6, 18, 15]},
+
     'round 9': {
         'num_p_enter': [1.0, 0.0, 0.0, 0.17, None, 1.0, 0.21, 0.38, 0.5, 0.17, 0.67, 0.69, 0.82, 0.82, 0.9, 0.88],
         'both_p_enter': [None, None, None, None, None, None, 0.0, 0.0, 1.0, 0.0, 0.0, None, 0.5, 1.0, 1.0, 0.86],
         'num_experts': [1, 2, 1, 6, 0, 1, 14, 13, 8, 6, 3, 26, 17, 40, 52, 196],
         'both_experts': [0, 0, 0, 0, 0, 0, 1, 3, 2, 1, 1, 0, 4, 7, 11, 28],
         'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.08, 0.0, 0.33, 0.67, 0.2, 0.71, 0.65, 0.69, 0.77, 0.84],
-        'verbal_experts': [1, 2, 2, 3, 2, 2, 24, 13, 3, 3, 5, 24, 23, 54, 62, 184]},
+        'verbal_experts': [1, 2, 2, 3, 2, 2, 24, 13, 3, 3, 5, 24, 23, 54, 62, 184],
+        'only_num_p_enter': [None, 1.0, None, None, None, None, 0.0, 0.33, 0.0, 0.0, 0.2, 0.86, 0.67, 0.75, 0.69, 0.92],
+        'only_num_experts': [0, 1, 0, 0, 0, 0, 1, 3, 2, 1, 5, 7, 3, 8, 16, 12]},
+
     'round 10': {
         'num_p_enter': [0.33, 0.0, 0.5, 0.38, 0.0, 0.0, 0.25, 0.43, 0.44, 0.29, 0.4, 0.67, 0.62, 0.84, 0.79, 0.89],
         'both_p_enter': [None, 0.0, None, None, None, None, 0.25, 0.0, None, None, None, 0.6, 1.0, 1.0, 0.85, 0.85],
         'num_experts': [3, 7, 2, 8, 1, 2, 12, 28, 9, 7, 5, 33, 8, 56, 67, 137],
         'both_experts': [0, 1, 0, 0, 0, 0, 4, 4, 0, 0, 0, 5, 1, 6, 13, 26],
         'verbal_p_enter': [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.17, 0.21, 0.5, 0.43, 0.5, 0.73, 0.77, 0.86, 0.65, 0.84],
-        'verbal_experts': [1, 3, 1, 2, 3, 3, 18, 29, 12, 7, 2, 22, 13, 43, 68, 182]},
+        'verbal_experts': [1, 3, 1, 2, 3, 3, 18, 29, 12, 7, 2, 22, 13, 43, 68, 182],
+        'only_num_p_enter': [0.0, None, None, None, None, None, None, 0.6, 0.0, 0.2, 0.0, 0.2, 0.75, 0.75, 0.87, 0.94],
+        'only_num_experts': [1, 0, 0, 0, 0, 0, 0, 5, 1, 5, 1, 5, 4, 4, 15, 17]},
+
 }
-colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
-markers = ["s", ".", "v", "1"]
+colors = {'verbal': 'pink', 'num': 'forestgreen', 'only_num': 'crimson', 'both': 'darkblue'}
+markers = {'verbal': 's', 'num': '.', 'only_num': 'v', 'both': 'd'}
 
 # first 5 and last 5:
 combine_est_8 = True
-for rng, in_title in [[range(1, 6), 'First'], [range(6, 11), 'Last']]:
-    fig100, ax100 = plt.subplots()
-    num_p_enter_list = list()
-    both_p_enter_list = list()
-    num_experts_list = list()
-    both_experts_list = list()
-    verbal_p_enter_list = list()
-    verbal_experts_list = list()
+for condition, condition_name in [['verbal', 'Expert-both-DM-Verbal'], ['only_num', 'Expert-num-DM-num']]:
+    for rng, in_title in [[range(1, 6), 'First'], [range(6, 11), 'Last']]:
+        fig100, ax100 = plt.subplots()
+        num_p_enter_list = list()
+        both_p_enter_list = list()
+        num_experts_list = list()
+        both_experts_list = list()
+        verbal_p_enter_list = list()
+        verbal_experts_list = list()
 
-    for idx in range(len(x)):
-        values = [rounds_dict[f'round {j}']['num_p_enter'][idx] for j in rng]
-        values = [x for x in values if x is not None]
-        num_p_enter_list.append(round(np.average(values), 2))
-        num_experts_list.append(sum([rounds_dict[f'round {j}']['num_experts'][idx] for j in rng]))
+        for idx in range(len(x)):
+            values = [rounds_dict[f'round {j}']['num_p_enter'][idx] for j in rng]
+            values = [x for x in values if x is not None]
+            num_p_enter_list.append(round(np.average(values), 2))
+            num_experts_list.append(sum([rounds_dict[f'round {j}']['num_experts'][idx] for j in rng]))
 
-        values = [rounds_dict[f'round {z}']['both_p_enter'][idx] for z in rng]
-        values = [x for x in values if x is not None]
-        both_p_enter_list.append(round(np.average(values), 2))
-        both_experts_list.append(sum([rounds_dict[f'round {j}']['both_experts'][idx] for j in rng]))
+            values = [rounds_dict[f'round {z}']['both_p_enter'][idx] for z in rng]
+            values = [x for x in values if x is not None]
+            both_p_enter_list.append(round(np.average(values), 2))
+            both_experts_list.append(sum([rounds_dict[f'round {j}']['both_experts'][idx] for j in rng]))
 
-        values = [rounds_dict[f'round {j}']['verbal_p_enter'][idx] for j in rng]
-        values = [x for x in values if x is not None]
-        verbal_p_enter_list.append(round(np.average(values), 2))
-        verbal_experts_list.append(sum([rounds_dict[f'round {j}']['verbal_experts'][idx] for j in rng]))
+            values = [rounds_dict[f'round {j}'][f'{condition}_p_enter'][idx] for j in rng]
+            values = [x for x in values if x is not None]
+            verbal_p_enter_list.append(round(np.average(values), 2))
+            verbal_experts_list.append(sum([rounds_dict[f'round {j}'][f'{condition}_experts'][idx] for j in rng]))
 
-    ax100.plot(x, num_p_enter_list, color=colors[1], label='Expert-both-DM-Number', marker=markers[1], linestyle='-')
-    ax100.plot(x, both_p_enter_list, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
-    ax100.plot(x, verbal_p_enter_list, color=colors[0], label='Expert-both-DM-Verbal', marker=markers[0], linestyle='-')
+        ax100.plot(x, num_p_enter_list, color=colors['num'], label='Expert-both-DM-Number', marker=markers['num'],
+                   linestyle='-')
+        ax100.plot(x, both_p_enter_list, color=colors['both'], label='Expert-both-DM-both', marker=markers['both'],
+                   linestyle='-')
+        ax100.plot(x, verbal_p_enter_list, color=colors[condition], label=condition_name, marker=markers[condition],
+                   linestyle='-')
 
-    plt.title(f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in {in_title} 5 rounds")
-    plt.xlabel('Experts Numerical Estimate', fontsize=15)
-    plt.ylabel('P(DM chose hotel)', fontsize=15)
-    ax100.legend(loc='upper left', shadow=True, fontsize=8)
-    plt.xticks(x)
-    # Add a table at the bottom of the axes
-    the_table = ax100.table(cellText=[x, num_experts_list, both_experts_list, verbal_experts_list],
-                            rowLabels=['Experts Numerical Estimate', 'Expert-both-DM-Number', 'Expert-both-DM-both',
-                                       'Expert-both-DM-Verbal'],
-                            bbox=(0, -0.5, 1, 0.3))
-    the_table.auto_set_font_size(False)
-    the_table.set_fontsize(10)
-    # plt.yticks(range(4, 11))
-    plt.show()
-    fig100.savefig(f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{in_title}_5_rounds.png',
-                   bbox_inches='tight')
-
-    if combine_est_8:
-        fig1000, ax1000 = plt.subplots()
-        combine_dict = {
-            'est<8': {'num_p_enter_list': [], 'both_p_enter_list': [], 'num_experts_list': [], 'both_experts_list': [],
-                      'verbal_p_enter_list': [], 'verbal_experts_list': []},
-            'est>8': {'num_p_enter_list': [], 'both_p_enter_list': [], 'num_experts_list': [], 'both_experts_list': [],
-                      'verbal_p_enter_list': [], 'verbal_experts_list': []}
-        }
-        for idx, est in enumerate(x):
-            if est < 8:
-                if not np.isnan(num_p_enter_list[idx]):
-                    combine_dict['est<8']['num_p_enter_list'].append(num_p_enter_list[idx])
-                if not np.isnan(both_p_enter_list[idx]):
-                    combine_dict['est<8']['both_p_enter_list'].append(both_p_enter_list[idx])
-                if not np.isnan(verbal_p_enter_list[idx]):
-                    combine_dict['est<8']['verbal_p_enter_list'].append(verbal_p_enter_list[idx])
-                combine_dict['est<8']['num_experts_list'].append(num_experts_list[idx])
-                combine_dict['est<8']['both_experts_list'].append(both_experts_list[idx])
-                combine_dict['est<8']['verbal_experts_list'].append(verbal_experts_list[idx])
-            else:
-                if not np.isnan(num_p_enter_list[idx]):
-                    combine_dict['est>8']['num_p_enter_list'].append(num_p_enter_list[idx])
-                if not np.isnan(both_p_enter_list[idx]):
-                    combine_dict['est>8']['both_p_enter_list'].append(both_p_enter_list[idx])
-                if not np.isnan(verbal_p_enter_list[idx]):
-                    combine_dict['est>8']['verbal_p_enter_list'].append(verbal_p_enter_list[idx])
-                combine_dict['est>8']['num_experts_list'].append(num_experts_list[idx])
-                combine_dict['est>8']['both_experts_list'].append(both_experts_list[idx])
-                combine_dict['est>8']['verbal_experts_list'].append(verbal_experts_list[idx])
-
-        num_p_enter_list = [round(np.average(combine_dict['est<8']['num_p_enter_list']), 2),
-                            round(np.average(combine_dict['est>8']['num_p_enter_list']), 2)]
-        both_p_enter_list = [round(np.average(combine_dict['est<8']['both_p_enter_list']), 2),
-                             round(np.average(combine_dict['est>8']['both_p_enter_list']), 2)]
-        verbal_p_enter_list = [round(np.average(combine_dict['est<8']['verbal_p_enter_list']), 2),
-                               round(np.average(combine_dict['est>8']['verbal_p_enter_list']), 2)]
-        num_experts_list = [np.sum(combine_dict['est<8']['num_experts_list']),
-                            np.sum(combine_dict['est>8']['num_experts_list'])]
-        both_experts_list = [np.sum(combine_dict['est<8']['both_experts_list']),
-                             np.sum(combine_dict['est>8']['both_experts_list'])]
-        verbal_experts_list = [np.sum(combine_dict['est<8']['verbal_experts_list']),
-                               np.sum(combine_dict['est>8']['verbal_experts_list'])]
-        ax1000.plot(['est<8', 'est>8'], num_p_enter_list, color=colors[1], label='Expert-both-DM-Number',
-                    marker=markers[1], linestyle='-')
-        ax1000.plot(['est<8', 'est>8'], both_p_enter_list, color=colors[3], label='Expert-both-DM-both',
-                    marker=markers[2], linestyle='-')
-        ax1000.plot(['est<8', 'est>8'], verbal_p_enter_list, color=colors[0], label='Expert-both-DM-Verbal',
-                    marker=markers[0], linestyle='-')
-
-        plt.title(
-            f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in {in_title} 5 rounds")
+        plt.title(f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in {in_title}"
+                  f" 5 rounds")
         plt.xlabel('Experts Numerical Estimate', fontsize=15)
         plt.ylabel('P(DM chose hotel)', fontsize=15)
-        ax1000.legend(loc='upper left', shadow=True, fontsize=8)
-        # plt.xticks(['est<8', 'est>8'])
+        ax100.legend(loc='upper left', shadow=True, fontsize=8)
+        plt.xticks(x)
         # Add a table at the bottom of the axes
-        num_experts_list = [(num_experts_list[idx], num_p_enter_list[idx]) for idx in
-                            range(len(num_p_enter_list))]
-        both_experts_list = [(both_experts_list[idx], both_p_enter_list[idx]) for idx in
-                             range(len(both_p_enter_list))]
-        verbal_experts_list = [(verbal_experts_list[idx], verbal_p_enter_list[idx]) for idx in
-                               range(len(verbal_p_enter_list))]
-        the_table = ax1000.table(
-            cellText=[['est<8', 'est>8'], num_experts_list, both_experts_list, verbal_experts_list],
-            rowLabels=['Experts Numerical Estimate', 'Expert-both-DM-Number', 'Expert-both-DM-both',
-                       'Expert-both-DM-Verbal'], bbox=(0, -0.5, 1, 0.3))
+        the_table = ax100.table(cellText=[x, num_experts_list, both_experts_list, verbal_experts_list],
+                                rowLabels=['Experts Numerical Estimate', 'Expert-both-DM-Number', 'Expert-both-DM-both',
+                                           condition_name],
+                                bbox=(0, -0.5, 1, 0.3))
         the_table.auto_set_font_size(False)
         the_table.set_fontsize(10)
-        plt.yticks([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+        # plt.yticks(range(4, 11))
         plt.show()
-        fig1000.savefig(
-            f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{in_title}_5_rounds_est_8.png',
-            bbox_inches='tight')
+        fig100.savefig(f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{in_title}_'
+                       f'5_rounds_with_condition_{condition}.png', bbox_inches='tight')
 
+        if combine_est_8:
+            fig1000, ax1000 = plt.subplots()
+            combine_dict = {
+                'est<8': {'num_p_enter_list': [], 'both_p_enter_list': [], 'num_experts_list': [],
+                          'both_experts_list': [], f'{condition}_p_enter_list': [], f'{condition}_experts_list': []},
+                'est>8': {'num_p_enter_list': [], 'both_p_enter_list': [], 'num_experts_list': [],
+                          'both_experts_list': [], f'{condition}_p_enter_list': [], f'{condition}_experts_list': []}
+            }
+            for idx, est in enumerate(x):
+                if est < 8:
+                    if not np.isnan(num_p_enter_list[idx]):
+                        combine_dict['est<8']['num_p_enter_list'].append(num_p_enter_list[idx])
+                    if not np.isnan(both_p_enter_list[idx]):
+                        combine_dict['est<8']['both_p_enter_list'].append(both_p_enter_list[idx])
+                    if not np.isnan(verbal_p_enter_list[idx]):
+                        combine_dict['est<8'][f'{condition}_p_enter_list'].append(verbal_p_enter_list[idx])
+                    combine_dict['est<8']['num_experts_list'].append(num_experts_list[idx])
+                    combine_dict['est<8']['both_experts_list'].append(both_experts_list[idx])
+                    combine_dict['est<8'][f'{condition}_experts_list'].append(verbal_experts_list[idx])
+                else:
+                    if not np.isnan(num_p_enter_list[idx]):
+                        combine_dict['est>8']['num_p_enter_list'].append(num_p_enter_list[idx])
+                    if not np.isnan(both_p_enter_list[idx]):
+                        combine_dict['est>8']['both_p_enter_list'].append(both_p_enter_list[idx])
+                    if not np.isnan(verbal_p_enter_list[idx]):
+                        combine_dict['est>8'][f'{condition}_p_enter_list'].append(verbal_p_enter_list[idx])
+                    combine_dict['est>8']['num_experts_list'].append(num_experts_list[idx])
+                    combine_dict['est>8']['both_experts_list'].append(both_experts_list[idx])
+                    combine_dict['est>8'][f'{condition}_experts_list'].append(verbal_experts_list[idx])
 
-for rounds in rounds_dict.keys():
-    fig100, ax100 = plt.subplots()
-    num_p_enter = rounds_dict[rounds]['num_p_enter']
-    both_p_enter = rounds_dict[rounds]['both_p_enter']
-    ax100.plot(x, num_p_enter, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
-    ax100.plot(x, both_p_enter, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
+            num_p_enter_list = [round(np.average(combine_dict['est<8']['num_p_enter_list']), 2),
+                                round(np.average(combine_dict['est>8']['num_p_enter_list']), 2)]
+            both_p_enter_list = [round(np.average(combine_dict['est<8']['both_p_enter_list']), 2),
+                                 round(np.average(combine_dict['est>8']['both_p_enter_list']), 2)]
+            verbal_p_enter_list = [round(np.average(combine_dict['est<8'][f'{condition}_p_enter_list']), 2),
+                                   round(np.average(combine_dict['est>8'][f'{condition}_p_enter_list']), 2)]
+            num_experts_list = [np.sum(combine_dict['est<8']['num_experts_list']),
+                                np.sum(combine_dict['est>8']['num_experts_list'])]
+            both_experts_list = [np.sum(combine_dict['est<8']['both_experts_list']),
+                                 np.sum(combine_dict['est>8']['both_experts_list'])]
+            verbal_experts_list = [np.sum(combine_dict['est<8'][f'{condition}_experts_list']),
+                                   np.sum(combine_dict['est>8'][f'{condition}_experts_list'])]
+            ax1000.plot(['est<8', 'est>8'], num_p_enter_list, color=colors['num'], label='Expert-both-DM-Number',
+                        marker=markers['num'], linestyle='-')
+            ax1000.plot(['est<8', 'est>8'], both_p_enter_list, color=colors['both'], label='Expert-both-DM-both',
+                        marker=markers['both'], linestyle='-')
+            ax1000.plot(['est<8', 'est>8'], verbal_p_enter_list, color=colors[condition], label=condition_name,
+                        marker=markers[condition], linestyle='-')
 
-    plt.title(f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in {rounds}")
-    plt.xlabel('Experts Numerical Estimate', fontsize=15)
-    plt.ylabel('P(DM chose hotel)', fontsize=15)
-    ax100.legend(loc='upper left', shadow=True, fontsize=8)
-    plt.xticks(x)
-    # plt.yticks(range(4, 11))
-    plt.show()
-    fig100.savefig(f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{rounds}.png',
-                   bbox_inches='tight')
+            plt.title(f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in "
+                      f"{in_title} 5 rounds")
+            plt.xlabel('Experts Numerical Estimate', fontsize=15)
+            plt.ylabel('P(DM chose hotel)', fontsize=15)
+            ax1000.legend(loc='upper left', shadow=True, fontsize=8)
+            # plt.xticks(['est<8', 'est>8'])
+            # Add a table at the bottom of the axes
+            num_experts_list = [(num_experts_list[idx], num_p_enter_list[idx]) for idx in
+                                range(len(num_p_enter_list))]
+            both_experts_list = [(both_experts_list[idx], both_p_enter_list[idx]) for idx in
+                                 range(len(both_p_enter_list))]
+            verbal_experts_list = [(verbal_experts_list[idx], verbal_p_enter_list[idx]) for idx in
+                                   range(len(verbal_p_enter_list))]
+            the_table = ax1000.table(
+                cellText=[['est<8', 'est>8'], num_experts_list, both_experts_list, verbal_experts_list],
+                rowLabels=['Experts Numerical Estimate', 'Expert-both-DM-Number', 'Expert-both-DM-both',
+                           condition_name], bbox=(0, -0.5, 1, 0.3))
+            the_table.auto_set_font_size(False)
+            the_table.set_fontsize(10)
+            plt.yticks([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+            plt.show()
+            fig1000.savefig(
+                f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{in_title}_5_rounds_est_8_'
+                f'with_condition_{condition}.png', bbox_inches='tight')
+
+    for rounds in rounds_dict.keys():
+        fig100, ax100 = plt.subplots()
+        num_p_enter = rounds_dict[rounds]['num_p_enter']
+        both_p_enter = rounds_dict[rounds]['both_p_enter']
+        condition_3_p_enter = rounds_dict[rounds][f'{condition}_p_enter']
+        ax100.plot(x, num_p_enter, color=colors['num'], label='Expert-both-DM-Number', marker=markers['num'],
+                   linestyle='-')
+        ax100.plot(x, both_p_enter, color=colors['both'], label='Expert-both-DM-both', marker=markers['both'],
+                   linestyle='-')
+        ax100.plot(x, condition_3_p_enter, color=colors[condition], label=condition_name, marker=markers[condition],
+                   linestyle='-')
+
+        plt.title(f"P(DM chose hotel) as a function of the experts\nnumerical estimate by Condition in {rounds}")
+        plt.xlabel('Experts Numerical Estimate', fontsize=15)
+        plt.ylabel('P(DM chose hotel)', fontsize=15)
+        ax100.legend(loc='upper left', shadow=True, fontsize=8)
+        plt.xticks(x)
+        # plt.yticks(range(4, 11))
+        plt.show()
+        fig100.savefig(f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{rounds}_with_'
+                       f'condition_{condition}.png', bbox_inches='tight')
 
 
 """score evaluation task"""
@@ -592,7 +714,7 @@ plt.xlabel('Round Number')
 plt.ylabel("Decision Makers' Average Expected Payoff")
 rects = ax2.patches
 autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
-ax2.legend(loc='lower center', shadow=True)
+ax2.legend(loc='upper left', shadow=True)
 plt.show()
 fig_to_save = ax2.get_figure()
 fig_to_save.savefig('Decision maker average expected payoff.png', bbox_inches='tight')
@@ -614,49 +736,33 @@ plt.xticks(index)
 plt.show()
 fig1.savefig('Decision_maker_average_expected_payoff_graph.png', bbox_inches='tight')
 
-"""Expert average payoff"""
-verbal_eap = [77, 66, 77, 71, 74, 70, 75, 67, 68, 68]
-numerical_eap = [88, 79, 76, 78, 75, 72, 78, 73, 78, 71]
-num_only_eap = [97, 90, 70, 71, 75, 70, 87, 78, 57, 85]
-both_eap = [79, 73, 64, 69, 65, 78, 86, 72, 79, 73]
+
+"""Histogram of sum of payoffs"""
+verbal_sum = [i + j for i, j in zip(verbal_dmaep, verbal_eap)]
+numerical_sum = [i + j for i, j in zip(numerical_dmaep, numerical_eap)]
+num_only_sum = [i + j for i, j in zip(num_only_dmaep, num_only_eap)]
+both_sum = [i + j for i, j in zip(both_dmaep, both_eap)]
+
 index = list(range(1, 11))
-decision_data = pd.DataFrame({f'Verbal: average percentage: {sum(verbal_eap)/ len(verbal_eap)}': verbal_eap,
-                              f'Numerical: average percentage: {sum(numerical_eap)/ len(numerical_eap)}': numerical_eap,
-                              f'Only Numeric: average percentage: {sum(num_only_eap)/ len(num_only_eap)}': num_only_eap,
-                              f'Numeric + Verbal: average percentage: {sum(both_eap)/ len(both_eap)}': both_eap},
-                             index=index)
+decision_data = pd.DataFrame({
+    f'Verbal: sum payoffs: {round(sum(verbal_sum)/ len(verbal_sum), 2)}': verbal_sum,
+    f'Numerical: sum payoffs: {round(sum(numerical_sum)/ len(numerical_sum), 2)}': numerical_sum,
+    f'Only Numeric: sum payoffs: {round(sum(num_only_sum)/ len(num_only_sum), 2)}': num_only_sum,
+    f'Numeric + Verbal: sum payoffs: {round(sum(both_sum)/ len(both_sum), 2)}': both_sum},
+    index=index)
 plt.figure(figsize=(10, 5))
 ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
                          color=['forestgreen', 'darkblue', 'crimson', 'pink'])
-plt.title("Percentage of Decision Makers that Chose the Hotel Option Throughout the Experiment", fontsize=15)
-plt.xlabel('Trial Number', fontsize=15)
-plt.ylabel("% Decision Makers", fontsize=15)
+plt.title("The Sum of Decision Makers' Average Expected Payoff\nand Experts' Average Payoff Throughout the Experiment")
+plt.xlabel('Round Number')
+plt.ylabel("Sum of Decision Makers' Average Expected Payoff\nand Experts' Average Payoff")
 rects = ax2.patches
+autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
 ax2.legend(loc='lower center', shadow=True)
-autolabel(rects, ax2, rotation='horizontal', max_height=89, convert_to_int=False, fontsize=10)
-ax2.set_yticks([0, 20, 40, 60, 80, 100])
 plt.show()
 fig_to_save = ax2.get_figure()
-fig_to_save.savefig('Expert average payoff.png', bbox_inches='tight')
-
-# plot
-fig1, ax20 = plt.subplots()
-numerical_eap = [value/100 for value in numerical_eap]
-num_only_eap = [value/100 for value in num_only_eap]
-both_eap = [value/100 for value in both_eap]
-ax20.plot(index, numerical_eap, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
-ax20.plot(index, num_only_eap, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
-ax20.plot(index, both_eap, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
-
-# plt.title("The Experts Average Payoff Throughout the Experiment")
-plt.xlabel('Round Number', fontsize=10)
-plt.ylabel("Experts Average Payoff", fontsize=10)
-ax20.legend(loc='upper right', shadow=True, fontsize=8)
-# plt.xticks(range(4, 11))
-plt.xticks(index)
-plt.show()
-fig1.savefig('Expert_average_payoff_graph.png', bbox_inches='tight')
-
+fig_to_save.savefig("The Sum of Decision Makers' Average Expected Payoff and Experts' Average Payoff.png",
+                    bbox_inches='tight')
 
 """Linear Regression num-num_only"""
 fig4, ax4 = plt.subplots()
@@ -757,27 +863,3 @@ plt.show()
 fig_to_save = ax3.get_figure()
 fig_to_save.savefig('predictions performances.png', bbox_inches='tight')
 
-
-"""Check significant"""
-numeric_data = pd.read_csv('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
-                           'analysis/text_exp_2_tests/numeric/linear_scores.csv')
-both_data = pd.read_csv('/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/data_analysis/'
-                        'analysis/text_exp_2_tests/both/linear_scores.csv')
-
-linear_score_dm_ev_statistic = scipy.stats.f_oneway(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
-print('linear_score_dm_ev')
-print(np.var(numeric_data.linear_score_dm_ev), np.var(both_data.linear_score_dm_ev))
-linear_score_dm_ev_kruskal = scipy.stats.kruskal(numeric_data.linear_score_dm_ev, both_data.linear_score_dm_ev)
-print(f'ANOVA test: {linear_score_dm_ev_statistic},\nKruskal test: {linear_score_dm_ev_kruskal}')
-
-linear_expert_payoff_statistic = scipy.stats.f_oneway(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
-print('linear_expert_payoff')
-print(np.var(numeric_data.linear_expert_payoff), np.var(both_data.linear_expert_payoff))
-linear_expert_payoff_kruskal = scipy.stats.kruskal(numeric_data.linear_expert_payoff, both_data.linear_expert_payoff)
-print(f'ANOVA test: {linear_expert_payoff_statistic},\nKruskal test: {linear_expert_payoff_kruskal}')
-
-linear_sum_statistic = scipy.stats.f_oneway(numeric_data.linear_sum, both_data.linear_sum)
-print('linear_sum')
-print(np.var(numeric_data.linear_sum), np.var(both_data.linear_sum))
-linear_sum_kruskal = scipy.stats.kruskal(numeric_data.linear_sum, both_data.linear_sum)
-print(f'ANOVA test: {linear_sum_statistic},\nKruskal test: {linear_sum_kruskal}')

@@ -334,7 +334,7 @@ def combine_models_all_results(folder_list: list):
             for inner_folder in listdir(folder_path):
                 if inner_folder == '.DS_Store':
                     continue
-                files_path = join(folder_path, inner_folder, 'excel_models_results')
+                files_path = join(folder_path, inner_folder)  # , 'excel_models_results')
                 print(f'load file {files_path}')
                 df = pd.read_excel(os.path.join(files_path, f'Results_{inner_folder}_all_models.xlsx'),
                                    sheet_name='All models results', skiprows=[0], index_col=0)
@@ -446,7 +446,7 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 
 if __name__ == '__main__':
-    main_file_name = (os.path.join(base_directory, 'logs', 'all_results_fix_with_new_03_05.xlsx'))
+    main_file_name = (os.path.join(base_directory, 'logs', 'all_results_07_05.xlsx'))
     select_best_model_per_type(main_file_name, raishas='All_raishas', rounds='All_rounds', measure='RMSE')
 
     # final_results = pd.DataFrame()
@@ -467,11 +467,9 @@ if __name__ == '__main__':
 
     # final_results.to_csv(os.path.join(base_directory, 'logs', 'per_round_results.csv'))
 
-    # combine_models_results([])
-    # combine_models_all_results(['compare_prediction_models_30_04_2020_14_29_new_baseline',
-    #                             'compare_prediction_models_30_04_2020_07_34_new_crf',
-    #                             'compare_prediction_models_29_04_2020_23_59'])
-
+    # combine_models_results(['compare_prediction_models_03_05_2020_11_53'])
+    # combine_models_all_results(['compare_prediction_models_04_05_2020_19_15'])
+    #
     # log_directory_main = '/Users/reutapel/Documents/Technion/Msc/thesis/experiment/decision_prediction/' \
     #                      'language_prediction/logs/LSTMDatasetReader_100_epochs_5_folds_04_03_2020_11_46_40'
     # model_output_file_name_main = 'predictions.csv'

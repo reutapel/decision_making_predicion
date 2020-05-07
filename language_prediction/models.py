@@ -7,7 +7,7 @@ from allennlp.models import Model
 from allennlp.modules.text_field_embedders import TextFieldEmbedder
 from allennlp.modules.seq2vec_encoders import Seq2VecEncoder
 from allennlp.modules import FeedForward
-from allennlp.modules.matrix_attention import MatrixAttention
+from allennlp.modules.matrix_attention import MatrixAttention, DotProductMatrixAttention
 from allennlp.data.vocabulary import Vocabulary
 from allennlp.nn.regularizers.regularizer_applicator import RegularizerApplicator
 from allennlp.nn.initializers import InitializerApplicator
@@ -708,7 +708,7 @@ class AttentionSoftMaxLayer(Model):
                  matrix_attention_layer: MatrixAttention,
                  vocab=Vocabulary()):
         super(AttentionSoftMaxLayer, self).__init__(vocab)
-        self.matrix_attention_layer = matrix_attention_layer
+        self.matrix_attention_layer = matrix_attention_layer()
         self.softmax = nn.Softmax(dim=-1)
         self.masked_softmax = masked_softmax
 
@@ -746,12 +746,14 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  predict_seq: bool=True,
                  predict_avg_total_payoff: bool=True,
                  batch_size: int=10,
-                 linear_dim=None) -> None:
+                 linear_dim=None,
+                 dropout: float=None) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=encoder.get_output_dim(), output_size=linear_dim)
+                self.linear_layer = LinearLayer(input_size=encoder.get_output_dim(), output_size=linear_dim,
+                                                dropout=dropout)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
@@ -760,7 +762,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
-            self.regressor = LinearLayer(input_size=10, output_size=1)
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
             self.attention_vector = torch.randn((batch_size, encoder.get_output_dim()), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
@@ -865,6 +867,79 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         return return_metrics
 
 
+class AttentionFixTextFeaturesDecisionResultModel(Model):
+    """
+    This is an Attention model that predict the average total payoff of the saifa
+    """
+    def __init__(self,
+                 metrics_dict_reg: dict,
+                 vocab: Vocabulary,
+                 input_size: int,
+                 attention: Attention = AttentionSoftMaxLayer(DotProductMatrixAttention),
+                 batch_size: int=10,
+                 dropout: float=None,
+                 regularizer: RegularizerApplicator = None,) -> None:
+        super(AttentionFixTextFeaturesDecisionResultModel, self).__init__(vocab)
+
+        self.attention = attention
+        self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+        self.attention_vector = torch.randn((batch_size, input_size), requires_grad=True)
+        if torch.cuda.is_available():
+            self.attention_vector = self.attention_vector.cuda()
+        self.mse_loss = nn.MSELoss()
+
+        self.metrics_dict_reg = metrics_dict_reg
+        self.reg_predictions = pd.DataFrame()
+        self._epoch = 0
+        self._first_pair = None
+
+    def forward(self,
+                sequence_review: torch.Tensor,
+                metadata: dict,
+                seq_labels: torch.Tensor = None,
+                reg_labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+
+        if self._first_pair is not None:
+            if self._first_pair == metadata[0]['pair_id']:
+                self._epoch += 1
+        else:
+            self._first_pair = metadata[0]['pair_id']
+
+        output = dict()
+        mask = get_text_field_mask({'tokens': sequence_review})
+        if torch.cuda.is_available():  # change to cuda
+            mask = mask.cuda()
+            sequence_review = sequence_review.cuda()
+            if reg_labels is not None:
+                reg_labels = reg_labels.cuda()
+
+        # attention_output = self.attention(self.attention_vector, sequence_review, mask)
+        attention_output = self.attention(sequence_review, mask)
+        regression_output = self.regressor(attention_output)
+        output['regression_output'] = regression_output
+        self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
+                                                predictions=output['regression_output'], gold_labels=reg_labels,
+                                                metadata=metadata, epoch=self._epoch, is_train=self.training,
+                                                int_label=False)
+
+        if reg_labels is not None:
+            for metric_name, metric in self.metrics_dict_reg.items():
+                metric(regression_output, reg_labels, mask)
+            output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
+            output['loss'] = output['reg_loss']
+
+        return output
+
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        """
+        merge the 2 metrics to get all the metrics
+        :param reset:
+        :return:
+        """
+        reg_metrics = {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics_dict_reg.items()}
+        return reg_metrics
+
+
 class LinearLayer(nn.Module):
     def __init__(self, input_size, output_size, dropout=None, activation=F.relu):
         super().__init__()
@@ -909,14 +984,18 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                  seq_weight_loss: float = 0.5,
                  reg_weight_loss: float = 0.5,
                  batch_size: int = 9,
-                 linear_dim: int=None
+                 linear_dim: int=None,
                  ):
         super(TransformerFixTextFeaturesDecisionResultModel, self).__init__(vocab)
+        if dropout is None:
+            transformer_dropout = 0.1
+        else:
+            transformer_dropout = dropout
         if custom_encoder is not None:
             self.encoder = custom_encoder
         else:
             encoder_layer = TransformerEncoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim,
-                                                    dropout, activation)
+                                                    transformer_dropout, activation)
             encoder_norm = LayerNorm(input_dim)
             self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
 
@@ -924,7 +1003,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             self.decoder = custom_decoder
         else:
             decoder_layer = TransformerDecoderLayer(input_dim, num_attention_heads, feedforward_hidden_dim,
-                                                    dropout, activation)
+                                                    transformer_dropout, activation)
             decoder_norm = LayerNorm(input_dim)
             self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
 
@@ -946,7 +1025,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
-            self.regressor = LinearLayer(input_size=batch_size, output_size=1)
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
             self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()

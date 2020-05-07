@@ -9,6 +9,7 @@ from datetime import datetime
 import execute_cv_models
 from collections import defaultdict
 import torch
+import copy
 
 
 # define directories
@@ -16,6 +17,32 @@ base_directory = os.path.abspath(os.curdir)
 condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
+
+
+def execute_create_fit_predict_eval_model(
+        function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
+        table_writer, hyper_parameters_dict, excel_models_results, all_models_results):
+    metadata_dict = {'model_num': model_num, 'model_type': model_type, 'model_name': model_name,
+                     'data_file_name': data_file_name, 'hyper_parameters_dict': hyper_parameters_dict}
+    metadata_df = pd.DataFrame.from_dict(metadata_dict, orient='index').T
+    model_class = getattr(execute_cv_models, function_to_run)(
+        model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict, table_writer,
+        data_directory, hyper_parameters_dict, excel_models_results)
+    model_class.load_data_create_model()
+    model_class.fit_predict()
+    results_dict = model_class.eval_model()
+    results_df = pd.DataFrame.from_dict(results_dict).T
+    results_df['raisha_round'] = results_df.index
+    results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
+    results_df = results_df.drop('raisha_round', axis=1)
+    results_df.index = np.zeros(shape=(results_df.shape[0],))
+    results_df = metadata_df.join(results_df)
+    all_models_results = pd.concat([all_models_results, results_df], sort='False')
+    utils.write_to_excel(model_class.model_table_writer, 'Model results', ['Model results'], results_df)
+    model_class.model_table_writer.save()
+    del model_class
+
+    return all_models_results
 
 
 @ray.remote
@@ -50,8 +77,10 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                         datefmt='%H:%M:%S',
                         )
     all_model_types = models_to_compare.model_type.unique()
-    # all_model_types = ['SVMTurn', 'RaishaMajorityBaseline', 'LSTM_avg_turn_linear']
-    # all_model_types = ['Transformer_avg_turn']
+    # all_model_types = ['LSTM_turn', 'LSTM_turn_linear', 'LSTM_avg', 'LSTM_avg_turn', 'Transformer_turn',
+    #                    'Transformer_avg_turn', 'Transformer_turn', 'Transformer_turn_linear', 'Transformer_avg',
+    #                    'Transformer_avg_turn', 'LSTM_avg_turn_linear']
+    # all_model_types = ['Attention_avg']
 
     all_models_results = pd.DataFrame()
     for model_type in all_model_types:  # compare all versions of each model type
@@ -70,9 +99,6 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             function_to_run = row['function_to_run']
             data_file_name = row['data_file_name']
             hyper_parameters_str = row['hyper_parameters']
-            metadata_dict = {'model_num': model_num, 'model_type': model_type, 'model_name': model_name,
-                             'data_file_name': data_file_name, 'hyper_parameters_str': hyper_parameters_str}
-            metadata_df = pd.DataFrame.from_dict(metadata_dict, orient='index').T
             # get hyper parameters as dict
             if type(hyper_parameters_str) == str:
                 hyper_parameters_dict = json.loads(hyper_parameters_str)
@@ -89,23 +115,20 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             # During running it needs to write the predictions to the table_writer and save the trained model with
             # the name: model_name_model_num to the fold_dir.
             # it needs to return a dict with the final results over the evaluation data: {measure_name: measure}
-            model_class = getattr(execute_cv_models, function_to_run)(
-                model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict, table_writer,
-                data_directory, hyper_parameters_dict, excel_models_results)
-            model_class.load_data_create_model()
-            model_class.fit_predict()
-            results_dict = model_class.eval_model()
-            results_df = pd.DataFrame.from_dict(results_dict).T
-            results_df['raisha_round'] = results_df.index
-            results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
-            results_df = results_df.drop('raisha_round', axis=1)
-            results_df.index = np.zeros(shape=(results_df.shape[0],))
-            results_df = metadata_df.join(results_df)
-            all_models_results = pd.concat([all_models_results, results_df], sort='False')
-            utils.write_to_excel(model_class.model_table_writer, 'Model results', ['Model results'], results_df)
-            model_class.model_table_writer.save()
-            del model_class
-            # torch.cuda.empty_cache()
+            if function_to_run == 'ExecuteEvalLSTM':
+                for dropout in [None, 0.1, 0.3, 0.5, 0.7, 0.8, 0.9]:
+                    new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
+                    new_hyper_parameters_dict['dropout'] = dropout
+                    new_model_name = f'{model_name}_dropout_{dropout}'
+                    new_model_num = f'{model_num}_{dropout}'
+                    all_models_results = execute_create_fit_predict_eval_model(
+                        function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name, data_file_name,
+                        fold_split_dict, table_writer, new_hyper_parameters_dict, excel_models_results,
+                        all_models_results)
+            else:
+                all_models_results = execute_create_fit_predict_eval_model(
+                    function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
+                    table_writer, hyper_parameters_dict, excel_models_results, all_models_results)
 
     utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
     table_writer.save()
@@ -130,7 +153,7 @@ def parallel_main():
     all_ready_lng =\
         ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
 
-    # for fold in range(6):
+    # for fold in range(1):
     #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
 
     print(f'Done! {all_ready_lng}')

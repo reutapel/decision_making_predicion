@@ -22,6 +22,7 @@ import torch
 from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper
 from collections import defaultdict
 import copy
+from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 
 
 per_round_predictions_name = 'per_round_predictions'
@@ -55,8 +56,8 @@ class ExecuteEvalModel:
         self.val_pair_ids = self.fold_split_dict['validation']
         self.model_table_writer = pd.ExcelWriter(
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
-        print(f'Create Model: model num: {model_num}, model_type: {model_type}, model_name: {model_name}. '
-              f'Data file name: {data_file_name}')
+        print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
+              f'\nData file name: {data_file_name}')
         logging.info(f'Create Model: model num: {model_num}, model_type: {model_type}, model_name: {model_name}. '
                      f'Data file name: {data_file_name}')
 
@@ -96,7 +97,7 @@ class ExecuteEvalModel:
 
         for table_writer in [self.table_writer, self.model_table_writer]:
             utils.write_to_excel(
-                table_writer, f'Model_{self.model_num}_{sheet_prefix_name}_predictions',
+                table_writer, f'Model_{self.model_num}_{sheet_prefix_name}',
                 headers=[f'{sheet_prefix_name} predictions for model {self.model_num}: {self.model_name} of type '
                          f'{self.model_type} in fold {self.fold}'], data=data_to_save)
 
@@ -476,6 +477,13 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.positional_encoding = hyper_parameters_dict['positional_encoding']
         else:
             self.positional_encoding = 'sinusoidal'
+        if 'dropout' in hyper_parameters_dict.keys():
+            if hyper_parameters_dict['dropout'] is not None:
+                self.dropout = float(hyper_parameters_dict['dropout'])
+            else:
+                self.dropout = None
+        else:
+            self.dropout = None
 
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
@@ -515,7 +523,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         logging.info(f'Load and create Data file name: {self.data_file_name}')
         all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
         # load train data
-        if 'LSTM' in self.model_type:
+        if 'LSTM' in self.model_type or 'Attention' in self.model_type:
             train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids)
             test_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
         elif 'Transformer' in self.model_type:
@@ -557,7 +565,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
                 predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
-                reg_weight_loss=self.avg_loss)
+                reg_weight_loss=self.avg_loss, dropout=self.dropout)
         elif 'Transformer' in self.model_type:
             if 'turn_linear' in self.model_type:
                 self.linear_hidden_dim = int(0.5 * train_reader.input_dim)
@@ -567,12 +575,17 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 batch_size=self.batch_size, input_dim=train_reader.input_dim,
                 feedforward_hidden_dim=int(4 * train_reader.input_dim), num_decoder_layers=self.num_decoder_layers,
                 num_encoder_layers=self.num_encoder_layers, seq_weight_loss=self.turn_loss,
-                reg_weight_loss=self.avg_loss, positional_encoding=self.positional_encoding,
+                reg_weight_loss=self.avg_loss, positional_encoding=self.positional_encoding, dropout=self.dropout
             )
+        elif 'Attention' in self.model_type:
+            input_size = train_reader.num_features
+            self.model = models.AttentionFixTextFeaturesDecisionResultModel(
+                metrics_dict_reg=metrics_dict_reg, vocab=vocab, input_size=input_size, dropout=self.dropout,
+                regularizer=RegularizerApplicator([("", L1Regularizer())]),)
         else:
-            logging.exception(f'Model type should include LSTM or Transformer to use this class')
-            print(f'Model type should include LSTM or Transformer to use this class')
-            raise Exception(f'Model type should include LSTM or Transformer to use this class')
+            logging.exception(f'Model type should include LSTM or Transformer or Attention to use this class')
+            print(f'Model type should include LSTM or Transformer or Attention to use this class')
+            raise Exception(f'Model type should include LSTM or Transformer or Attention to use this class')
 
         print(self.model)
         if torch.cuda.is_available():
