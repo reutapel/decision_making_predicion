@@ -1,9 +1,16 @@
+from collections import defaultdict
 import scipy.stats
 import numpy as np
 import pandas as pd
-from collections import defaultdict
 import os
 import matplotlib.pyplot as plt
+
+base_directory = os.path.abspath(os.curdir)
+data_directory = os.path.join(base_directory, 'results')
+orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
+date_directory = 'text_exp_2_tests'
+data_analysis_directory = os.path.join(orig_data_analysis_directory, date_directory)
+conditions = ['numeric', 'both', 'num_only']
 
 
 all_conditions = ['num_only', 'both', 'verbal', 'numeric']
@@ -364,7 +371,61 @@ class SignificanceTests:
         return
 
 
+class CalculationsForPaper:
+    def __init__(self):
+        self.all_data = defaultdict(pd.DataFrame)
+        for condition in conditions:
+            df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
+            df = df.loc[df.status == 'play']
+            time_spent = pd.read_csv(os.path.join(data_directory, date_directory, condition, 'TimeSpent.csv'))
+            time_spent = time_spent.groupby(by='participant_code').seconds_on_page.sum()
+            if 'seconds_on_page' in df.columns:
+                df = df.drop('seconds_on_page', axis=1)
+            df = df.merge(time_spent, left_on='participant_code', right_index=True)
+            self.all_data[condition] = df
+
+    def number_participants(self):
+        age = list()
+        std_age = list()
+        payment = list()
+        male = list()
+        female = list()
+        participants = list()
+        seconds_on_page = list()
+        for condition in conditions:
+            print(f'Numbers for condition {condition}')
+            condition_data = self.all_data[condition]
+            num_participants = condition_data.participant_code.unique().shape[0]
+            participants.append(num_participants)
+            print(f'Number of participant: {num_participants}')
+            gender = condition_data.groupby(by='player_gender').participant_code.count()
+            male.append(gender.Male)
+            female.append(gender.Female)
+            print(f'Gender split: {gender}')
+            avg_age = condition_data.player_age.mean()
+            age.append(avg_age)
+            cur_std_age = condition_data.player_age.std()
+            std_age.append(cur_std_age)
+            print(f'Average age: {avg_age}, STD: {cur_std_age}')
+            avg_pay = condition_data.total_pay.mean()
+            payment.append(avg_pay)
+            print(f'Average payment: {avg_pay}')
+            avg_time = condition_data.seconds_on_page.mean()/60
+            seconds_on_page.append(avg_time)
+            print(f'Average time: {avg_time}')
+
+        print('Total numbers')
+        print(f'Number of participant {sum(participants)}')
+        print(f'Number of males {sum(male)}')
+        print(f'Number of females {sum(female)}')
+        print(f'Average age: {sum(age)/len(age)}')
+        print(f'Average payment: {sum(payment)/len(payment)}')
+        print(f'Average time: {sum(seconds_on_page)/len(seconds_on_page)}')
+
+
 def main():
+    calculation_obj = CalculationsForPaper()
+    calculation_obj.number_participants()
     tests_obj = SignificanceTests()
     for study in [1, 2]:
         print(f'Significant tests for study {study}')
