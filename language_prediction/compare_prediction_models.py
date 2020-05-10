@@ -90,6 +90,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
             model_num = row['model_num']
             if model_num < 458:
                 continue
+            # if model_num not in [727]:
+            #     continue
             # if (fold == 0 and model_num < 357) or (fold == 1 and model_num < 359) or (fold == 2 and model_num < 360) or\
             #         (fold == 3 and model_num < 360) or (fold == 4 and model_num < 369) or\
             #         (fold == 5 and model_num < 356):

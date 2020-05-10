@@ -875,7 +875,7 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
                  metrics_dict_reg: dict,
                  vocab: Vocabulary,
                  input_size: int,
-                 attention: Attention = AttentionSoftMaxLayer(DotProductMatrixAttention),
+                 attention: Attention = DotProductAttention(),
                  batch_size: int=10,
                  dropout: float=None,
                  regularizer: RegularizerApplicator = None,) -> None:
@@ -913,8 +913,8 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
             if reg_labels is not None:
                 reg_labels = reg_labels.cuda()
 
-        # attention_output = self.attention(self.attention_vector, sequence_review, mask)
-        attention_output = self.attention(sequence_review, mask)
+        attention_output = self.attention(self.attention_vector, sequence_review, mask)
+        # attention_output = self.attention(sequence_review, mask)
         regression_output = self.regressor(attention_output)
         output['regression_output'] = regression_output
         self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
