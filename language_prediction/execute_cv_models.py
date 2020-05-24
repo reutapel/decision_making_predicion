@@ -588,14 +588,19 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             raise Exception(f'Model type should include LSTM or Transformer or Attention to use this class')
 
         print(self.model)
-        if torch.cuda.is_available():
-            cuda_device = 0
-            print('Cuda is available')
-            logging.info('Cuda is available')
+        # if torch.cuda.is_available():
+        cuda_device = 0
+        print('Cuda is available')
+        logging.info('Cuda is available')
 
-            self.model = self.model.cuda(cuda_device)
-        else:
-            cuda_device = -1
+        torch.backends.cudnn.benchmark = True
+
+        self.model = self.model.cuda()
+
+        # else:
+        #     cuda_device = -1
+        #     print('Cuda is not available')
+        #     logging.info('Cuda is not available')
         optimizer = optim.SGD(self.model.parameters(), lr=0.1)
 
         validation_metric = '+Accuracy' if self.predict_seq else '-loss'

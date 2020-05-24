@@ -18,12 +18,15 @@ condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
 run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
 
+os.environ['http_proxy'] = 'some proxy'
+os.environ['https_proxy'] = 'some proxy'
+
 
 def execute_create_fit_predict_eval_model(
         function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
         table_writer, hyper_parameters_dict, excel_models_results, all_models_results):
     metadata_dict = {'model_num': model_num, 'model_type': model_type, 'model_name': model_name,
-                     'data_file_name': data_file_name, 'hyper_parameters_dict': hyper_parameters_dict}
+                     'data_file_name': data_file_name, 'hyper_parameters_str': hyper_parameters_dict}
     metadata_df = pd.DataFrame.from_dict(metadata_dict, orient='index').T
     model_class = getattr(execute_cv_models, function_to_run)(
         model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict, table_writer,
@@ -46,7 +49,7 @@ def execute_create_fit_predict_eval_model(
 
 
 @ray.remote
-def execute_fold_parallel(participants_fold: pd.Series, fold: int):
+def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: str):
     """
     This function get a dict that split the participant to train-val-test (for this fold) and run all the models
     we want to compare --> it train them using the train data and evaluate them using the val data
@@ -55,6 +58,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
     :return:
     """
     # get the train, test, validation participant code for this fold
+    os.environ["CUDA_VISIBLE_DEVICES"] = cuda_device
     fold_split_dict = dict()
     for data_set in ['train', 'test', 'validation']:
         fold_split_dict[data_set] = participants_fold.loc[participants_fold == data_set].index.tolist()
@@ -77,9 +81,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                         datefmt='%H:%M:%S',
                         )
     all_model_types = models_to_compare.model_type.unique()
-    # all_model_types = ['LSTM_turn', 'LSTM_turn_linear', 'LSTM_avg', 'LSTM_avg_turn', 'Transformer_turn',
-    #                    'Transformer_avg_turn', 'Transformer_turn', 'Transformer_turn_linear', 'Transformer_avg',
-    #                    'Transformer_avg_turn', 'LSTM_avg_turn_linear']
+    all_model_types = ['LSTM_turn', 'LSTM_turn_linear', 'LSTM_avg', 'LSTM_avg_turn', 'Transformer_turn',
+                       'Transformer_avg_turn', 'Transformer_turn', 'Transformer_turn_linear', 'Transformer_avg',
+                       'Transformer_avg_turn', 'LSTM_avg_turn_linear']
     # all_model_types = ['Attention_avg']
 
     all_models_results = pd.DataFrame()
@@ -92,9 +96,15 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int):
                 continue
             # if model_num not in [727]:
             #     continue
-            # if (fold == 0 and model_num < 357) or (fold == 1 and model_num < 359) or (fold == 2 and model_num < 360) or\
-            #         (fold == 3 and model_num < 360) or (fold == 4 and model_num < 369) or\
-            #         (fold == 5 and model_num < 356):
+            if (fold == 0 and model_num in range(483, 604)) or (fold == 1 and model_num in range(483, 602)) or \
+                    (fold == 2 and model_num in range(483, 582)) or (fold == 3 and model_num in range(483, 604)) or\
+                    (fold == 4 and model_num in range(483, 587)) or (fold == 5 and model_num in range(483, 582)):
+                continue
+            # if (fold == 0 and ((model_num <= 199) or (model_num in range(238, 257)) or (model_num in range(286, 296))))\
+            #         or (fold == 1 and ((model_num <= 199) or (model_num in range(238, 263)) or
+            #                            (model_num in range(286, 296)))) or\
+            #         (fold == 2 and model_num <= 135) or (fold == 3 and model_num <= 79) or\
+            #         (fold == 4 and model_num <= 126) or (fold == 5 and model_num <= 133):
             #     continue
             model_type = row['model_type']
             model_name = row['model_name']
@@ -151,15 +161,32 @@ def parallel_main():
     participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
     participants_fold_split.index = participants_fold_split.pair_id
     # participants_fold_split = participants_fold_split.iloc[:50]
-    ray.init()
-    all_ready_lng =\
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i) for i in range(6)])
-
     # for fold in range(1):
     #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
 
+    ray.init()
+    all_ready_lng =\
+        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
+                 for j, i in enumerate(range(2))])
+
     print(f'Done! {all_ready_lng}')
     logging.info(f'Done! {all_ready_lng}')
+
+    ray.init()
+    all_ready_lng_1 = \
+        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
+                 for j, i in enumerate(range(2, 4))])
+
+    print(f'Done! {all_ready_lng_1}')
+    logging.info(f'Done! {all_ready_lng_1}')
+
+    ray.init()
+    all_ready_lng_2 =\
+        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
+                 for j, i in enumerate(range(4, 6))])
+
+    print(f'Done! {all_ready_lng_2}')
+    logging.info(f'Done! {all_ready_lng_2}')
 
     return
 

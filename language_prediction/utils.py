@@ -353,10 +353,8 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 
 if __name__ == '__main__':
-    main_file_name = (os.path.join(base_directory, 'logs', 'all_results_07_05.xlsx'))
-    select_best_model_per_type(main_file_name, raishas='All_raishas', rounds='All_rounds', measure='RMSE')
 
-    # final_results = pd.DataFrame()
+    final_results = pd.DataFrame()
     #
     # for fold in range(6):
     #     curr_df = eval_model(['compare_prediction_models_22_04_2020_23_32',

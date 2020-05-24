@@ -133,6 +133,31 @@ import scipy.stats
 #     fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
 
+"""Decision maker average payoff"""
+verbal_dmap = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
+numerical_dmap = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
+num_only_dmap = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
+both_dmap = [0.01, 0.36, 0.14, 0.36, 0.46, 0.46, 0.31, -0.21, 0.24, 0.55]
+
+index = list(range(1, 11))
+decision_data = pd.DataFrame(
+    {f'Verbal: average payoff: {round(sum(verbal_dmap)/ len(verbal_dmap), 2)}': verbal_dmap,
+     f'Numerical: average payoff: {round(sum(numerical_dmap)/ len(numerical_dmap), 2)}': numerical_dmap,
+     f'Only Numeric: average payoff: {round(sum(num_only_dmap)/ len(num_only_dmap), 2)}': num_only_dmap,
+     f'Numeric + Verbal: {round(sum(both_dmap)/ len(both_dmap), 2)}': both_dmap}, index=index)
+plt.figure(figsize=(10, 5))
+ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
+                         color=['forestgreen', 'darkblue', 'crimson', 'pink'])
+plt.title("The Decision Makers' Average Payoff Throughout the Experiment")
+plt.xlabel('Round Number')
+plt.ylabel("Decision Makers' Average Payoff")
+rects = ax2.patches
+autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
+ax2.legend(loc='lower center', shadow=True)
+plt.show()
+fig_to_save = ax2.get_figure()
+fig_to_save.savefig('Decision maker average payoff.png', bbox_inches='tight')
+
 """Expert average payoff"""
 colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
 markers = [".", "x", "v", "1"]
@@ -668,30 +693,6 @@ plt.yticks(range(4, 11))
 plt.show()
 fig1.savefig('The_Communication_Type_Effect_on_the_Experts_Cheating_Level.png', bbox_inches='tight')
 
-"""Decision maker average payoff"""
-verbal_dmap = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
-numerical_dmap = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
-num_only_dmap = [0.06, 0.3, 0.28, 0.08, 0.34, 0.53, 0.12, 0.64, -0.03, 0.32]
-both_dmap = [0.01, 0.36, 0.14, 0.36, 0.46, 0.46, 0.31, -0.21, 0.24, 0.55]
-
-index = list(range(1, 11))
-decision_data = pd.DataFrame(
-    {f'Verbal: average payoff: {round(sum(verbal_dmap)/ len(verbal_dmap), 2)}': verbal_dmap,
-     f'Numerical: average payoff: {round(sum(numerical_dmap)/ len(numerical_dmap), 2)}': numerical_dmap,
-     f'Only Numeric: average payoff: {round(sum(num_only_dmap)/ len(num_only_dmap), 2)}': num_only_dmap,
-     f'Numeric + Verbal: {round(sum(both_dmap)/ len(both_dmap), 2)}': both_dmap}, index=index)
-plt.figure(figsize=(10, 5))
-ax2 = decision_data.plot(kind="bar", stacked=False, rot=0, figsize=(10, 5),
-                         color=['forestgreen', 'darkblue', 'crimson', 'pink'])
-plt.title("The Decision Makers' Average Payoff Throughout the Experiment")
-plt.xlabel('Round Number')
-plt.ylabel("Decision Makers' Average Payoff")
-rects = ax2.patches
-autolabel(rects, ax2, rotation='horizontal', max_height=0.52, convert_to_int=False)
-ax2.legend(loc='lower center', shadow=True)
-plt.show()
-fig_to_save = ax2.get_figure()
-fig_to_save.savefig('Decision maker average payoff.png', bbox_inches='tight')
 
 """Decision maker average expected payoff"""
 verbal_dmaep = [0.31, 0.11, 0.38, 0.47, 0.2, 0.3, 0.32, 0.28, 0.21, 0.12]
