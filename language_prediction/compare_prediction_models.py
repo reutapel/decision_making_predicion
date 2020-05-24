@@ -120,8 +120,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
             if hyper_parameters_dict is not None and 'features_max_size' in hyper_parameters_dict.keys():
                 if int(hyper_parameters_dict['features_max_size']) > 1000:
                     continue
-            # elif hyper_parameters_dict is not None and 'features_max_size' not in hyper_parameters_dict.keys():
-            #     continue
+
             # each function need to get: model_num, fold, fold_dir, model_type, model_name, data_file_name,
             # fold_split_dict, table_writer, data_directory, hyper_parameters_dict.
             # During running it needs to write the predictions to the table_writer and save the trained model with
@@ -160,6 +159,7 @@ def parallel_main():
     # the values will be train/test/validation
     participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
     participants_fold_split.index = participants_fold_split.pair_id
+    """For debug"""
     # participants_fold_split = participants_fold_split.iloc[:50]
     # for fold in range(1):
     #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
