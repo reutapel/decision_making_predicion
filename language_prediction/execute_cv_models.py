@@ -116,10 +116,18 @@ class ExecuteEvalModel:
         if prediction_df is None:
             prediction_df = self.prediction
         # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+        if bin_label is not None:
+            only_bin_label = copy.deepcopy(bin_label['bin_label'])
+        else:
+            only_bin_label = bin_label
+        if bin_predictions is not None:
+            only_bin_predictions = copy.deepcopy(bin_predictions['bin_predictions'])
+        else:
+            only_bin_predictions = bin_predictions
         _, results_dict = utils.calculate_measures_for_continues_labels(
                 prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                 total_payoff_label_column=total_payoff_label_column,
-                bin_label=bin_label, bin_predictions=bin_predictions,
+                bin_label=only_bin_label, bin_predictions=only_bin_predictions,
                 label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                'total future payoff > 2/3'])
         if raisha_column_name in prediction_df.columns:  # do the raisha analysis
@@ -127,10 +135,19 @@ class ExecuteEvalModel:
             all_raisha_dict = defaultdict(dict)
             for raisha in raisha_options:
                 raisha_data = prediction_df.loc[prediction_df[raisha_column_name] == raisha]
+                if bin_label is not None:
+                    raisha_bin_label = bin_label.loc[bin_label[raisha_column_name] == raisha]['bin_label']
+                else:
+                    raisha_bin_label = bin_label
+                if bin_predictions is not None:
+                    raisha_bin_predictions =\
+                        bin_predictions.loc[bin_predictions[raisha_column_name] == raisha]['bin_predictions']
+                else:
+                    raisha_bin_predictions = bin_predictions
                 _, results_dict_raisha = utils.calculate_measures_for_continues_labels(
                     raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                     total_payoff_label_column=total_payoff_label_column,
-                    bin_label=bin_label, bin_predictions=bin_predictions,
+                    bin_label=raisha_bin_label, bin_predictions=raisha_bin_predictions,
                     label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                    'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
                 all_raisha_dict.update(results_dict_raisha)
@@ -588,19 +605,19 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             raise Exception(f'Model type should include LSTM or Transformer or Attention to use this class')
 
         print(self.model)
-        # if torch.cuda.is_available():
-        cuda_device = 0
-        print('Cuda is available')
-        logging.info('Cuda is available')
+        if torch.cuda.is_available():
+            cuda_device = 0
+            print('Cuda is available')
+            logging.info('Cuda is available')
 
-        torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.benchmark = True
 
-        self.model = self.model.cuda()
+            self.model = self.model.cuda()
 
-        # else:
-        #     cuda_device = -1
-        #     print('Cuda is not available')
-        #     logging.info('Cuda is not available')
+        else:
+            cuda_device = -1
+            print('Cuda is not available')
+            logging.info('Cuda is not available')
         optimizer = optim.SGD(self.model.parameters(), lr=0.1)
 
         validation_metric = '+Accuracy' if self.predict_seq else '-loss'
@@ -665,6 +682,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.final_total_payoff_prediction,
                                                                   self.prediction.total_payoff_label,
                                                                   hotel_label_0=self.hotel_label_0)
+            bin_prediction = self.prediction[['raisha']].join(bin_prediction)
+            bin_test_y = self.prediction[['raisha']].join(bin_test_y)
             # self.prediction = self.prediction.merge(bin_test_y, left_index=True, right_index=True)
             # self.prediction = self.prediction.merge(bin_prediction, left_index=True, right_index=True)
             # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta

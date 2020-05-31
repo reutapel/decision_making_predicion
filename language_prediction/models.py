@@ -1099,6 +1099,13 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             where S is the source sequence length, T is the target sequence length, N is the
             batch size, E is the feature number
         """
+
+        if self._first_pair is not None:
+            if self._first_pair == metadata[0]['pair_id']:
+                self._epoch += 1
+        else:
+            self._first_pair = metadata[0]['pair_id']
+
         output = dict()
         if self._sinusoidal_positional_encoding:
             source = add_positional_features(source)

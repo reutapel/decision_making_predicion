@@ -9,7 +9,7 @@ import os
 import logging
 import copy
 from collections import defaultdict
-from os.path import isfile, join
+from os.path import isfile, join, isdir
 import ray
 base_directory = os.path.abspath(os.curdir)
 
@@ -173,6 +173,8 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     :param label_options: list of the label option names
     :param raisha: if we run a raisha analysis this is the raisha we worked with
     :param round_number: for per round analysis
+    :param bin_label: the bin label series, the index is the same as the total_payoff_label_column index
+    :param bin_predictions: the bin predictions series, the index is the same as the total_payoff_label_column index
     :return:
     """
     dict_key = f'{raisha} {round_number}'
@@ -340,6 +342,122 @@ def eval_model(folder_list: list, fold_num: int):
     return all_models_results
 
 
+def eval_model_total_prediction(folder_list: list, fold_num: int, total_payoff: pd.Series):
+    """
+    :param folder_list:
+    :param fold_num:
+    :param total_payoff: total_payoff for this fold
+    :return:
+    """
+    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_compare.xlsx'),
+                                      sheet_name='table_to_load', skiprows=[0])
+    models_to_eval = models_to_compare.loc[models_to_compare.function_to_run == 'ExecuteEvalLSTM']
+    model_nums = models_to_eval.model_num.unique().tolist()
+    all_models_combinations = copy.deepcopy(model_nums)
+    for num in model_nums:
+        for dropout in [None, 0.1, 0.3, 0.5, 0.7, 0.8, 0.9]:
+            all_models_combinations.append(f'{str(num)}_{dropout}')
+    # model_nums = list(range(29, 77)) + list(range(102, 178)) + list(range(190, 222)) + list(range(238, 318)) +\
+    #              list(range(334, 382))
+    all_models_results = list()
+    final_total_payoff_prediction_column = 'final_total_payoff_prediction'
+    total_payoff_label_column = 'total_payoff_label'
+    raisha_column_name = 'raisha'
+
+    for folder in folder_list:
+        # if folder == 'compare_prediction_models_03_05_2020_11_53' and fold == 0:  # already done
+        #     continue
+        folder_path = os.path.join(base_directory, 'logs', folder)
+        inner_folder = f'fold_{fold_num}'
+        if isdir(join(folder_path, inner_folder, 'excel_models_results')):
+            files_path = join(folder_path, inner_folder, 'excel_models_results')
+        elif join(folder_path, inner_folder):
+            files_path = join(folder_path, inner_folder)
+        else:
+            print('No correct directory')
+            return
+        print(f'load from {files_path}')
+        for model_num in all_models_combinations:
+            file_name = f'Results_{inner_folder}_model_{model_num}.xlsx'
+            if isfile(join(files_path, file_name)):
+                print(f'work on model num: {model_num}')
+                xls = pd.ExcelFile(os.path.join(files_path, file_name))
+                if f'Model_{model_num}_reg_predictions' in xls.sheet_names:
+                    df = pd.read_excel(xls, f'Model_{model_num}_reg_predictions', skiprows=[0], index_col=0)
+                elif f'Model_{model_num}_reg' in xls.sheet_names:
+                    df = pd.read_excel(xls, f'Model_{model_num}_reg', skiprows=[0], index_col=0)
+                elif f'Model_{model_num}_seq_predictions' in xls.sheet_names:
+                    df = pd.read_excel(xls, f'Model_{model_num}_seq_predictions', skiprows=[0], index_col=0)
+                elif f'Model_{model_num}_seq' in xls.sheet_names:
+                    df = pd.read_excel(xls, f'Model_{model_num}_seq', skiprows=[0], index_col=0)
+                else:
+                    print('No sheet is in the file')
+                    return
+
+                prediction_df = df.loc[df.is_train == False]
+                if prediction_df.shape[0] > 1000:  # duplicated predictions (bug in epoch+=1)
+                    prediction_df = prediction_df.drop_duplicates(subset=['sample_id', raisha_column_name], keep='last')
+                final_total_payoff_prediction = prediction_df[final_total_payoff_prediction_column]
+                total_payoff_label = prediction_df[total_payoff_label_column]
+                if type(total_payoff_label.values[0]) == str:  # tensor(value, cuda=...) instead of float
+                    total_payoff_label = prediction_df[['sample_id']].merge(
+                        total_payoff, right_index=True, left_on='sample_id')[total_payoff_label_column]
+                    prediction_df = prediction_df.drop(total_payoff_label_column, axis=1).merge(
+                        total_payoff, right_index=True, left_on='sample_id')
+                # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+                bin_predictions, bin_label = create_bin_columns(final_total_payoff_prediction, total_payoff_label,
+                                                                hotel_label_0=True)
+                # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+                _, results_dict = calculate_measures_for_continues_labels(
+                    prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                    total_payoff_label_column=total_payoff_label_column,
+                    bin_label=bin_label, bin_predictions=bin_predictions,
+                    label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
+                                   'total future payoff > 2/3'])
+
+                if raisha_column_name in prediction_df.columns:  # do the raisha analysis
+                    raisha_options = prediction_df[raisha_column_name].unique()
+                    bin_predictions = pd.DataFrame(bin_predictions).join(prediction_df[[raisha_column_name]], how='left')
+                    bin_label = pd.DataFrame(bin_label).join(prediction_df[[raisha_column_name]], how='left')
+                    all_raisha_dict = defaultdict(dict)
+                    for raisha in raisha_options:
+                        raisha_data = prediction_df.loc[prediction_df[raisha_column_name] == raisha]
+                        raisha_bin_label = bin_label.loc[bin_label[raisha_column_name] == raisha]
+                        raisha_bin_predictions = bin_predictions.loc[bin_predictions[raisha_column_name] == raisha]
+                        # bin_label_raisha = bin_label.loc[]
+                        _, results_dict_raisha = calculate_measures_for_continues_labels(
+                            raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                            total_payoff_label_column=total_payoff_label_column,
+                            bin_label=raisha_bin_label['bin_label'],
+                            bin_predictions=raisha_bin_predictions['bin_predictions'],
+                            label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
+                                           'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
+                        all_raisha_dict.update(results_dict_raisha)
+                    results_dict = update_default_dict(results_dict, all_raisha_dict)
+
+                results_df = pd.DataFrame.from_dict(results_dict).T
+                results_df['raisha_round'] = results_df.index
+                results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
+                results_df = results_df.drop('raisha_round', axis=1)
+                results_df.index = np.zeros(shape=(results_df.shape[0],))
+                metadata_df = pd.read_excel(os.path.join(files_path, file_name), sheet_name=f'Model results',
+                                            skiprows=[0], index_col=0)
+                if 'hyper_parameters_dict' in metadata_df.columns:
+                    hyper_parameters = 'hyper_parameters_dict'
+                else:
+                    hyper_parameters = 'hyper_parameters_str'
+                metadata_df = pd.DataFrame(metadata_df[['model_num', 'model_type', 'model_name', 'data_file_name',
+                                                        hyper_parameters]].iloc[0])
+                results_df = results_df.join(metadata_df.T)
+                results_df.index = [f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'] * results_df.shape[0]
+                results_df.to_excel(os.path.join(base_directory, 'logs', 'after_fix_bin_raisha',
+                                                 f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'))
+                all_models_results.append(results_df)
+
+    all_models_results_df = pd.concat(all_models_results, sort='False')
+    return all_models_results_df
+
+
 def main(log_directory: str, model_output_file_name: str, final_total_payoff_prediction_column_name: str,
          total_payoff_label_column_name: str):
     if 'csv' in model_output_file_name:
@@ -353,13 +471,35 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 
 if __name__ == '__main__':
-
     final_results = pd.DataFrame()
-    #
-    # for fold in range(6):
-    #     curr_df = eval_model(['compare_prediction_models_22_04_2020_23_32',
-    #                           'compare_prediction_models_24_04_2020_15_58'], fold)
-    #     final_results = pd.concat([final_results, curr_df], sort='False')
+
+    for fold in range(6):
+        total_payoff = pd.read_excel(join(base_directory, 'logs', 'compare_prediction_models_07_05_2020_11_49',
+                                          f'fold_{fold}', 'excel_models_results',
+                                          f'Results_fold_{fold}_model_29_0.1.xlsx'),
+                                     sheet_name=f'Model_29_0.1_seq', skiprows=[0], index_col=0)
+        total_payoff = total_payoff.loc[total_payoff.is_train == False]
+        total_payoff = total_payoff.total_payoff_label
+        # all_models.xslx: compare_prediction_models_04_05_2020_19_15, compare_prediction_models_25_05_2020_12_53
+        curr_df = eval_model_total_prediction(['compare_prediction_models_07_05_2020_11_49',
+                                               'compare_prediction_models_03_05_2020_11_53',
+                                               'compare_prediction_models_10_05_2020_11_02',
+                                               'compare_prediction_models_11_05_2020_11_58',
+                                               'compare_prediction_models_12_05_2020_14_51',
+                                               'compare_prediction_models_13_05_2020_22_07',
+                                               'compare_prediction_models_14_05_2020_17_46',
+                                               'compare_prediction_models_16_05_2020_21_52',
+                                               'compare_prediction_models_17_05_2020_22_12',
+                                               'compare_prediction_models_19_05_2020_22_44',
+                                               'compare_prediction_models_20_05_2020_17_39',
+                                               'compare_prediction_models_25_04_2020_19_00',
+                                               'compare_prediction_models_25_05_2020_14_04',
+                                               'compare_prediction_models_26_05_2020_11_04',
+                                               'compare_prediction_models_26_05_2020_18_17',
+                                               'compare_prediction_models_29_04_2020_23_59'], fold, total_payoff)
+        final_results = pd.concat([final_results, curr_df], sort='False')
+
+    final_results.to_csv(os.path.join(base_directory, 'logs', 'total_prediction_results_check_no_train.csv'))
 
     # ray.init()
     # final_results = pd.DataFrame()

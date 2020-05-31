@@ -81,9 +81,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                         datefmt='%H:%M:%S',
                         )
     all_model_types = models_to_compare.model_type.unique()
-    all_model_types = ['LSTM_turn', 'LSTM_turn_linear', 'LSTM_avg', 'LSTM_avg_turn', 'Transformer_turn',
-                       'Transformer_avg_turn', 'Transformer_turn', 'Transformer_turn_linear', 'Transformer_avg',
-                       'Transformer_avg_turn', 'LSTM_avg_turn_linear']
+    # all_model_types = ['LSTM_turn', 'LSTM_turn_linear', 'LSTM_avg', 'LSTM_avg_turn', 'Transformer_turn',
+    #                    'Transformer_avg_turn', 'Transformer_turn', 'Transformer_turn_linear', 'Transformer_avg',
+    #                    'Transformer_avg_turn', 'LSTM_avg_turn_linear']
     # all_model_types = ['Attention_avg']
 
     all_models_results = pd.DataFrame()
@@ -92,20 +92,22 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_num = row['model_num']
-            if model_num < 458:
+            if model_num >= 458:
                 continue
-            # if model_num not in [727]:
+            # if model_num not in [271]:
             #     continue
-            if (fold == 0 and model_num in range(483, 604)) or (fold == 1 and model_num in range(483, 602)) or \
-                    (fold == 2 and model_num in range(483, 582)) or (fold == 3 and model_num in range(483, 604)) or\
-                    (fold == 4 and model_num in range(483, 587)) or (fold == 5 and model_num in range(483, 582)):
+            # nlp 16: no numbers: model_num < 458
+            # if (fold == 0 and model_num in range(458, 729)) or (fold == 1 and model_num in range(458, 726)) or \
+            #         (fold == 2 and model_num in range(458, 677)) or (fold == 3 and model_num in range(458, 700)) or\
+            #         (fold == 4 and model_num in range(483, 587)) or (fold == 5 and model_num in range(483, 582)):
+            #     continue
+            # nlp12: adding dropout: model_num >= 458
+            if (fold == 0 and ((model_num <= 220) or (model_num in range(238, 305)) or (model_num in range(334, 376))))\
+                    or (fold == 1 and ((model_num <= 223) or (model_num in range(238, 318)) or
+                                       (model_num in range(334, 376)))) or\
+                    (fold == 2 and model_num <= 191) or (fold == 3 and model_num <= 149) or\
+                    (fold == 4 and model_num <= 168) or (fold == 5 and model_num <= 172):
                 continue
-            # if (fold == 0 and ((model_num <= 199) or (model_num in range(238, 257)) or (model_num in range(286, 296))))\
-            #         or (fold == 1 and ((model_num <= 199) or (model_num in range(238, 263)) or
-            #                            (model_num in range(286, 296)))) or\
-            #         (fold == 2 and model_num <= 135) or (fold == 3 and model_num <= 79) or\
-            #         (fold == 4 and model_num <= 126) or (fold == 5 and model_num <= 133):
-            #     continue
             model_type = row['model_type']
             model_name = row['model_name']
             function_to_run = row['function_to_run']
@@ -162,31 +164,35 @@ def parallel_main():
     """For debug"""
     # participants_fold_split = participants_fold_split.iloc[:50]
     # for fold in range(1):
-    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold)
+    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1')
+
+    cuda_devices = {0: 0, 1: 1,
+                    2: 0, 3: 1,
+                    4: 0, 5: 1}
 
     ray.init()
     all_ready_lng =\
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
-                 for j, i in enumerate(range(2))])
+        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]))
+                 for i in range(2, 6)])
 
     print(f'Done! {all_ready_lng}')
     logging.info(f'Done! {all_ready_lng}')
 
-    ray.init()
-    all_ready_lng_1 = \
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
-                 for j, i in enumerate(range(2, 4))])
+    # ray.init()
+    # all_ready_lng_1 = \
+    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
+    #              for j, i in enumerate(range(2, 4))])
+    #
+    # print(f'Done! {all_ready_lng_1}')
+    # logging.info(f'Done! {all_ready_lng_1}')
 
-    print(f'Done! {all_ready_lng_1}')
-    logging.info(f'Done! {all_ready_lng_1}')
-
-    ray.init()
-    all_ready_lng_2 =\
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
-                 for j, i in enumerate(range(4, 6))])
-
-    print(f'Done! {all_ready_lng_2}')
-    logging.info(f'Done! {all_ready_lng_2}')
+    # ray.init()
+    # all_ready_lng_2 =\
+    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(j))
+    #              for j, i in enumerate(range(4, 6))])
+    #
+    # print(f'Done! {all_ready_lng_2}')
+    # logging.info(f'Done! {all_ready_lng_2}')
 
     return
 

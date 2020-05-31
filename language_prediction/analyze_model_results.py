@@ -59,7 +59,8 @@ def combine_models_all_results(folder_list: list):
                     continue
                 files_path = join(folder_path, inner_folder)  # , 'excel_models_results')
                 print(f'load file {files_path}')
-                df = pd.read_excel(os.path.join(files_path, f'Results_{inner_folder}_all_models.xlsx'),
+                df = pd.read_excel(os.path.join(files_path,
+                                                f'Results_{inner_folder}_all_models.xlsx'),
                                    sheet_name='All models results', skiprows=[0], index_col=0)
                 df = df.assign(fold=inner_folder)
                 all_files_results[f'{folder}_{inner_folder}_all_models'] = df
@@ -176,21 +177,36 @@ def correlation_analysis(data_path: str):
 
 def find_all_best_models_of_directory(directory: str):
     xls = pd.ExcelFile(os.path.join(base_directory, 'logs', 'analyze_results', 'Best models analysis.xlsx'))
+    number_best_fold = defaultdict(list)
     for sheet in xls.sheet_names:
-        df = pd.read_excel(xls, sheet)
+        df = pd.read_excel(xls, sheet, skiprows=[0])
         for fold in range(6):
             data = df[f'Best Model folder for fold {fold}']
             index_data = data.str.findall(directory)
             for my_index in index_data.index:
-                print(data[my_index, f'Best Model folder for fold {fold}'].values)
+                if type(index_data[my_index]) == list and len(index_data[my_index]) > 0:
+                    number_best_fold[fold].append(f"Fold: {fold}, Model number: "
+                                                  f"{df.iloc[my_index][f'Best Model number for fold {fold}']}")
+
+    print(f'Best models in {directory}')
+    for fold in range(6):
+        best_models_list = sorted(set(number_best_fold[fold]))
+        print(f'Number of best models for fold {fold} is {len(best_models_list)}')
+        for item in best_models_list:
+            print(item)
+
+    return
 
 
 def main():
-    results_path = combine_models_results(['compare_prediction_models_20_05_2020_17_39'])
-    # results_path = combine_models_all_results(['compare_prediction_models_04_05_2020_19_15'])
+    # find_all_best_models_of_directory('compare_prediction_models_25_04_2020_19_00')
+    # return
+
+    # results_path = combine_models_results(['compare_prediction_models_26_05_2020_11_04'])
+    results_path = combine_models_all_results(['compare_prediction_models_25_05_2020_12_53'])
     # results_path = f"all_server_results_['compare_prediction_models_04_05_2020_19_15'].csv"
-    new_results_file_name = 'all_results_24_05.xlsx'
-    concat_new_results(results_path, old_results_name='all_results_19_05.xlsx',
+    new_results_file_name = 'all_results_29_05.xlsx'
+    concat_new_results(results_path, old_results_name='all_results_27_05.xlsx',
                        new_results_file_name_to_save=new_results_file_name)
 
     # correlation_analysis(
