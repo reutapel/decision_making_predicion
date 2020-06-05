@@ -21,11 +21,17 @@ def combine_models_results(folder_list: list):
             for inner_folder in listdir(folder_path):  # fold_number
                 if inner_folder == '.DS_Store':
                     continue
-                files_path = join(folder_path, inner_folder, 'excel_models_results')
+                if isdir(join(folder_path, inner_folder, 'excel_models_results')):
+                    files_path = join(folder_path, inner_folder, 'excel_models_results')
+                elif join(folder_path, inner_folder):
+                    files_path = join(folder_path, inner_folder)
+                else:
+                    print('No correct directory')
+                    return
                 folder_files = [f for f in listdir(files_path) if isfile(join(files_path, f))]
                 for file in folder_files:
-                    print(f'load file {file}')
-                    if file != '.DS_Store':
+                    if file != '.DS_Store' and '_all_models' not in file:
+                        print(f'load file {file}')
                         df = pd.read_excel(os.path.join(files_path, file), sheet_name='Model results', skiprows=[0],
                                            index_col=0)
                         df = df.assign(fold=inner_folder)
@@ -82,10 +88,17 @@ def combine_models_all_results(folder_list: list):
 
 def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measure_to_select_best: str,
                                table_writer: pd.ExcelWriter, measure_to_select_best_name: str,
-                               sheet_name: str= 'Sheet1', all_measures: list=None,):
-    all_results = pd.read_excel(file_name, sheet_name=sheet_name)
+                               sheet_name: str= 'Sheet1', all_measures: list=None, all_results: pd.DataFrame=None,
+                               all_not_include_model_num: list=None):
+    if all_results is None:
+        if 'csv' in file_name:
+            all_results = pd.read_csv(file_name)
+        else:
+            all_results = pd.read_excel(file_name, sheet_name=sheet_name)
     all_rounds_all_raisha = all_results.loc[(all_results.Raisha == raishas) & (all_results.Round == rounds)]
-    all_rounds_all_raisha = all_rounds_all_raisha.loc[~all_rounds_all_raisha.model_num.isin([181, 187])]
+    if all_not_include_model_num is not None:
+        all_rounds_all_raisha = all_rounds_all_raisha.loc[
+            ~all_rounds_all_raisha.model_num.isin(all_not_include_model_num)]
     all_rounds_all_raisha = all_rounds_all_raisha.fillna(0)
     all_model_types = all_rounds_all_raisha.model_type.unique()
     all_best_results = defaultdict(dict)
@@ -132,14 +145,25 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
             all_best_results.insert(index_to_insert, f'STD_{measure}', all_best_results[measure_all_folds].std(axis=1))
             index_to_insert += 1
 
+    if measure_to_select_best == 'RMSE':
+        sort_ascending = True
+    else:
+        sort_ascending = False
+    all_best_results = all_best_results.sort_values(by=f'Average_{measure_to_select_best}', ascending=sort_ascending)
     write_to_excel(table_writer, f'{measure_to_select_best_name}_{raishas}',
                    headers=[f'best_models_based_on_{measure_to_select_best_name}_for_{raishas}'], data=all_best_results)
     return all_best_results
 
 
 def concat_new_results(new_results_name: str, old_results_name: str, new_results_file_name_to_save: str):
-    all_results = pd.read_excel(os.path.join(base_directory, 'logs', old_results_name), sheet_name='Sheet1',
-                                index_col=[0])
+    if 'xslx' in old_results_name:
+        all_results = pd.read_excel(os.path.join(base_directory, 'logs', f'{old_results_name}'), sheet_name='Sheet1',
+                                    index_col=[0])
+    elif 'csv' in old_results_name:
+        all_results = pd.read_csv(os.path.join(base_directory, 'logs', f'{old_results_name}'), index_col=[0])
+    else:
+        print('old_results_name is not csv or excel file')
+        return
     # all_results = all_results.loc[~all_results.model_type.isin(['SVMTurn'])]
     new_results = pd.read_csv(os.path.join(base_directory, 'logs', new_results_name))
     # svm_results = svm_results.loc[svm_results.model_type.isin(['SVMTotal', 'SVMTurn', 'CRF'])]
@@ -149,8 +173,13 @@ def concat_new_results(new_results_name: str, old_results_name: str, new_results
         new_results.rename(columns={'hyper_parameters_dict': 'hyper_parameters_str'}, inplace=True)
     all_results = all_results[new_results.columns]
 
-    check = pd.concat([all_results, new_results], axis=0)
-    check.to_excel(os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}'))
+    final = pd.concat([all_results, new_results], axis=0)
+    all_columns = final.columns.tolist()
+    all_columns.remove('folder')
+    final = final.drop_duplicates()
+    joblib.dump(final, os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}.pkl'))
+    final.to_csv(os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}.csv'))
+    final.to_excel(os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}.xlsx'))
 
 
 def correlation_analysis(data_path: str):
@@ -198,16 +227,21 @@ def find_all_best_models_of_directory(directory: str):
     return
 
 
-def main():
-    # find_all_best_models_of_directory('compare_prediction_models_25_04_2020_19_00')
+def main(new_results_file_name, results_to_use: pd.DataFrame=None):
+    # for dir in ['compare_prediction_models_04_05_2020_19_15', 'compare_prediction_models_07_05_2020_11_49',
+    #             'compare_prediction_models_17_05_2020_22_12', 'compare_prediction_models_29_04_2020_23_59']:
+    #     find_all_best_models_of_directory(dir)
     # return
 
-    # results_path = combine_models_results(['compare_prediction_models_26_05_2020_11_04'])
-    results_path = combine_models_all_results(['compare_prediction_models_25_05_2020_12_53'])
+    # results_path = combine_models_results(['compare_prediction_models_29_04_2020_23_59',
+    #                                        'compare_prediction_models_30_04_2020_07_34_new_crf',
+    #                                        'compare_prediction_models_30_04_2020_14_29_new_baseline'])
+    # # results_path = combine_models_all_results(['compare_prediction_models_25_05_2020_12_53'])
     # results_path = f"all_server_results_['compare_prediction_models_04_05_2020_19_15'].csv"
-    new_results_file_name = 'all_results_29_05.xlsx'
-    concat_new_results(results_path, old_results_name='all_results_27_05.xlsx',
-                       new_results_file_name_to_save=new_results_file_name)
+    # concat_new_results(results_path, old_results_name='all_results_01_06_new_eval.csv',
+    #                    new_results_file_name_to_save=new_results_file_name)
+    #
+    # return
 
     # correlation_analysis(
     #     os.path.join(base_directory, 'data', 'verbal', 'cv_framework',
@@ -228,6 +262,13 @@ def main():
     raishas.append('All_raishas')
     table_writer = pd.ExcelWriter(os.path.join(base_directory, 'logs', 'analyze_results', 'Best models analysis.xlsx'),
                                   engine='xlsxwriter')
+    not_include_model_num = [16, 24, 32, 43, 47, 58, 69, 80, 94, 105, 119, 130, 145, 156, 170, 181, 187, 391, 402, 413,
+                             424, 435, 446, 730, 744]
+    all_not_include_model_num = copy.deepcopy(not_include_model_num)
+    for num in not_include_model_num:
+        all_not_include_model_num.append(str(num))
+        for dropout in [None, 0.1, 0.3, 0.5, 0.7, 0.8, 0.9]:
+            all_not_include_model_num.append(f'{str(num)}_{dropout}')
     for measure_to_analyze in [['Bin_Fbeta_score_total future payoff < 1/3', 'Bin_Fbeta_1_3'],
                                ['Bin_Fbeta_score_total future payoff > 2/3', 'Bin_Fbeta_2_3'],
                                ['Bin_Fbeta_score_1/3 < total future payoff < 2/3', 'Bin_Fbeta_1_3_2_3'],
@@ -239,10 +280,11 @@ def main():
             other_measures.remove(measure_to_analyze[0])
             select_best_model_per_type(main_file_name, raishas=raisha, rounds='All_rounds', table_writer=table_writer,
                                        measure_to_select_best=measure_to_analyze[0],
-                                       measure_to_select_best_name=measure_to_analyze[1], all_measures=other_measures)
+                                       measure_to_select_best_name=measure_to_analyze[1], all_measures=other_measures,
+                                       all_results=results_to_use, all_not_include_model_num=all_not_include_model_num)
 
     table_writer.save()
 
 
 if __name__ == '__main__':
-    main()
+    main(new_results_file_name='all_results_05_06_new_eval_select_correct_final_pred.csv')

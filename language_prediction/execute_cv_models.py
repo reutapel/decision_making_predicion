@@ -24,7 +24,6 @@ from collections import defaultdict
 import copy
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
 
-
 per_round_predictions_name = 'per_round_predictions'
 per_round_labels_name = 'per_round_labels'
 
@@ -39,7 +38,8 @@ class ExecuteEvalModel:
     Save model, log, return the evaluation.
     """
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
-                 fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, excel_models_results: str):
+                 fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, excel_models_results: str,
+                 trained_model=None, trained_model_dir=None):
 
         self.model_num = model_num
         self.fold = fold
@@ -54,6 +54,9 @@ class ExecuteEvalModel:
         self.data_directory = data_directory
         self.train_pair_ids = self.fold_split_dict['train']
         self.val_pair_ids = self.fold_split_dict['validation']
+        self.test_pair_ids = self.fold_split_dict['test']
+        self.trained_model = trained_model
+        self.trained_model_dir = trained_model_dir
         self.model_table_writer = pd.ExcelWriter(
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
         print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
@@ -65,12 +68,16 @@ class ExecuteEvalModel:
         """This function should load the data, split to train-validation and create the model"""
         raise NotImplementedError
 
-    def fit_predict(self):
+    def fit_validation(self):
         """This function should fit the model on the train data, predict on the validation data and dave the results"""
         raise NotImplementedError
 
-    def eval_model(self):
+    def eval_model(self, predict_type: str=None):
         """This function should use the prediction of the model and eval these results"""
+        raise NotImplementedError
+
+    def predict(self, predict_type: str):
+        """This function use trained model to predict the labels of the test set"""
         raise NotImplementedError
 
     def save_model_prediction(self, data_to_save: pd.DataFrame, save_model=True, sheet_prefix_name: str='All',
@@ -278,11 +285,15 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         parser.add_argument('train_data_file', help="data file for training input")
         parser.add_argument('features_file', help="the features file name input.")
         parser.add_argument('model_file', help="the model file name. (output)")
+        # if it is test time, use the correct folder of the model
+        if self.trained_model_dir is not None:
+            folder = self.trained_model_dir
+        else:
+            folder = self.fold_dir
         self.args = parser.parse_args([
                 os.path.join(self.data_directory, self.data_file_name),
                 os.path.join(self.data_directory, features_file_name),
-                os.path.join(self.fold_dir,
-                             f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'),
+                os.path.join(folder, f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'),
             ])
         self.correct_count = None
         self.total_count = None
@@ -293,26 +304,37 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         logging.info(f'Load and create Data file name: {self.args.train_data_file}')
         self.model = crf.LinearChainCRF(squared_sigma=self.squared_sigma, predict_future=self.predict_future)
 
-    def fit_predict(self):
+    def fit_validation(self):
         print(f'fit and predict model {self.model_name}')
         logging.info(f'fit and predict model {self.model_name}')
         self.model.train(self.args.train_data_file, self.args.model_file, self.args.features_file,
                          vector_rep_input=True, pair_ids=self.train_pair_ids,
                          use_forward_backward_fix_history=self.use_forward_backward_fix_history)
 
+        self.predict(predict_type='validation')
+
+    def predict(self, predict_type: str):
+        print(f'predict model {self.model_name}')
+        logging.info(f'predict model {self.model_name}')
         self.model.load(self.args.model_file, self.args.features_file, vector_rep_input=True)
+        if predict_type == 'validation':
+            pair_ids = self.val_pair_ids
+        elif predict_type == 'test':
+            pair_ids = self.test_pair_ids
+        else:
+            print(f'predict_type must be validation or test, {predict_type} was passed')
+            return
         self.correct_count, self.total_count, self.prediction, self.total_seq_count = \
             self.model.test(self.args.train_data_file, predict_only_last=self.predict_only_last,
-                            pair_ids=self.val_pair_ids, use_viterbi_fix_history=self.use_viterbi_fix_history)
+                            pair_ids=pair_ids, use_viterbi_fix_history=self.use_viterbi_fix_history)
         # create the bin analysis columns in self.prediction
         if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
             bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.total_payoff_prediction,
                                                                   self.prediction.total_payoff_label)
             self.prediction = self.prediction.join(bin_test_y).join(bin_prediction)
-        # in the CRF train the model is already saved
         self.save_model_prediction(data_to_save=self.prediction, save_model=False)
 
-    def eval_model(self):
+    def eval_model(self, predict_type: str=None):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
         if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
@@ -349,7 +371,8 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         super(ExecuteEvalSVM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory, excel_models_results)
         self.label_name = hyper_parameters_dict['label_name']
-        self.train_x, self.train_y, self.validation_x, self.validation_y = None, None, None, None
+        self.train_x, self.train_y, self.validation_x, self.validation_y, self.test_y, self.test_x =\
+            None, None, None, None, None, None
         self.features_file_name = 'features_' + self.data_file_name.split('all_data_', 1)[1].split('.pkl')[0]+'.xlsx'
 
     def load_data_create_model(self):
@@ -372,27 +395,53 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         validation_data = data.loc[data.pair_id.isin(self.val_pair_ids)]
         self.validation_y = validation_data[self.label_name]
         self.validation_x = validation_data[x_columns]
+        # get test data
+        test_data = data.loc[data.pair_id.isin(self.test_pair_ids)]
+        self.test_y = test_data[self.label_name]
+        self.test_x = test_data[x_columns]
 
         # load features file:
         features = pd.read_excel(os.path.join(self.data_directory, self.features_file_name))
         features = features[0].tolist()
 
-        # create model
-        self.model = getattr(SVM_models, self.model_type)(features, self.model_name)
+        # create or load model
+        if self.trained_model is not None:
+            self.model = self.trained_model
+        else:
+            self.model = getattr(SVM_models, self.model_type)(features, self.model_name)
 
-    def fit_predict(self):
+    def fit_validation(self):
         print(f'fit and predict model {self.model_name}')
         logging.info(f'fit and predict model {self.model_name}')
         self.model.fit(self.train_x, self.train_y)
-        self.prediction = self.model.predict(self.validation_x, self.validation_y)
+        self.predict(predict_type='validation')
+
+    def predict(self, predict_type: str):
+        if predict_type == 'validation':
+            x = self.validation_x
+            y = self.validation_y
+        elif predict_type == 'test':
+            x = self.test_x
+            y = self.test_y
+        else:
+            print(f'predict_type must be validation or test, {predict_type} was passed')
+            return
+        self.prediction = self.model.predict(x, y)
         self.save_model_prediction(data_to_save=self.prediction)
 
-    def eval_model(self):
+    def eval_model(self, predict_type: str=None):
+        if predict_type == 'validation':
+            x = self.validation_x
+        elif predict_type == 'test':
+            x = self.test_x
+        else:
+            print(f'predict_type must be validation or test, {predict_type} was passed')
+            return
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
         if self.model_type == 'SVMTotal' or 'proportion' in self.model_name:
-            if 'raisha' in self.validation_x.columns and 'proportion' not in self.model_name:  # only relevant for svm
-                self.prediction = self.prediction.join(self.validation_x.raisha)
+            if 'raisha' in x.columns and 'proportion' not in self.model_name:  # only relevant for svm
+                self.prediction = self.prediction.join(x.raisha)
             try:
                 if 'labels' in self.prediction.columns and 'predictions' in self.prediction.columns:
                     # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
@@ -511,6 +560,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         self.avg_loss = 1.0  # if we don't use 2 losses - the weight of each of them should be 1
         self.turn_loss = 1.0
         self.hotel_label_0 = None
+        self.vocab = None
+        self.cuda_device = None
         self.run_log_directory = utils.set_folder(datetime.now().strftime(
             f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_{self.fold}_folds_'
             f'{self.lstm_hidden_dim}_hidden_dim_%d_%m_%Y_%H_%M_%S'), self.fold_dir)
@@ -542,28 +593,29 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         # load train data
         if 'LSTM' in self.model_type or 'Attention' in self.model_type:
             train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids)
-            test_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
+            validation_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
+
         elif 'Transformer' in self.model_type:
             train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids,
                                                     features_max_size=self.features_max_size)
-            test_reader = TransformerDatasetReader(pair_ids=self.val_pair_ids,
-                                                   features_max_size=self.features_max_size)
+            validation_reader = TransformerDatasetReader(pair_ids=self.val_pair_ids,
+                                                         features_max_size=self.features_max_size)
         else:
             logging.exception(f'Model type should include LSTM or Transformer to use this class')
             print(f'Model type should include LSTM or Transformer to use this class')
             raise Exception(f'Model type should include LSTM or Transformer to use this class')
 
         train_instances = train_reader.read(all_data_file_path)
-        validation_instances = test_reader.read(all_data_file_path)
-        vocab = Vocabulary.from_instances(train_instances + validation_instances)
+        validation_instances = validation_reader.read(all_data_file_path)
+        self.vocab = Vocabulary.from_instances(train_instances + validation_instances)
 
-        self.hotel_label_0 = True if vocab._index_to_token['labels'][0] == 'hotel' else False
+        self.hotel_label_0 = True if self.vocab._index_to_token['labels'][0] == 'hotel' else False
 
         metrics_dict_seq = {
             'Accuracy': CategoricalAccuracy(),  # BooleanAccuracy(),
             # 'auc': Auc(),
-            'F1measure_hotel_label': F1Measure(positive_label=vocab._token_to_index['labels']['hotel']),
-            'F1measure_home_label': F1Measure(positive_label=vocab._token_to_index['labels']['stay_home']),
+            'F1measure_hotel_label': F1Measure(positive_label=self.vocab._token_to_index['labels']['hotel']),
+            'F1measure_home_label': F1Measure(positive_label=self.vocab._token_to_index['labels']['stay_home']),
         }
 
         metrics_dict_reg = {
@@ -574,12 +626,12 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         # batch_size should be: 10 or 9 depends on the input
         # and not shuffle so all the data of the same pair will be in the same batch
         iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
-        iterator.index_with(vocab)
+        iterator.index_with(self.vocab)
         if 'LSTM' in self.model_type:
             lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
                                                        batch_first=True, num_layers=1, dropout=0.0))
             self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
-                encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=vocab,
+                encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=self.vocab,
                 predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
                 reg_weight_loss=self.avg_loss, dropout=self.dropout)
@@ -587,7 +639,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             if 'turn_linear' in self.model_type:
                 self.linear_hidden_dim = int(0.5 * train_reader.input_dim)
             self.model = models.TransformerFixTextFeaturesDecisionResultModel(
-                vocab=vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
+                vocab=self.vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
                 predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=self.linear_hidden_dim,
                 batch_size=self.batch_size, input_dim=train_reader.input_dim,
                 feedforward_hidden_dim=int(4 * train_reader.input_dim), num_decoder_layers=self.num_decoder_layers,
@@ -597,7 +649,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         elif 'Attention' in self.model_type:
             input_size = train_reader.num_features
             self.model = models.AttentionFixTextFeaturesDecisionResultModel(
-                metrics_dict_reg=metrics_dict_reg, vocab=vocab, input_size=input_size, dropout=self.dropout,
+                metrics_dict_reg=metrics_dict_reg, vocab=self.vocab, input_size=input_size, dropout=self.dropout,
                 regularizer=RegularizerApplicator([("", L1Regularizer())]),)
         else:
             logging.exception(f'Model type should include LSTM or Transformer or Attention to use this class')
@@ -606,7 +658,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         print(self.model)
         if torch.cuda.is_available():
-            cuda_device = 0
+            self.cuda_device = 0
             print('Cuda is available')
             logging.info('Cuda is available')
 
@@ -615,7 +667,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.model = self.model.cuda()
 
         else:
-            cuda_device = -1
+            self.cuda_device = -1
             print('Cuda is not available')
             logging.info('Cuda is not available')
         optimizer = optim.SGD(self.model.parameters(), lr=0.1)
@@ -633,11 +685,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             serialization_dir=self.run_log_directory,
             patience=10,
             histogram_interval=10,
-            cuda_device=cuda_device,
+            cuda_device=self.cuda_device,
             validation_metric=validation_metric,
         )
 
-    def fit_predict(self):
+    def fit_validation(self):
         print(f'fit and predict model {self.model_name}')
         logging.info(f'fit and predict model {self.model_name}')
         model_dict = self.trainer.train()
@@ -649,12 +701,14 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         if self.predict_seq:
             self.all_seq_predictions = pd.DataFrame.from_dict(self.model.seq_predictions, orient='index')
-            max_predict_column = max([column for column in self.all_seq_predictions.columns if 'predictions' in column])
-            self.all_seq_predictions['final_prediction'] = self.all_seq_predictions[max_predict_column]
-            max_total_payoff_predict_column = max([column for column in self.all_seq_predictions.columns
-                                                   if 'total_payoff_prediction' in column])
+            max_predict_column = max([int(column.split('_')[1]) for column in self.all_seq_predictions.columns if
+                                      'predictions' in column])
+            self.all_seq_predictions['final_prediction'] = self.all_seq_predictions[f'predictions_{max_predict_column}']
+            max_total_payoff_predict_column = max([int(column.split('_')[3]) for
+                                                   column in self.all_seq_predictions.columns if
+                                                   'total_payoff_prediction_' in column])
             self.all_seq_predictions['final_total_payoff_prediction'] =\
-                self.all_seq_predictions[max_total_payoff_predict_column]
+                self.all_seq_predictions[f'total_payoff_prediction_{max_total_payoff_predict_column}']
             self.save_model_prediction(data_to_save=self.all_seq_predictions, sheet_prefix_name='seq',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.all_seq_predictions = self.all_seq_predictions[['is_train', 'labels', 'total_payoff_label', 'raisha',
@@ -664,8 +718,10 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         if self.predict_avg_total_payoff:
             self.all_reg_predictions = self.model.reg_predictions
-            max_predict_column = max([column for column in self.all_reg_predictions.columns if 'prediction' in column])
-            self.all_reg_predictions['final_total_payoff_prediction'] = self.all_reg_predictions[max_predict_column]
+            max_predict_column = max([int(column.split('_')[1]) for column in self.all_reg_predictions.columns if
+                                      'prediction_' in column])
+            self.all_reg_predictions['final_total_payoff_prediction'] =\
+                self.all_reg_predictions[f'prediction_{max_predict_column}']
             self.save_model_prediction(data_to_save=self.all_reg_predictions, sheet_prefix_name='reg',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.all_reg_predictions = self.all_reg_predictions[['is_train', 'sample_id', 'total_payoff_label',
@@ -673,7 +729,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.all_reg_predictions = self.all_reg_predictions.loc[self.all_reg_predictions.is_train==False]
             self.prediction = self.all_reg_predictions
 
-    def eval_model(self):
+    def eval_model(self, predict_type: str=None):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
         if 'total_payoff_label' in self.prediction.columns and\
@@ -717,3 +773,30 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         else:
             logging.exception(f'Error in eval model {self.model_name}')
             raise Exception(f'Error in eval model {self.model_name}')
+
+    def predict(self, predict_type: str):
+        if self.trained_model is None:
+            print('Need to pass trained model for this models')
+            return
+        # load test data
+        all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
+        # load train data
+        if 'LSTM' in self.model_type or 'Attention' in self.model_type:
+            test_reader = LSTMDatasetReader(pair_ids=self.test_pair_ids)
+
+        elif 'Transformer' in self.model_type:
+            test_reader = TransformerDatasetReader(pair_ids=self.test_pair_ids,
+                                                   features_max_size=self.features_max_size)
+        else:
+            logging.exception(f'Model type should include LSTM or Transformer to use this class')
+            print(f'Model type should include LSTM or Transformer to use this class')
+            raise Exception(f'Model type should include LSTM or Transformer to use this class')
+
+        test_instances = test_reader.read(all_data_file_path)
+        iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
+        iterator.index_with(self.vocab)
+
+        # And here's how to reload the model.
+        self.model.load_state_dict(self.trained_model.state_dict())
+        predictor = models.Predictor(self.model, iterator=iterator, cuda_device=self.cuda_device)
+        self.prediction = predictor.predict(ds=test_instances)

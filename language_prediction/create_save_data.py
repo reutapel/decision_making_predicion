@@ -1451,7 +1451,7 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'manual_binary_features'
+    features_to_use = 'bert_embedding'
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
@@ -1460,7 +1460,7 @@ def main():
                    'use_manual_features': True,
                    'use_all_history_average': False,
                    'use_all_history': False,
-                   'use_all_history_text_average': True,
+                   'use_all_history_text_average': False,
                    'use_all_history_text': False,
                    'saifa_average_text': False,
                    'no_saifa_text': True,
@@ -1469,7 +1469,7 @@ def main():
                    'use_score': False,
                    'predict_first_round': True,
                    'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
-                   'transformer_model': True,   # for transformer models-we need to create features also for the raisha
+                   'transformer_model': False,   # for transformer models-we need to create features also for the raisha
                    'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,

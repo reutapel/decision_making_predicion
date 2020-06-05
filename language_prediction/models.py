@@ -26,6 +26,10 @@ from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderL
 from torch.nn.modules.normalization import LayerNorm
 from torch.nn.init import xavier_uniform_
 from allennlp.nn.util import add_positional_features
+from allennlp.data.iterators import DataIterator
+from tqdm import tqdm
+from allennlp.data import Instance
+from allennlp.nn import util as nn_util
 
 
 def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
@@ -763,6 +767,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
             self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+            # self.sigmoid = nn.Sigmoid()
             self.attention_vector = torch.randn((batch_size, encoder.get_output_dim()), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
@@ -818,6 +823,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         if self.predict_avg_total_payoff:
             attention_output = self.attention(self.attention_vector, encoder_out, mask)
             regression_output = self.regressor(attention_output)
+            # regression_output = self.sigmoid(regression_output)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                     predictions=output['regression_output'], gold_labels=reg_labels,
@@ -883,6 +889,7 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
 
         self.attention = attention
         self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+        # self.sigmoid = nn.Sigmoid()
         self.attention_vector = torch.randn((batch_size, input_size), requires_grad=True)
         if torch.cuda.is_available():
             self.attention_vector = self.attention_vector.cuda()
@@ -916,6 +923,7 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
         attention_output = self.attention(self.attention_vector, sequence_review, mask)
         # attention_output = self.attention(sequence_review, mask)
         regression_output = self.regressor(attention_output)
+        # regression_output = self.sigmoid(regression_output)
         output['regression_output'] = regression_output
         self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                 predictions=output['regression_output'], gold_labels=reg_labels,
@@ -1026,6 +1034,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
             self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+            # self.sigmoid = nn.Sigmoid()
             self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
@@ -1155,6 +1164,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         if self.predict_avg_total_payoff:
             attention_output = self.attention(self.attention_vector, decoder_output, tgt_key_padding_mask)
             regression_output = self.regressor(attention_output)
+            # regression_output = self.sigmoid(regression_output)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                     predictions=output['regression_output'], gold_labels=reg_labels,
@@ -1209,3 +1219,29 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                 {metric_name: metric.get_metric(reset) for metric_name, metric in self.metrics_dict_reg.items()}
             return_metrics.update(reg_metrics)
         return return_metrics
+
+
+def tonp(tsr): return tsr.detach().cpu().numpy()
+
+
+class Predictor:
+    def __init__(self, model: Model, iterator: DataIterator,
+                 cuda_device: int = -1) -> None:
+        self.model = model
+        self.iterator = iterator
+        self.cuda_device = cuda_device
+
+    def _extract_data(self, batch) -> np.ndarray:
+        out_dict = self.model(**batch)
+        return tonp(out_dict["class_logits"])
+
+    def predict(self, ds: Iterable[Instance]) -> np.ndarray:
+        pred_generator = self.iterator(ds, num_epochs=1, shuffle=False)
+        self.model.eval()
+        pred_generator_tqdm = tqdm(pred_generator, total=self.iterator.get_num_batches(ds))
+        preds = []
+        with torch.no_grad():
+            for batch in pred_generator_tqdm:
+                batch = nn_util.move_to_device(batch, self.cuda_device)
+                preds.append(self._extract_data(batch))
+        return np.concatenate(preds, axis=0)

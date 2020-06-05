@@ -11,7 +11,11 @@ import copy
 from collections import defaultdict
 from os.path import isfile, join, isdir
 import ray
+import analyze_model_results
 base_directory = os.path.abspath(os.curdir)
+
+per_round_predictions_name = 'per_round_predictions'
+per_round_labels_name = 'per_round_labels'
 
 
 def update_default_dict(orig_dict: defaultdict, dict2: defaultdict, dict3: defaultdict=None):
@@ -294,8 +298,7 @@ def set_folder(folder_name: str, father_folder_name: str = None, father_folder_p
 def eval_model(folder_list: list, fold_num: int):
     model_nums = list(range(29, 77)) + list(range(102, 178)) + list(range(190, 222)) + list(range(238, 318)) +\
                  list(range(334, 382))
-    per_round_predictions_name = 'per_round_predictions'
-    per_round_labels_name = 'per_round_labels'
+
     all_models_results = pd.DataFrame()
 
     for folder in folder_list:
@@ -342,11 +345,62 @@ def eval_model(folder_list: list, fold_num: int):
     return all_models_results
 
 
-def eval_model_total_prediction(folder_list: list, fold_num: int, total_payoff: pd.Series):
+def flat_seq_predictions_list_column(label_column_name_per_round: str,
+                                     prediction_column_name_per_round: str,
+                                     prediction: pd.DataFrame) -> pd.DataFrame:
+    """
+    Use the prediction DF to get one column of all rounds predictions and labels, in order to calculate
+    the per round measures
+    :param label_column_name_per_round: the name od the label column per round (for example: y_0, y_1, ..., y_9)
+    :param prediction_column_name_per_round: the name od the prediction column per round
+    (for example: y_prime_0, y_prime_1, ..., y_prime_9)
+    :param prediction: the data
+    :return: pd.Dataframe with 2 columns: labels and predictions with the labels and predictions per round for
+    the saifa data
+    """
+
+    flat_data_dict = dict()
+    for list_column, new_column in [[label_column_name_per_round, per_round_labels_name],
+                                    [prediction_column_name_per_round, per_round_predictions_name]]:
+        # create a pd with [new_column, 'raisha', 'sample_id'] columns
+        flat_data = copy.deepcopy(prediction)
+        # reset index to get numeric index for the future merge
+        flat_data['sample_id'] = flat_data.index
+        flat_data.reset_index(inplace=True, drop=True)
+        flat_data = flat_data[[list_column, 'raisha', 'sample_id']]
+        flat_data[list_column] =\
+            flat_data[list_column].apply(lambda row: [int(item) for item in list(row) if item in ['0', '1']])
+        lens_of_lists = flat_data[list_column].apply(len)
+        origin_rows = range(flat_data.shape[0])
+        destination_rows = np.repeat(origin_rows, lens_of_lists)
+        non_list_cols = [idx for idx, col in enumerate(flat_data.columns) if col != list_column]
+        expanded_df = flat_data.iloc[destination_rows, non_list_cols].copy()
+        expanded_df[new_column] = [i for items in flat_data[list_column] for i in items]
+        # remove non 0/1 rows and reset index
+        expanded_df = expanded_df.loc[expanded_df[new_column].isin(['0', '1'])]
+        # create round number column
+        round_number = pd.Series()
+        for index, round_num in lens_of_lists.iteritems():
+            round_number =\
+                round_number.append(pd.Series(list(range(11-round_num, 11)), index=np.repeat(index, round_num)))
+        expanded_df['round_number'] = round_number
+        expanded_df.reset_index(inplace=True, drop=True)
+        flat_data_dict[new_column] = expanded_df[[new_column]]
+        flat_data_dict['metadata'] = expanded_df[['raisha', 'sample_id', 'round_number']]
+
+    # concat the new labels and new predictions per round
+    flat_data = flat_data_dict[per_round_labels_name].join(flat_data_dict[per_round_predictions_name]).\
+        join(flat_data_dict['metadata'])
+    flat_data.reset_index(inplace=True, drop=True)
+
+    return flat_data
+
+
+def eval_model_total_prediction(folder_list: list, fold_num: int, total_payoff_true_label: pd.Series):
     """
     :param folder_list:
     :param fold_num:
-    :param total_payoff: total_payoff for this fold
+    :param total_payoff_true_label: total_payoff_true_label for this fold
     :return:
     """
     models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_compare.xlsx'),
@@ -377,85 +431,228 @@ def eval_model_total_prediction(folder_list: list, fold_num: int, total_payoff: 
             print('No correct directory')
             return
         print(f'load from {files_path}')
+        all_results_file_name_inner = f'Results_{inner_folder}_all_models.xlsx'
+        if isfile(join(files_path, all_results_file_name_inner)):
+            xls = pd.ExcelFile(os.path.join(files_path, all_results_file_name_inner))
+            all_results_file = True
+        else:
+            xls = None
+            all_results_file = False
+
+        # all_models_combinations = [76, 77]
         for model_num in all_models_combinations:
+            all_reg_predictions = None
+            all_seq_predictions = None
+            print(f'work on model num: {model_num}')
             file_name = f'Results_{inner_folder}_model_{model_num}.xlsx'
-            if isfile(join(files_path, file_name)):
-                print(f'work on model num: {model_num}')
-                xls = pd.ExcelFile(os.path.join(files_path, file_name))
-                if f'Model_{model_num}_reg_predictions' in xls.sheet_names:
-                    df = pd.read_excel(xls, f'Model_{model_num}_reg_predictions', skiprows=[0], index_col=0)
-                elif f'Model_{model_num}_reg' in xls.sheet_names:
-                    df = pd.read_excel(xls, f'Model_{model_num}_reg', skiprows=[0], index_col=0)
-                elif f'Model_{model_num}_seq_predictions' in xls.sheet_names:
-                    df = pd.read_excel(xls, f'Model_{model_num}_seq_predictions', skiprows=[0], index_col=0)
-                elif f'Model_{model_num}_seq' in xls.sheet_names:
-                    df = pd.read_excel(xls, f'Model_{model_num}_seq', skiprows=[0], index_col=0)
+            if not all_results_file:  # no all_results_file
+                if isfile(join(files_path, file_name)):
+                    xls = pd.ExcelFile(os.path.join(files_path, file_name))
                 else:
-                    print('No sheet is in the file')
-                    return
+                    print(f'No all results file and not model results file for model num: {model_num}')
+                    continue
+            if f'Model_{model_num}_reg_predictions' in xls.sheet_names:
+                all_reg_predictions = pd.read_excel(xls, f'Model_{model_num}_reg_predictions', skiprows=[0],
+                                                    index_col=0, parse_dates=True)
+            elif f'Model_{model_num}_reg' in xls.sheet_names:
+                all_reg_predictions = pd.read_excel(xls, f'Model_{model_num}_reg', skiprows=[0], index_col=0,
+                                                    parse_dates=True)
+            if f'Model_{model_num}_seq_predictions' in xls.sheet_names:
+                all_seq_predictions = pd.read_excel(xls, f'Model_{model_num}_seq_predictions', skiprows=[0],
+                                                    index_col=0, parse_dates=True)
+            elif f'Model_{model_num}_seq' in xls.sheet_names:
+                all_seq_predictions = pd.read_excel(xls, f'Model_{model_num}_seq', skiprows=[0], index_col=0,
+                                                    parse_dates=True)
+            if all_seq_predictions is None and all_reg_predictions is None:
+                print('No sheet is in the file')
+                continue
 
-                prediction_df = df.loc[df.is_train == False]
-                if prediction_df.shape[0] > 1000:  # duplicated predictions (bug in epoch+=1)
-                    prediction_df = prediction_df.drop_duplicates(subset=['sample_id', raisha_column_name], keep='last')
-                final_total_payoff_prediction = prediction_df[final_total_payoff_prediction_column]
-                total_payoff_label = prediction_df[total_payoff_label_column]
-                if type(total_payoff_label.values[0]) == str:  # tensor(value, cuda=...) instead of float
-                    total_payoff_label = prediction_df[['sample_id']].merge(
-                        total_payoff, right_index=True, left_on='sample_id')[total_payoff_label_column]
-                    prediction_df = prediction_df.drop(total_payoff_label_column, axis=1).merge(
-                        total_payoff, right_index=True, left_on='sample_id')
-                # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
-                bin_predictions, bin_label = create_bin_columns(final_total_payoff_prediction, total_payoff_label,
-                                                                hotel_label_0=True)
-                # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
-                _, results_dict = calculate_measures_for_continues_labels(
-                    prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
-                    total_payoff_label_column=total_payoff_label_column,
-                    bin_label=bin_label, bin_predictions=bin_predictions,
-                    label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
-                                   'total future payoff > 2/3'])
+            if not all_results_file:  # no all_results_file
+                metadata_df = pd.read_excel(xls, sheet_name=f'Model results', skiprows=[0], index_col=0)
+            else:
+                metadata_df = pd.read_excel(xls, f'All models results', skiprows=[0], index_col=0)
+                metadata_df = metadata_df.loc[metadata_df.model_num == model_num]
 
-                if raisha_column_name in prediction_df.columns:  # do the raisha analysis
-                    raisha_options = prediction_df[raisha_column_name].unique()
-                    bin_predictions = pd.DataFrame(bin_predictions).join(prediction_df[[raisha_column_name]], how='left')
-                    bin_label = pd.DataFrame(bin_label).join(prediction_df[[raisha_column_name]], how='left')
-                    all_raisha_dict = defaultdict(dict)
-                    for raisha in raisha_options:
-                        raisha_data = prediction_df.loc[prediction_df[raisha_column_name] == raisha]
-                        raisha_bin_label = bin_label.loc[bin_label[raisha_column_name] == raisha]
-                        raisha_bin_predictions = bin_predictions.loc[bin_predictions[raisha_column_name] == raisha]
-                        # bin_label_raisha = bin_label.loc[]
-                        _, results_dict_raisha = calculate_measures_for_continues_labels(
-                            raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
-                            total_payoff_label_column=total_payoff_label_column,
-                            bin_label=raisha_bin_label['bin_label'],
-                            bin_predictions=raisha_bin_predictions['bin_predictions'],
-                            label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
-                                           'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
-                        all_raisha_dict.update(results_dict_raisha)
-                    results_dict = update_default_dict(results_dict, all_raisha_dict)
+            model_type = metadata_df['model_type'].unique()[0]
+            model_name = metadata_df['model_name'].unique()[0]
+            if 'turn' in model_type:
+                predict_seq = True
+            else:
+                predict_seq = False
 
-                results_df = pd.DataFrame.from_dict(results_dict).T
-                results_df['raisha_round'] = results_df.index
-                results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
-                results_df = results_df.drop('raisha_round', axis=1)
-                results_df.index = np.zeros(shape=(results_df.shape[0],))
-                metadata_df = pd.read_excel(os.path.join(files_path, file_name), sheet_name=f'Model results',
-                                            skiprows=[0], index_col=0)
-                if 'hyper_parameters_dict' in metadata_df.columns:
-                    hyper_parameters = 'hyper_parameters_dict'
-                else:
-                    hyper_parameters = 'hyper_parameters_str'
-                metadata_df = pd.DataFrame(metadata_df[['model_num', 'model_type', 'model_name', 'data_file_name',
-                                                        hyper_parameters]].iloc[0])
-                results_df = results_df.join(metadata_df.T)
-                results_df.index = [f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'] * results_df.shape[0]
-                results_df.to_excel(os.path.join(base_directory, 'logs', 'after_fix_bin_raisha',
-                                                 f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'))
-                all_models_results.append(results_df)
+            if 'avg' in model_type:
+                predict_avg_total_payoff = True
+            else:
+                predict_avg_total_payoff = False
 
-    all_models_results_df = pd.concat(all_models_results, sort='False')
-    return all_models_results_df
+            table_writer = pd.ExcelWriter(os.path.join(base_directory, 'logs', 'after_fix_bin_raisha',
+                                                       f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'),
+                                          engine='xlsxwriter')
+
+            if predict_seq:
+                if all_seq_predictions.shape[0] > 4000:  # duplicated predictions (bug in epoch+=1)
+                    all_seq_predictions =\
+                        all_seq_predictions.drop_duplicates(subset=['sample_id', raisha_column_name], keep='last')
+                max_predict_column = max([int(column.split('_')[1]) for column in all_seq_predictions.columns if
+                                          'predictions' in column])
+                all_seq_predictions['final_prediction'] = all_seq_predictions[f'predictions_{max_predict_column}']
+                max_total_payoff_predict_column = max([int(column.split('_')[3]) for column in
+                                                       all_seq_predictions.columns if
+                                                       'total_payoff_prediction_' in column])
+                all_seq_predictions['final_total_payoff_prediction'] = \
+                    all_seq_predictions[f'total_payoff_prediction_{max_total_payoff_predict_column}']
+                all_seq_predictions = all_seq_predictions.loc[all_seq_predictions.is_train == False]
+                all_seq_predictions = all_seq_predictions[['is_train', 'labels', 'total_payoff_label', 'raisha',
+                                                           'final_prediction', 'final_total_payoff_prediction']]
+                write_to_excel(
+                    table_writer, f'Model_{model_num}_seq',
+                    headers=[f'Seq predictions for model {model_num}: {model_name} of type {model_type} in fold {fold}'],
+                    data=all_seq_predictions)
+                all_prediction = all_seq_predictions
+
+            if predict_avg_total_payoff:
+                if all_reg_predictions.shape[0] > 4000:  # duplicated predictions (bug in epoch+=1)
+                    all_reg_predictions =\
+                        all_reg_predictions.drop_duplicates(subset=['sample_id', raisha_column_name], keep='last')
+                # get the final prediction for reg models
+                max_predict_column = max([int(column.split('_')[1]) for column in all_reg_predictions.columns if
+                                          'prediction_' in column])
+                all_reg_predictions['final_total_payoff_prediction'] =\
+                    all_reg_predictions[f'prediction_{max_predict_column}']
+                all_reg_predictions = all_reg_predictions.loc[all_reg_predictions.is_train == False]
+                all_reg_predictions = all_reg_predictions[['is_train', 'sample_id', 'total_payoff_label', 'raisha',
+                                                           'final_total_payoff_prediction']]
+                write_to_excel(
+                    table_writer, f'Model_{model_num}_reg',
+                    headers=[f'Reg predictions for model {model_num}: {model_name} of type {model_type} in fold {fold}'],
+                    data=all_reg_predictions)
+                all_prediction = all_reg_predictions
+            if not predict_avg_total_payoff and not predict_seq:
+                print('Model type do not have avg or turn')
+                return
+
+            final_total_payoff_prediction = all_prediction[final_total_payoff_prediction_column]
+            total_payoff_label = all_prediction[total_payoff_label_column]
+            if type(total_payoff_label.values[0]) == str:  # tensor(value, cuda=...) instead of float
+                total_payoff_label = all_prediction[['sample_id']].merge(
+                    total_payoff_true_label, right_index=True, left_on='sample_id')[total_payoff_label_column]
+                all_prediction = all_prediction.drop(total_payoff_label_column, axis=1).merge(
+                    total_payoff_true_label, right_index=True, left_on='sample_id')
+            # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+            bin_predictions, bin_label = create_bin_columns(final_total_payoff_prediction, total_payoff_label,
+                                                            hotel_label_0=True)
+            # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+            _, results_dict = calculate_measures_for_continues_labels(
+                all_prediction, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                total_payoff_label_column=total_payoff_label_column,
+                bin_label=bin_label, bin_predictions=bin_predictions,
+                label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
+                               'total future payoff > 2/3'])
+
+            if raisha_column_name in all_prediction.columns:  # do the raisha analysis
+                raisha_options = all_prediction[raisha_column_name].unique()
+                bin_predictions = pd.DataFrame(bin_predictions).join(all_prediction[[raisha_column_name]], how='left')
+                bin_label = pd.DataFrame(bin_label).join(all_prediction[[raisha_column_name]], how='left')
+                all_raisha_dict = defaultdict(dict)
+                for raisha in raisha_options:
+                    raisha_data = all_prediction.loc[all_prediction[raisha_column_name] == raisha]
+                    raisha_bin_label = bin_label.loc[bin_label[raisha_column_name] == raisha]
+                    raisha_bin_predictions = bin_predictions.loc[bin_predictions[raisha_column_name] == raisha]
+                    # bin_label_raisha = bin_label.loc[]
+                    _, results_dict_raisha = calculate_measures_for_continues_labels(
+                        raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                        total_payoff_label_column=total_payoff_label_column,
+                        bin_label=raisha_bin_label['bin_label'],
+                        bin_predictions=raisha_bin_predictions['bin_predictions'],
+                        label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
+                                       'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
+                    all_raisha_dict.update(results_dict_raisha)
+                results_dict = update_default_dict(results_dict, all_raisha_dict)
+
+            # measures per round
+            if predict_seq:  # and not self.predict_avg_total_payoff:
+                all_prediction = all_seq_predictions
+                flat_seq_predictions = flat_seq_predictions_list_column(
+                    prediction=all_prediction, label_column_name_per_round='labels',
+                    prediction_column_name_per_round='final_prediction')
+                write_to_excel(
+                    table_writer, f'Model_{model_num}_per_round',
+                    headers=[f'Per round predictions for model {model_num}: {model_name} of type {model_type} in fold '
+                             f'{fold}'], data=flat_seq_predictions)
+                label_options = ['DM chose hotel', 'DM chose stay home']
+                results_dict_per_round = per_round_analysis(
+                    flat_seq_predictions, predictions_column=per_round_predictions_name,
+                    label_column=per_round_labels_name, label_options=label_options,
+                    function_to_run='calculate_per_round_measures')
+                results_dict = update_default_dict(results_dict, results_dict_per_round)
+
+                if 'raisha' in flat_seq_predictions:
+                    results_dict_per_round_per_raisha = per_round_analysis(
+                        flat_seq_predictions, predictions_column=per_round_predictions_name,
+                        label_column=per_round_labels_name, label_options=label_options,
+                        function_to_run='calculate_per_round_per_raisha_measures')
+                    results_dict = update_default_dict(results_dict, results_dict_per_round_per_raisha)
+
+            results_df = pd.DataFrame.from_dict(results_dict).T
+            results_df['raisha_round'] = results_df.index
+            results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
+            results_df = results_df.drop('raisha_round', axis=1)
+            results_df.index = np.zeros(shape=(results_df.shape[0],))
+            if 'hyper_parameters_dict' in metadata_df.columns:
+                hyper_parameters = 'hyper_parameters_dict'
+            else:
+                hyper_parameters = 'hyper_parameters_str'
+
+            metadata_df = pd.DataFrame(metadata_df[['model_num', 'model_type', 'model_name', 'data_file_name',
+                                                    hyper_parameters]].iloc[0])
+            metadata_df['fold'] = f'fold_{fold_num}'
+            results_df = results_df.join(metadata_df.T)
+            results_df.index = [f'{folder}_Results_{inner_folder}_model_{model_num}.xlsx'] * results_df.shape[0]
+            write_to_excel(table_writer, 'Model results', ['Model results'], results_df)
+            table_writer.save()
+            all_models_results.append(results_df)
+
+    if len(all_models_results) > 0:
+        all_models_results_df = pd.concat(all_models_results, sort='False')
+        return all_models_results_df
+    else:
+        return None
+
+
+def concat_all_rounds_per_rounds_results(all_resutls_file_name: str, new_eval_all_rounds: pd.DataFrame):
+    """
+    Concat all results with the new eval of the all_rounds measures
+    :param all_resutls_file_name:
+    :param new_eval_all_rounds:
+    :return:
+    """
+    all_resutls = pd.read_csv(os.path.join(base_directory, 'logs', all_resutls_file_name))
+    folders_to_eval = new_eval_all_rounds.index.unique()
+    all_resutls_not_LSTM = all_resutls.loc[~all_resutls.folder.isin(folders_to_eval)]
+    # merge
+    all_resutls_LSTM = all_resutls.loc[all_resutls.folder.isin(folders_to_eval)]
+    all_resutls_LSTM = all_resutls_LSTM[['folder', 'Per_round_Accuracy', 'Per_round_Fbeta_score_DM chose hotel',
+                                         'Per_round_Fbeta_score_DM chose stay home',
+                                         'Per_round_precision_DM chose hotel', 'Per_round_precision_DM chose stay home',
+                                         'Per_round_recall_DM chose hotel', 'Per_round_recall_DM chose stay home',
+                                         'Raisha', 'Round', 'data_file_name', 'fold', 'hyper_parameters_str',
+                                         'model_name', 'model_num', 'model_type']]
+    new_eval_all_rounds['folder'] = new_eval_all_rounds.index
+    new_eval_all_rounds = new_eval_all_rounds[[
+        'folder', 'Bin_Accuracy', 'Bin_Fbeta_score_1/3 < total future payoff < 2/3',
+        'Bin_Fbeta_score_total future payoff < 1/3', 'Bin_Fbeta_score_total future payoff > 2/3',
+        'Bin_precision_1/3 < total future payoff < 2/3', 'Bin_precision_total future payoff < 1/3',
+        'Bin_precision_total future payoff > 2/3', 'Bin_recall_1/3 < total future payoff < 2/3',
+        'Bin_recall_total future payoff < 1/3', 'Bin_recall_total future payoff > 2/3', 'MAE', 'MSE', 'RMSE', 'Raisha',
+        'Round']]
+
+    all_resutls_LSTM = all_resutls_LSTM.merge(new_eval_all_rounds, on=['folder', 'Raisha', 'Round'], how='left')
+    # join all results
+    all_resutls = pd.concat([all_resutls_LSTM, all_resutls_not_LSTM], sort='False')
+
+    all_results_file_name = 'all_results_03_06_new_eval_select_correct_final_pred.csv'
+    all_resutls.to_csv(os.path.join(base_directory, 'logs', all_results_file_name))
+    return all_results_file_name
 
 
 def main(log_directory: str, model_output_file_name: str, final_total_payoff_prediction_column_name: str,
@@ -471,35 +668,73 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 
 if __name__ == '__main__':
-    final_results = pd.DataFrame()
+    # final_results = pd.DataFrame()
 
-    for fold in range(6):
-        total_payoff = pd.read_excel(join(base_directory, 'logs', 'compare_prediction_models_07_05_2020_11_49',
-                                          f'fold_{fold}', 'excel_models_results',
-                                          f'Results_fold_{fold}_model_29_0.1.xlsx'),
-                                     sheet_name=f'Model_29_0.1_seq', skiprows=[0], index_col=0)
-        total_payoff = total_payoff.loc[total_payoff.is_train == False]
-        total_payoff = total_payoff.total_payoff_label
-        # all_models.xslx: compare_prediction_models_04_05_2020_19_15, compare_prediction_models_25_05_2020_12_53
-        curr_df = eval_model_total_prediction(['compare_prediction_models_07_05_2020_11_49',
-                                               'compare_prediction_models_03_05_2020_11_53',
-                                               'compare_prediction_models_10_05_2020_11_02',
-                                               'compare_prediction_models_11_05_2020_11_58',
-                                               'compare_prediction_models_12_05_2020_14_51',
-                                               'compare_prediction_models_13_05_2020_22_07',
-                                               'compare_prediction_models_14_05_2020_17_46',
-                                               'compare_prediction_models_16_05_2020_21_52',
-                                               'compare_prediction_models_17_05_2020_22_12',
-                                               'compare_prediction_models_19_05_2020_22_44',
-                                               'compare_prediction_models_20_05_2020_17_39',
-                                               'compare_prediction_models_25_04_2020_19_00',
-                                               'compare_prediction_models_25_05_2020_14_04',
-                                               'compare_prediction_models_26_05_2020_11_04',
-                                               'compare_prediction_models_26_05_2020_18_17',
-                                               'compare_prediction_models_29_04_2020_23_59'], fold, total_payoff)
-        final_results = pd.concat([final_results, curr_df], sort='False')
+    # for fold in range(6):
+    #     total_payoff = pd.read_excel(join(base_directory, 'logs', 'compare_prediction_models_07_05_2020_11_49',
+    #                                       f'fold_{fold}', 'excel_models_results',
+    #                                       f'Results_fold_{fold}_model_29_0.1.xlsx'),
+    #                                  sheet_name=f'Model_29_0.1_seq', skiprows=[0], index_col=0)
+    #     total_payoff = total_payoff.loc[total_payoff.is_train == False]
+    #     total_payoff = total_payoff.total_payoff_label
+    #     # all_models.xslx: compare_prediction_models_04_05_2020_19_15, compare_prediction_models_25_05_2020_12_53
+    #     curr_df = eval_model_total_prediction(['compare_prediction_models_04_05_2020_19_15',
+    #                                            'compare_prediction_models_07_05_2020_11_49',
+    #                                            'compare_prediction_models_03_05_2020_11_53',
+    #                                            'compare_prediction_models_10_05_2020_11_02',
+    #                                            'compare_prediction_models_11_05_2020_11_58',
+    #                                            'compare_prediction_models_12_05_2020_14_51',
+    #                                            'compare_prediction_models_13_05_2020_22_07',
+    #                                            'compare_prediction_models_14_05_2020_17_46',
+    #                                            'compare_prediction_models_16_05_2020_21_52',
+    #                                            'compare_prediction_models_17_05_2020_22_12',
+    #                                            'compare_prediction_models_19_05_2020_22_44',
+    #                                            'compare_prediction_models_20_05_2020_17_39',
+    #                                            'compare_prediction_models_25_04_2020_19_00',
+    #                                            'compare_prediction_models_25_05_2020_14_04',
+    #                                            'compare_prediction_models_26_05_2020_11_04',
+    #                                            'compare_prediction_models_26_05_2020_18_17',
+    #                                            'compare_prediction_models_29_04_2020_23_59'
+    #                                            'compare_prediction_models_31_05_2020_12_35',
+    #                                            'compare_prediction_models_29_05_2020_15_10',
+    #                                            'compare_prediction_models_25_05_2020_12_53',
+    #                                            'compare_prediction_models_01_06_2020_15_23',
+    #                                            'compare_prediction_models_02_06_2020_13_18',
+    #                                            'compare_prediction_models_30_05_2020_17_17'], fold, total_payoff)
+    #     # curr_df = eval_model_total_prediction(['compare_prediction_models_22_04_2020_23_32'], fold, total_payoff)
+    #     if curr_df is not None:  # if no data in this fold so curr_df = None
+    #         final_results = pd.concat([final_results, curr_df], sort='False')
+    #
+    # final_results.to_csv(os.path.join(base_directory, 'logs', 'after_fix_bin_raisha',
+    #                                   'total_prediction_results_check_no_train_select_correct_final_results_04_06.csv'))
 
-    final_results.to_csv(os.path.join(base_directory, 'logs', 'total_prediction_results_check_no_train.csv'))
+    new_eval_all_rounds = list()
+    for new_eval_file_name in ['total_prediction_results_check_no_train_select_correct_final_results_04_06.csv',
+                               'total_prediction_results_check_no_train_select_correct_final_results_22_04.csv']:
+        new_eval_all_rounds.append(pd.read_csv(os.path.join(base_directory, 'logs', 'after_fix_bin_raisha',
+                                                            new_eval_file_name), index_col=0))
+
+    final_results = pd.concat(new_eval_all_rounds, sort=False)
+    final_results['folder'] = final_results.index
+
+    final_results['fold'] = final_results.folder.str.extract(r"fold_(\d)")
+    final_results['temp'] = 'fold'
+    final_results['fold'] = final_results['temp'] + '_' + final_results['fold'].map(str)
+
+    # all_results_file_name = concat_all_rounds_per_rounds_results('all_results_01_06.csv', new_eval_all_rounds)
+
+    all_resutls = pd.read_csv(os.path.join(base_directory, 'logs', 'all_results_01_06_new_eval.csv'), index_col=0)
+    folders_to_eval = final_results.index.unique()
+    all_resutls_not_LSTM = all_resutls.loc[~all_resutls.folder.isin(folders_to_eval)]
+    # merge
+    all_resutls_LSTM = all_resutls.loc[all_resutls.folder.isin(folders_to_eval)]
+    # join all results
+    all_resutls = pd.concat([final_results, all_resutls_not_LSTM], sort='False')
+    all_resutls.reset_index(inplace=True, drop=True)
+    all_results_file_name = 'all_results_05_06_new_eval_select_correct_final_pred.csv'
+    all_resutls.to_csv(os.path.join(base_directory, 'logs', all_results_file_name))
+
+    analyze_model_results.main(new_results_file_name=all_results_file_name, results_to_use=all_resutls)
 
     # ray.init()
     # final_results = pd.DataFrame()
