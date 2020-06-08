@@ -537,7 +537,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_epochs' in hyper_parameters_dict.keys():
             self.num_epochs = int(hyper_parameters_dict['num_epochs'])
         else:
-            self.num_epochs = 10
+            self.num_epochs = 100
         if 'batch_size' in hyper_parameters_dict.keys():
             self.batch_size = int(hyper_parameters_dict['batch_size'])
         else:
