@@ -403,7 +403,7 @@ def eval_model_total_prediction(folder_list: list, fold_num: int, total_payoff_t
     :param total_payoff_true_label: total_payoff_true_label for this fold
     :return:
     """
-    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_compare.xlsx'),
+    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_hyper_parameters.xlsx'),
                                       sheet_name='table_to_load', skiprows=[0])
     models_to_eval = models_to_compare.loc[models_to_compare.function_to_run == 'ExecuteEvalLSTM']
     model_nums = models_to_eval.model_num.unique().tolist()

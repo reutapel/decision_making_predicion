@@ -30,7 +30,7 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.0
+alpha_text = 0.9
 alpha_global = 0.8
 
 # define global raisha and saifa names to prevent typos
@@ -84,8 +84,8 @@ def create_average_history_text(rounds: list, temp_reviews: pd.DataFrame, prefix
             history_mean = history.mean(axis=0)  # get the average of each column
             future_mean = future.mean(axis=0)
         else:
-            history_mean = history.mul(history_weights, axis=0).sum()
-            future_mean = future.mul(future_weights, axis=0).sum()
+            history_mean = history.mul(history_weights, axis=0).mean()
+            future_mean = future.mul(future_weights, axis=0).mean()
         # concat the review_id of the current round
         if history.empty:  # round=1, no history
             history_mean = pd.Series(np.repeat(-1, history.shape[1]), index=history.columns)
@@ -210,7 +210,7 @@ class CreateSaveData:
                  predict_first_round: bool=False, use_crf: bool=False, features_to_drop: list=None,
                  string_labels: bool=False, saifa_average_text: bool=False, no_saifa_text: bool=False,
                  saifa_only_prev_rounds_text: bool=False, use_prev_round_label: bool=False,
-                 non_nn_turn_model: bool=False, transformer_model: bool=False):
+                 non_nn_turn_model: bool=False, transformer_model: bool=False, raisha_data_first_round: bool=False):
         """
         :param load_file_name: the raw data file name
         :param total_payoff_label: if the label is the total payoff of the expert or the next rounds normalized payoff
@@ -239,6 +239,7 @@ class CreateSaveData:
         :param saifa_only_prev_rounds_text: if we want to use only the previous rounds in the saifa
         :param non_nn_turn_model: non neural networks models that predict a label for each round
         :param transformer_model: create data for transformer model --> create features for raisha rounds too
+        :param raisha_data_first_round: use the raisha data only for the first round in the saifa
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -328,6 +329,7 @@ class CreateSaveData:
         self.use_prev_round_label = use_prev_round_label
         self.non_nn_turn_model = non_nn_turn_model
         self.transformer_model = transformer_model
+        self.raisha_data_first_round = raisha_data_first_round
         # if we use the history average -> don't predict the first round because there is no history
         # if self.use_all_history_text_average or self.use_all_history_average:
         #     self.predict_first_round = False
@@ -348,10 +350,11 @@ class CreateSaveData:
                                'prev_round_text_' if self.use_prev_round_text else '',
                                'prev_round_label_' if self.use_prev_round_label else '',
                                f'all_history_features_' if self.use_all_history else '',
-                               f'all_history_features_average_with_global_alpha_{alpha_global}_'
+                               f'all_history_features_avg_with_global_alpha_{alpha_global}_'
                                if self.use_all_history_average else '',
-                               f'all_history_text_average_with_alpha_{alpha_text}_' if
+                               f'all_history_text_avg_with_alpha_{alpha_text}_' if
                                self.use_all_history_text_average else '',
+                               'rai_data_fir_rnd_' if raisha_data_first_round else '',
                                f'no_saifa_text_' if self.no_saifa_text else '',
                                f'all_saifa_text_average_' if self.saifa_average_text else '',
                                'saifa_only_prev_rounds_text_' if self.saifa_only_prev_rounds_text else '',
@@ -406,7 +409,7 @@ class CreateSaveData:
                     else:
                         data_to_create.loc[(data_to_create.pair_id == pair) &
                                            (data_to_create.subsession_round_number == round_num),
-                                           f'history_{column}'] = (pow(history[column], j) * weights).sum()
+                                           f'history_{column}'] = (pow(history[column], j) * weights).mean()
                     # for the first round put -1 for the history
                     data_to_create.loc[(data_to_create.pair_id == pair) &
                                        (data_to_create.subsession_round_number == 1), f'history_{column}'] = -1
@@ -986,6 +989,7 @@ class CreateSaveData:
                     sorted([f'{column}_{j}' for column, j in
                             list(itertools.product(*[decisions_payoffs_columns, list(range(raisha, 10))]))],
                            key=lambda x: int(x[-1]))
+
                 for round_num in range(0, 10):
                     # the raisha data --> no need to put because we don't predict these rounds
                     if round_num < raisha and not self.transformer_model:
@@ -1176,6 +1180,11 @@ class CreateSaveData:
                 raisha_saifa_data = raisha_saifa_data[raisha_columns]
                 raisha_saifa_data_list = raisha_saifa_data.values.tolist()[0]
                 for round_num in range(0, 10):
+                    # put raisha data only for the first round in saifa
+                    if self.raisha_data_first_round and round_num - raisha != 0:
+                        raisha_saifa_data_list_round = [-1] * len(raisha_saifa_data_list)
+                    else:
+                        raisha_saifa_data_list_round = copy.deepcopy(raisha_saifa_data_list)
                     # the raisha data --> no need to put because we don't predict these rounds
                     if round_num < raisha and not self.transformer_model:
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = None
@@ -1204,7 +1213,7 @@ class CreateSaveData:
                             round_data_list += prev_round_data_list
 
                         # concat raisha, current round and saifa data
-                        all_data = raisha_saifa_data_list + round_data_list
+                        all_data = raisha_saifa_data_list_round + round_data_list
                         raisha_data_dict[raisha][f'features_round_{round_num+1}'] = all_data
 
             pair_raisha_data = pd.DataFrame.from_dict(raisha_data_dict).T
@@ -1451,18 +1460,19 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = 'bert_embedding'
+    features_to_use = 'manual_binary_features'
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
-                   'use_prev_round_text': True,
+                   'use_prev_round_text': False,
                    'use_prev_round_label': False,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
+                   'use_all_history_average': True,
                    'use_all_history': False,
-                   'use_all_history_text_average': False,
+                   'use_all_history_text_average': True,
                    'use_all_history_text': False,
-                   'saifa_average_text': False,
+                   'raisha_data_first_round': False,
+                   'saifa_average_text': True,
                    'no_saifa_text': True,
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
@@ -1470,7 +1480,7 @@ def main():
                    'predict_first_round': True,
                    'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
                    'transformer_model': False,   # for transformer models-we need to create features also for the raisha
-                   'label': 'single_round',
+                   'label': 'future_total_payoff',
                    },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
@@ -1481,20 +1491,21 @@ def main():
                     'use_all_history_text_average': False,
                     'use_all_history_text': True,
                     'saifa_average_text': True,
+                    'raisha_data_first_round': True,
                     'no_saifa_text': True,
                     'saifa_only_prev_rounds_text': True,
                     'no_text': True,
                     'use_score': True,
                     'predict_first_round': True,
-                    'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
-                    'transformer_model': True,  # for transformer models-we need to create features also for the raisha
+                    'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
+                    'transformer_model': False,  # for transformer models-we need to create features also for the raisha
                     'label': 'future_total_payoff'
                     }
     }
     use_seq = False
     use_crf = False
-    use_crf_raisha = True
-    string_labels = True  # labels are string --> for LSTM and transformer model
+    use_crf_raisha = False
+    string_labels = False  # labels are string --> for LSTM and transformer model
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
     #                     'topic_location_negative', 'topic_food_positive']
@@ -1527,7 +1538,8 @@ def main():
                                               'saifa_only_prev_rounds_text'],
                                           use_prev_round_label=conditions_dict[condition]['use_prev_round_label'],
                                           non_nn_turn_model=conditions_dict[condition]['non_nn_turn_model'],
-                                          transformer_model=conditions_dict[condition]['transformer_model'])
+                                          transformer_model=conditions_dict[condition]['transformer_model'],
+                                          raisha_data_first_round=conditions_dict[condition]['raisha_data_first_round'])
     # create_save_data_obj = CreateSaveData('results_payments_status', total_payoff_label=True)
     if create_save_data_obj.use_manual_features:
         if use_seq:

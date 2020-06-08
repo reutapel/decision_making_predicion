@@ -7,9 +7,9 @@ from sklearn.dummy import DummyClassifier, DummyRegressor
 
 
 class SVMTotal:
-    def __init__(self, features, model_name):
+    def __init__(self, features, model_name, kernel: str=None, degree: int=None):
         if 'svm' in str.lower(model_name):
-            self.model = SVR(gamma='scale')
+            self.model = SVR(gamma='scale', kernel=kernel, degree=degree)
         elif 'average' in str.lower(model_name):
             self.model = DummyRegressor(strategy='mean')
         elif 'median' in str.lower(model_name):
@@ -54,9 +54,9 @@ class SVMTotal:
 
 
 class SVMTurn:
-    def __init__(self, features, model_name):
+    def __init__(self, features, model_name, kernel: str=None, degree: int=None):
         if 'svm' in str.lower(model_name):
-            self.model = SVC(gamma='scale')
+            self.model = SVC(gamma='scale', kernel=kernel, degree=degree)
         elif 'stratified' in str.lower(model_name):
             self.model = DummyClassifier(strategy='stratified')
         elif 'most_frequent' in str.lower(model_name):

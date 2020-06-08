@@ -751,27 +751,37 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  predict_avg_total_payoff: bool=True,
                  batch_size: int=10,
                  linear_dim=None,
-                 dropout: float=None) -> None:
+                 dropout: float=None,
+                 use_last_hidden_vec: bool=False,
+                 use_transformer_encode: bool=False,
+                 input_dim: int=0) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
+        if use_transformer_encode:
+            encoder_input_dim = input_dim
+        else:
+            encoder_input_dim = encoder.get_output_dim()
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=encoder.get_output_dim(), output_size=linear_dim,
-                                                dropout=dropout)
+                self.linear_layer = LinearLayer(input_size=encoder_input_dim, output_size=linear_dim, dropout=dropout)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
-                hidden2tag_input_size = encoder.get_output_dim()
-            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
+                hidden2tag_input_size = encoder_input_dim
+            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'),
+                                          dropout=dropout)
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
             self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
             # self.sigmoid = nn.Sigmoid()
-            self.attention_vector = torch.randn((batch_size, encoder.get_output_dim()), requires_grad=True)
+            self.attention_vector = torch.randn((batch_size, encoder_input_dim), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
+
+        if use_last_hidden_vec:
+            self.last_hidden_reg = LinearLayer(input_size=encoder_input_dim, output_size=1, dropout=dropout)
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg
@@ -783,6 +793,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         self.reg_weight_loss = reg_weight_loss
         self.predict_seq = predict_seq
         self.predict_avg_total_payoff = predict_avg_total_payoff
+        self.use_last_hidden_vec = use_last_hidden_vec
 
     def forward(self,
                 sequence_review: torch.Tensor,
@@ -807,6 +818,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                 reg_labels = reg_labels.cuda()
 
         encoder_out = self.encoder(sequence_review, mask)
+
         if self.predict_seq:
             if self.linear_layer is not None:
                 encoder_out_linear = self.linear_layer(encoder_out)  # add linear layer before hidden2tag
@@ -821,9 +833,19 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                                                                # hotel_label_0=self.hotel_label_0)
 
         if self.predict_avg_total_payoff:
-            attention_output = self.attention(self.attention_vector, encoder_out, mask)
-            regression_output = self.regressor(attention_output)
-            # regression_output = self.sigmoid(regression_output)
+            if self.use_last_hidden_vec:
+                max_raisha = metadata[-1]['raisha']
+                all_last_hidden_vectors = list()
+                for seq_id in range(encoder_out.shape[0]):
+                    seq_raisha = metadata[seq_id]['raisha']
+                    last_hidden_vec = encoder_out[seq_id][max_raisha - seq_raisha]
+                    all_last_hidden_vectors.append(last_hidden_vec)
+                all_last_hidden_vectors = torch.stack(all_last_hidden_vectors, dim=0)
+                regression_output = self.last_hidden_reg(all_last_hidden_vectors)
+            else:
+                attention_output = self.attention(self.attention_vector, encoder_out, mask)
+                regression_output = self.regressor(attention_output)
+                # regression_output = self.sigmoid(regression_output)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                     predictions=output['regression_output'], gold_labels=reg_labels,
@@ -982,6 +1004,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                  num_decoder_layers=6,
                  feedforward_hidden_dim=2048,
                  dropout=0.1,
+                 transformer_dropout=0.1,
                  activation="relu",
                  custom_encoder=None,
                  custom_decoder=None,
@@ -995,10 +1018,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                  linear_dim: int=None,
                  ):
         super(TransformerFixTextFeaturesDecisionResultModel, self).__init__(vocab)
-        if dropout is None:
-            transformer_dropout = 0.1
-        else:
-            transformer_dropout = dropout
+
         if custom_encoder is not None:
             self.encoder = custom_encoder
         else:
@@ -1042,12 +1062,13 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
 
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim)
+                self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim, dropout=dropout)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
                 hidden2tag_input_size = input_dim
-            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'))
+            self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'),
+                                          dropout=dropout)
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg

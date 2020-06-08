@@ -18,7 +18,7 @@ run_dir = utils.set_folder(datetime.now().strftime(f'predict_best_models_%d_%m_%
 def predict_best_models(best_model_file_name: str):
     all_models_results = pd.DataFrame()
     best_models = pd.read_excel(os.path.join(base_directory, 'logs', best_model_file_name))
-    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_compare.xlsx'),
+    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_hyper_parameters.xlsx'),
                                       sheet_name='table_to_load', skiprows=[0])
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'
     participants_fold = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))

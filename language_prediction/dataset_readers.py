@@ -192,12 +192,17 @@ class LSTMDatasetReader(DatasetReader):
     def __init__(self,
                  lazy: bool = False,
                  label_column: Optional[str] = 'labels',
-                 pair_ids: list = None) -> None:
+                 pair_ids: list = None,
+                 num_attention_heads: int=8,
+                 use_transformer: bool= False) -> None:
         super().__init__(lazy)
         self._label_column = label_column
         self.num_features = 0
         self.num_labels = 2
         self.pair_ids = pair_ids
+        self.input_dim = 0
+        self.use_transformer = use_transformer
+        self.num_attention_heads = num_attention_heads
 
     @overrides
     def text_to_instance(self, features_list: List[ArrayField], labels: List[str] = None,
@@ -245,7 +250,18 @@ class LSTMDatasetReader(DatasetReader):
                 if row[f'features_round_{round_num}'] is not None:
                     if self.num_features == 0:
                         self.num_features = len(row[f'features_round_{round_num}'])
-                    text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+                        if self.use_transformer:  # for transformer the input dim should be // self.num_attention_heads
+                            check = self.num_features // self.num_attention_heads
+                            if check * self.num_attention_heads != self.num_features:
+                                self.input_dim = (check + 1) * self.num_attention_heads
+                            else:
+                                self.input_dim = self.num_features
+                    if self.use_transformer:
+                        extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
+                        raisha_data = row[f'features_round_{round_num}'] + extra_columns
+                        text_list.append(ArrayField(np.array(raisha_data), padding_value=-1))
+                    else:
+                        text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
             labels = row[self._label_column]
             metadata_dict = {column: row[column] for column in metadata_columns}
             yield self.text_to_instance(text_list, labels, metadata_dict)

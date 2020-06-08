@@ -23,6 +23,8 @@ from allennlp.modules.seq2seq_encoders import PytorchSeq2SeqWrapper
 from collections import defaultdict
 import copy
 from allennlp.nn.regularizers import RegularizerApplicator, L1Regularizer, L2Regularizer
+from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
+from torch.nn.modules.normalization import LayerNorm
 
 per_round_predictions_name = 'per_round_predictions'
 per_round_labels_name = 'per_round_labels'
@@ -39,7 +41,7 @@ class ExecuteEvalModel:
     """
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, excel_models_results: str,
-                 trained_model=None, trained_model_dir=None):
+                 hyper_parameters_dict: dict, trained_model=None, trained_model_dir=None):
 
         self.model_num = model_num
         self.fold = fold
@@ -60,7 +62,8 @@ class ExecuteEvalModel:
         self.model_table_writer = pd.ExcelWriter(
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
         print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
-              f'\nData file name: {data_file_name}')
+              f'\nData file name: {data_file_name}'
+              f'\nMode hyper parameters: {hyper_parameters_dict}')
         logging.info(f'Create Model: model num: {model_num}, model_type: {model_type}, model_name: {model_name}. '
                      f'Data file name: {data_file_name}')
 
@@ -270,9 +273,10 @@ class ExecuteEvalModel:
 class ExecuteEvalCRF(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results:str):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None):
         super(ExecuteEvalCRF, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
-                                             fold_split_dict, table_writer, data_directory, excel_models_results)
+                                             fold_split_dict, table_writer, data_directory, excel_models_results,
+                                             hyper_parameters_dict, trained_model, trained_model_dir)
         self.squared_sigma = float(hyper_parameters_dict['squared_sigma'])
         self.predict_future = False if hyper_parameters_dict['predict_future'] == 'False' else True
         self.use_forward_backward_fix_history =\
@@ -367,13 +371,23 @@ class ExecuteEvalCRF(ExecuteEvalModel):
 class ExecuteEvalSVM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None):
         super(ExecuteEvalSVM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
-                                             fold_split_dict, table_writer, data_directory, excel_models_results)
+                                             fold_split_dict, table_writer, data_directory, excel_models_results,
+                                             hyper_parameters_dict, trained_model, trained_model_dir)
         self.label_name = hyper_parameters_dict['label_name']
         self.train_x, self.train_y, self.validation_x, self.validation_y, self.test_y, self.test_x =\
             None, None, None, None, None, None
         self.features_file_name = 'features_' + self.data_file_name.split('all_data_', 1)[1].split('.pkl')[0]+'.xlsx'
+
+        if 'kernel' in hyper_parameters_dict.keys():
+            self.kernel = hyper_parameters_dict['kernel']
+        else:
+            self.kernel = 'rbf'
+
+        self.degree = 0
+        if 'degree' in hyper_parameters_dict.keys() and type(hyper_parameters_dict['degree']) == int:
+            self.degree = hyper_parameters_dict['degree']
 
     def load_data_create_model(self):
         print(f'Load and create Data file name: {self.data_file_name}')
@@ -408,7 +422,7 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         if self.trained_model is not None:
             self.model = self.trained_model
         else:
-            self.model = getattr(SVM_models, self.model_type)(features, self.model_name)
+            self.model = getattr(SVM_models, self.model_type)(features, self.model_name, self.kernel, self.degree)
 
     def fit_validation(self):
         print(f'fit and predict model {self.model_name}')
@@ -507,9 +521,10 @@ class ExecuteEvalSVM(ExecuteEvalModel):
 class ExecuteEvalLSTM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None):
         super(ExecuteEvalLSTM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
-                                              fold_split_dict, table_writer, data_directory, excel_models_results)
+                                              fold_split_dict, table_writer, data_directory, excel_models_results,
+                                              hyper_parameters_dict, trained_model, trained_model_dir)
         if 'lstm_hidden_dim' in hyper_parameters_dict.keys():
             self.lstm_hidden_dim = int(hyper_parameters_dict['lstm_hidden_dim'])
         else:
@@ -522,7 +537,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_epochs' in hyper_parameters_dict.keys():
             self.num_epochs = int(hyper_parameters_dict['num_epochs'])
         else:
-            self.num_epochs = 100
+            self.num_epochs = 10
         if 'batch_size' in hyper_parameters_dict.keys():
             self.batch_size = int(hyper_parameters_dict['batch_size'])
         else:
@@ -538,18 +553,18 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if 'num_decoder_layers' in hyper_parameters_dict.keys():
             self.num_decoder_layers = int(hyper_parameters_dict['num_decoder_layers'])
         else:
-            self.num_decoder_layers = 6
+            self.num_decoder_layers = self.num_encoder_layers
         if 'positional_encoding' in hyper_parameters_dict.keys():
             self.positional_encoding = hyper_parameters_dict['positional_encoding']
         else:
             self.positional_encoding = 'sinusoidal'
-        if 'dropout' in hyper_parameters_dict.keys():
-            if hyper_parameters_dict['dropout'] is not None:
-                self.dropout = float(hyper_parameters_dict['dropout'])
+        if 'linear_dropout' in hyper_parameters_dict.keys():
+            if hyper_parameters_dict['linear_dropout'] is not None:
+                self.linear_dropout = float(hyper_parameters_dict['linear_dropout'])
             else:
-                self.dropout = None
+                self.linear_dropout = None
         else:
-            self.dropout = None
+            self.linear_dropout = None
 
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
@@ -564,7 +579,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         self.cuda_device = None
         self.run_log_directory = utils.set_folder(datetime.now().strftime(
             f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_{self.fold}_folds_'
-            f'{self.lstm_hidden_dim}_hidden_dim_%d_%m_%Y_%H_%M_%S'), self.fold_dir)
+            f'{self.lstm_hidden_dim}_hidden_dim'), self.fold_dir)
         try:
             if 'turn' in model_type:
                 self.predict_seq = True
@@ -576,12 +591,35 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 self.predict_avg_total_payoff = False
 
+            if 'last_hidden' in model_type:
+                self.use_last_hidden_vec = True
+            else:
+                self.use_last_hidden_vec = False
+
+            if 'use_transformer' in model_type:
+                self.use_transformer_encoder = True
+            else:
+                self.use_transformer_encoder = False
+
             if 'avg_loss' in hyper_parameters_dict.keys():
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
             if 'turn_loss' in hyper_parameters_dict.keys():
                 self.turn_loss = float(hyper_parameters_dict['turn_loss'])
             if 'linear_hidden_dim' in hyper_parameters_dict.keys():
                 self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
+            if 'lstm_dropout' in hyper_parameters_dict.keys():
+                self.lstm_dropout = float(hyper_parameters_dict['lstm_dropout'])
+            else:
+                self.lstm_dropout = 0.0
+            if 'num_layers' in hyper_parameters_dict.keys():
+                self.num_layers = int(hyper_parameters_dict['num_layers'])
+            else:
+                self.num_layers = 1
+            if 'feedforward_hidden_dim_prod' in hyper_parameters_dict.keys():
+                self.feedforward_hidden_dim_prod = float(hyper_parameters_dict['feedforward_hidden_dim_prod'])
+            else:
+                self.feedforward_hidden_dim_prod = 4
+
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return
@@ -592,8 +630,10 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
         # load train data
         if 'LSTM' in self.model_type or 'Attention' in self.model_type:
-            train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids)
-            validation_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids)
+            train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids,
+                                             use_transformer=self.use_transformer_encoder)
+            validation_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids,
+                                                  use_transformer=self.use_transformer_encoder)
 
         elif 'Transformer' in self.model_type:
             train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids,
@@ -628,13 +668,23 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         iterator = BasicIterator(batch_size=self.batch_size)  # , instances_per_epoch=10)
         iterator.index_with(self.vocab)
         if 'LSTM' in self.model_type:
-            lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
-                                                       batch_first=True, num_layers=1, dropout=0.0))
+            if self.use_transformer_encoder:
+                encoder_layer = TransformerEncoderLayer(
+                    train_reader.input_dim, nhead=8, dropout=self.lstm_dropout,
+                    dim_feedforward=int(self.feedforward_hidden_dim_prod * train_reader.input_dim))
+                encoder_norm = LayerNorm(train_reader.input_dim)
+                lstm = TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
+            else:
+                lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
+                                                           batch_first=True, num_layers=self.num_layers,
+                                                           dropout=self.lstm_dropout))
             self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
                 encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=self.vocab,
                 predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
-                reg_weight_loss=self.avg_loss, dropout=self.dropout)
+                reg_weight_loss=self.avg_loss, dropout=self.linear_dropout,
+                use_last_hidden_vec=self.use_last_hidden_vec, use_transformer_encode=self.use_transformer_encoder,
+                input_dim=train_reader.input_dim)
         elif 'Transformer' in self.model_type:
             if 'turn_linear' in self.model_type:
                 self.linear_hidden_dim = int(0.5 * train_reader.input_dim)
@@ -642,14 +692,15 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 vocab=self.vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
                 predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=self.linear_hidden_dim,
                 batch_size=self.batch_size, input_dim=train_reader.input_dim,
-                feedforward_hidden_dim=int(4 * train_reader.input_dim), num_decoder_layers=self.num_decoder_layers,
-                num_encoder_layers=self.num_encoder_layers, seq_weight_loss=self.turn_loss,
-                reg_weight_loss=self.avg_loss, positional_encoding=self.positional_encoding, dropout=self.dropout
+                feedforward_hidden_dim=int(self.feedforward_hidden_dim_prod * train_reader.input_dim),
+                num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
+                seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss, transformer_dropout=self.lstm_dropout,
+                positional_encoding=self.positional_encoding, dropout=self.linear_dropout,
             )
         elif 'Attention' in self.model_type:
             input_size = train_reader.num_features
             self.model = models.AttentionFixTextFeaturesDecisionResultModel(
-                metrics_dict_reg=metrics_dict_reg, vocab=self.vocab, input_size=input_size, dropout=self.dropout,
+                metrics_dict_reg=metrics_dict_reg, vocab=self.vocab, input_size=input_size, dropout=self.linear_dropout,
                 regularizer=RegularizerApplicator([("", L1Regularizer())]),)
         else:
             logging.exception(f'Model type should include LSTM or Transformer or Attention to use this class')
@@ -670,7 +721,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.cuda_device = -1
             print('Cuda is not available')
             logging.info('Cuda is not available')
-        optimizer = optim.SGD(self.model.parameters(), lr=0.1)
+        optimizer = optim.Adam(self.model.parameters())  # , lr=0.1)
 
         validation_metric = '+Accuracy' if self.predict_seq else '-loss'
 
@@ -701,14 +752,25 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         if self.predict_seq:
             self.all_seq_predictions = pd.DataFrame.from_dict(self.model.seq_predictions, orient='index')
-            max_predict_column = max([int(column.split('_')[1]) for column in self.all_seq_predictions.columns if
-                                      'predictions' in column])
-            self.all_seq_predictions['final_prediction'] = self.all_seq_predictions[f'predictions_{max_predict_column}']
-            max_total_payoff_predict_column = max([int(column.split('_')[3]) for
-                                                   column in self.all_seq_predictions.columns if
-                                                   'total_payoff_prediction_' in column])
-            self.all_seq_predictions['final_total_payoff_prediction'] =\
-                self.all_seq_predictions[f'total_payoff_prediction_{max_total_payoff_predict_column}']
+            # select the  best epoch if exists
+            if f"predictions_{model_dict['best_epoch']}" in self.all_seq_predictions:
+                self.all_seq_predictions['final_prediction'] =\
+                    self.all_seq_predictions[f"predictions_{model_dict['best_epoch']}"]
+            else:
+                max_predict_column = max([int(column.split('_')[1]) for column in self.all_seq_predictions.columns if
+                                          'predictions' in column])
+                self.all_seq_predictions['final_prediction'] =\
+                    self.all_seq_predictions[f'predictions_{max_predict_column}']
+            # select the  best epoch if exists
+            if f"total_payoff_prediction_{model_dict['best_epoch']}" in self.all_seq_predictions:
+                self.all_seq_predictions['final_prediction'] = \
+                    self.all_seq_predictions[f"total_payoff_prediction_{model_dict['best_epoch']}"]
+            else:
+                max_total_payoff_predict_column = max([int(column.split('_')[3]) for
+                                                       column in self.all_seq_predictions.columns if
+                                                       'total_payoff_prediction_' in column])
+                self.all_seq_predictions['final_total_payoff_prediction'] =\
+                    self.all_seq_predictions[f'total_payoff_prediction_{max_total_payoff_predict_column}']
             self.save_model_prediction(data_to_save=self.all_seq_predictions, sheet_prefix_name='seq',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.all_seq_predictions = self.all_seq_predictions[['is_train', 'labels', 'total_payoff_label', 'raisha',
@@ -718,10 +780,15 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
 
         if self.predict_avg_total_payoff:
             self.all_reg_predictions = self.model.reg_predictions
-            max_predict_column = max([int(column.split('_')[1]) for column in self.all_reg_predictions.columns if
-                                      'prediction_' in column])
-            self.all_reg_predictions['final_total_payoff_prediction'] =\
-                self.all_reg_predictions[f'prediction_{max_predict_column}']
+            # select the  best epoch if exists
+            if f"predictions_{model_dict['best_epoch']}" in self.all_seq_predictions:
+                self.all_seq_predictions['final_prediction'] = \
+                    self.all_seq_predictions[f"predictions_{model_dict['best_epoch']}"]
+            else:
+                max_predict_column = max([int(column.split('_')[1]) for column in self.all_reg_predictions.columns if
+                                          'prediction_' in column])
+                self.all_reg_predictions['final_total_payoff_prediction'] =\
+                    self.all_reg_predictions[f'prediction_{max_predict_column}']
             self.save_model_prediction(data_to_save=self.all_reg_predictions, sheet_prefix_name='reg',
                                        save_fold=self.run_log_directory, element_to_save=element_to_save)
             self.all_reg_predictions = self.all_reg_predictions[['is_train', 'sample_id', 'total_payoff_label',
