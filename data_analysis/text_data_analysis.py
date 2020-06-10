@@ -390,7 +390,7 @@ class DataAnalysis:
 
         self.results_payments['not_chose_lose'] = \
             self.results_payments.lottery_result_lose * self.results_payments.group_receiver_choice
-        self.results_payments['previous_not_chose_lose'] = self.results_payments.chose_lose.shift(2)
+        self.results_payments['previous_not_chose_lose'] = self.results_payments.not_chose_lose.shift(2)
 
         self.results_payments['not_chose_earn'] = \
             self.results_payments.lottery_result_high * self.results_payments.group_receiver_choice

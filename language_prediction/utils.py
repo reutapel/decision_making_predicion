@@ -167,8 +167,8 @@ def calculate_per_round_measures(all_predictions: pd.DataFrame, predictions_colu
 def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final_total_payoff_prediction_column: str,
                                             total_payoff_label_column: str, label_options: list,
                                             raisha: str = 'All_raishas', round_number: str = 'All_rounds',
-                                            bin_label: pd.Series=None, bin_predictions: pd.Series=None) ->\
-        (pd.DataFrame, dict):
+                                            bin_label: pd.Series=None, bin_predictions: pd.Series=None,
+                                            prediction_type: str='') -> (pd.DataFrame, dict):
     """
     Calc and print the regression measures, including bin analysis
     :param all_predictions:
@@ -179,6 +179,7 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     :param round_number: for per round analysis
     :param bin_label: the bin label series, the index is the same as the total_payoff_label_column index
     :param bin_predictions: the bin predictions series, the index is the same as the total_payoff_label_column index
+    :param prediction_type: if we want to use seq and reg predictions- so we have a different column for each.
     :return:
     """
     dict_key = f'{raisha} {round_number}'
@@ -220,11 +221,11 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     # create the results to return
     for measure, measure_name in [[precision, 'precision'], [recall, 'recall'], [fbeta_score, 'Fbeta_score']]:
         for i in range(len(measure)):
-            results_dict[dict_key][f'Bin_{measure_name}_{final_labels[i]}'] = round(measure[i]*100, 2)
+            results_dict[dict_key][f'Bin_{measure_name}_{final_labels[i]}{prediction_type}'] = round(measure[i]*100, 2)
 
-    results_dict[dict_key][f'MSE'] = mse
-    results_dict[dict_key][f'RMSE'] = rmse
-    results_dict[dict_key][f'MAE'] = mae
+    results_dict[dict_key][f'MSE{prediction_type}'] = mse
+    results_dict[dict_key][f'RMSE{prediction_type}'] = rmse
+    results_dict[dict_key][f'MAE{prediction_type}'] = mae
 
     results_pd = pd.DataFrame.from_dict(results_dict, orient='index')
 

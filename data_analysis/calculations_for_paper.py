@@ -602,6 +602,7 @@ class CalculationsForPaper:
         for condition in conditions:
             df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
             df = df.loc[df.status == 'play']
+            df = df.drop_duplicates()
             time_spent = pd.read_csv(os.path.join(data_directory, date_directory, condition, 'TimeSpent.csv'))
             time_spent = time_spent.groupby(by='participant_code').seconds_on_page.sum()
             if 'seconds_on_page' in df.columns:

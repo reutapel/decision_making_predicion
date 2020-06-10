@@ -113,13 +113,15 @@ class ExecuteEvalModel:
 
     def total_payoff_calculate_measures(self, final_total_payoff_prediction_column: str, total_payoff_label_column: str,
                                         raisha_column_name: str = 'raisha', prediction_df: pd.DataFrame=None,
-                                        bin_label: pd.Series = None, bin_predictions: pd.Series = None):
+                                        bin_label: pd.Series = None, bin_predictions: pd.Series = None,
+                                        prediction_type: str=''):
         """
         Calculate the measures for seq models per raisha
         :param total_payoff_label_column: the name of the label column
         :param final_total_payoff_prediction_column: the name of the prediction label
         :param raisha_column_name:
         :param prediction_df: if we don't want to use self.prediction
+        :param prediction_type: if we want to use seq and reg predictions- so we have a different column for each.
         :return:
         """
 
@@ -139,7 +141,7 @@ class ExecuteEvalModel:
                 total_payoff_label_column=total_payoff_label_column,
                 bin_label=only_bin_label, bin_predictions=only_bin_predictions,
                 label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
-                               'total future payoff > 2/3'])
+                               'total future payoff > 2/3'], prediction_type=prediction_type)
         if raisha_column_name in prediction_df.columns:  # do the raisha analysis
             raisha_options = prediction_df[raisha_column_name].unique()
             all_raisha_dict = defaultdict(dict)
@@ -159,7 +161,8 @@ class ExecuteEvalModel:
                     total_payoff_label_column=total_payoff_label_column,
                     bin_label=raisha_bin_label, bin_predictions=raisha_bin_predictions,
                     label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
-                                   'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}')
+                                   'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}',
+                    prediction_type=prediction_type)
                 all_raisha_dict.update(results_dict_raisha)
             results_dict = utils.update_default_dict(results_dict, all_raisha_dict)
 
@@ -578,8 +581,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         self.vocab = None
         self.cuda_device = None
         self.run_log_directory = utils.set_folder(datetime.now().strftime(
-            f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_{self.fold}_folds_'
-            f'{self.lstm_hidden_dim}_hidden_dim'), self.fold_dir)
+            f'{self.model_num}_{self.model_type}_{self.model_name}_{self.num_epochs}_epochs_fold_num_{self.fold}'),
+            self.fold_dir)
         try:
             if 'turn' in model_type:
                 self.predict_seq = True
@@ -763,7 +766,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                     self.all_seq_predictions[f'predictions_{max_predict_column}']
             # select the  best epoch if exists
             if f"total_payoff_prediction_{model_dict['best_epoch']}" in self.all_seq_predictions:
-                self.all_seq_predictions['final_prediction'] = \
+                self.all_seq_predictions['final_total_payoff_prediction'] = \
                     self.all_seq_predictions[f"total_payoff_prediction_{model_dict['best_epoch']}"]
             else:
                 max_total_payoff_predict_column = max([int(column.split('_')[3]) for
@@ -781,9 +784,9 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         if self.predict_avg_total_payoff:
             self.all_reg_predictions = self.model.reg_predictions
             # select the  best epoch if exists
-            if f"predictions_{model_dict['best_epoch']}" in self.all_seq_predictions:
-                self.all_seq_predictions['final_prediction'] = \
-                    self.all_seq_predictions[f"predictions_{model_dict['best_epoch']}"]
+            if f"prediction_{model_dict['best_epoch']}" in self.all_reg_predictions:
+                self.all_reg_predictions['final_total_payoff_prediction'] = \
+                    self.all_reg_predictions[f"prediction_{model_dict['best_epoch']}"]
             else:
                 max_predict_column = max([int(column.split('_')[1]) for column in self.all_reg_predictions.columns if
                                           'prediction_' in column])
@@ -799,21 +802,35 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
     def eval_model(self, predict_type: str=None):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
+        results_dict = list()
         if 'total_payoff_label' in self.prediction.columns and\
                 'final_total_payoff_prediction' in self.prediction.columns:
             # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
-            bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.final_total_payoff_prediction,
-                                                                  self.prediction.total_payoff_label,
-                                                                  hotel_label_0=self.hotel_label_0)
-            bin_prediction = self.prediction[['raisha']].join(bin_prediction)
-            bin_test_y = self.prediction[['raisha']].join(bin_test_y)
-            # self.prediction = self.prediction.merge(bin_test_y, left_index=True, right_index=True)
-            # self.prediction = self.prediction.merge(bin_prediction, left_index=True, right_index=True)
-            # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
-            results_dict = self.total_payoff_calculate_measures(
-                    final_total_payoff_prediction_column='final_total_payoff_prediction',
-                    total_payoff_label_column='total_payoff_label',
-                    bin_label=bin_test_y, bin_predictions=bin_prediction)
+            if self.predict_avg_total_payoff and self.predict_seq:  # avg_turn models - need to be both
+                seq_pred_type = '_seq'
+            else:  # only seq/reg prediction --> no need to split measures
+                seq_pred_type = ''
+            for df, prediction_type in [[self.all_reg_predictions, ''], [self.all_seq_predictions, seq_pred_type]]:
+                if not df.empty:
+                    self.prediction = df
+                    bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.final_total_payoff_prediction,
+                                                                          self.prediction.total_payoff_label,
+                                                                          hotel_label_0=self.hotel_label_0)
+                    bin_prediction = self.prediction[['raisha']].join(bin_prediction)
+                    bin_test_y = self.prediction[['raisha']].join(bin_test_y)
+                    # self.prediction = self.prediction.merge(bin_test_y, left_index=True, right_index=True)
+                    # self.prediction = self.prediction.merge(bin_prediction, left_index=True, right_index=True)
+                    # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
+                    results_dict.append(self.total_payoff_calculate_measures(
+                        prediction_type=prediction_type,
+                        final_total_payoff_prediction_column='final_total_payoff_prediction',
+                        total_payoff_label_column='total_payoff_label',
+                        bin_label=bin_test_y, bin_predictions=bin_prediction))
+            if len(results_dict) > 1:  # the loop happened twice
+                results_dict = utils.update_default_dict(results_dict[0], results_dict[1])
+            else:
+                results_dict = results_dict[0]
+
             # measures per round
             if self.predict_seq:  # and not self.predict_avg_total_payoff:
                 self.prediction = self.all_seq_predictions

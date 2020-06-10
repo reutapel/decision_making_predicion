@@ -4,7 +4,7 @@ from collections import defaultdict
 from os import listdir
 from os.path import isfile, join
 import joblib
-from language_prediction.utils import *
+from utils import *
 import itertools
 
 base_directory = os.path.abspath(os.curdir)
@@ -257,10 +257,11 @@ def main(new_results_file_name, results_to_use: pd.DataFrame=None):
     #     find_all_best_models_of_directory(dir)
     # return
 
-    results_path = combine_models_results(['compare_prediction_models_07_06_2020_20_19'])
+    results_path = combine_models_results(['compare_prediction_models_08_06_2020_20_00'])
     # results_path = combine_models_all_results(['compare_prediction_models_05_06_2020_16_43',
     #                                            'compare_prediction_models_06_06_2020_11_49'])
     # results_path = "all_server_results_['compare_prediction_models_06_06_2020_00_18'].csv"
+    return
     concat_new_results(results_path, old_results_name='all_results_07_06_new_eval_select_correct_final_pred_last_hidden'
                                                       '_use_transformer.csv',
                        new_results_file_name_to_save=new_results_file_name)
