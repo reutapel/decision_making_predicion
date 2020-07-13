@@ -133,6 +133,43 @@ import scipy.stats
 #     fig.savefig(os.path.join(directory, condition, f'Pair number {user_num+1} results.png'), bbox_inches='tight')
 
 
+"""The Communication Type Effect on the Experts Cheating Level"""
+colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
+markers = [".", "x", "v", "1"]
+fig1, ax1 = plt.subplots()
+ax1.axis([4, 10, 4, 10])
+x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
+num_cl = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
+verbal_cl = [5.47, 8.56, 9.04, 9.24, 9.4, 9.6, 9.6, 9.66, 9.82, 9.87]
+num_only_cl = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
+both_cl = [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]
+
+# ax1.plot(x, verbal_cl, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
+ax1.plot(x, num_cl, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
+ax1.plot(x, num_only_cl, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
+ax1.plot(x, both_cl, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
+ax1.plot(x, verbal_cl, color=colors[0], label='Expert-both-DM-Verbal', marker=markers[3], linestyle='-')
+
+ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
+
+# for hotel in range(1, 11):
+#     hotel_list = score_eval_data.loc[score_eval_data.hotel_id == hotel].answer_real.round(1).tolist()
+#     if hotel != 4:
+#         y_gap = 0
+#     else:
+#         y_gap = -0.1
+#     ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
+#              {'fontsize': 8})
+
+# plt.title("The Selected Score as a Function of the Hotels' Average Score by Condition")
+plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
+plt.ylabel('Expert Average Signal', fontsize=15)
+ax1.legend(loc='upper left', shadow=True, fontsize=8)
+plt.xticks(range(4, 11))
+plt.yticks(range(4, 11))
+plt.show()
+fig1.savefig('The_Communication_Type_Effect_on_the_Experts_Cheating_Level.png', bbox_inches='tight')
+
 """Decision maker average payoff"""
 verbal_dmap = [0.29, 0.14, 0.44, 0.52, 0.21, 0.43, 0.31, 0.27, 0.19, 0.16]
 numerical_dmap = [0.41, 0.17, 0.48, 0.1, 0.19, 0.17, 0.28, 0.41, 0.38, -0.09]
@@ -656,42 +693,6 @@ plt.xticks(())
 plt.yticks(())
 
 plt.show()
-
-"""The Communication Type Effect on the Experts Cheating Level"""
-colors = ['pink', 'forestgreen', 'crimson', 'darkblue']
-markers = [".", "x", "v", "1"]
-fig1, ax1 = plt.subplots()
-ax1.axis([4, 10, 4, 10])
-x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
-num_cl = [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86]
-verbal_cl = [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87]
-num_only_cl = [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75]
-both_cl = [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]
-
-# ax1.plot(x, verbal_cl, color=colors[0], label='Verbal', marker=markers[0], linestyle='-')
-ax1.plot(x, num_cl, color=colors[1], label='Expert-both-DM-Number', marker=markers[0], linestyle='-')
-ax1.plot(x, num_only_cl, color=colors[2], label='Expert-Number-DM-Number', marker=markers[1], linestyle='-')
-ax1.plot(x, both_cl, color=colors[3], label='Expert-both-DM-both', marker=markers[2], linestyle='-')
-
-ax1.plot(x, x, color='darkviolet', marker=markers[0], linestyle='-', label='Truth Telling')
-
-# for hotel in range(1, 11):
-#     hotel_list = score_eval_data.loc[score_eval_data.hotel_id == hotel].answer_real.round(1).tolist()
-#     if hotel != 4:
-#         y_gap = 0
-#     else:
-#         y_gap = -0.1
-#     ax1.text(x[hotel-1]+0.1, x[hotel-1]+y_gap, f'avg:{round(sum(hotel_list)/len(hotel_list), 1)}:{hotel_list}',
-#              {'fontsize': 8})
-
-# plt.title("The Selected Score as a Function of the Hotels' Average Score by Condition")
-plt.xlabel('Decision Maker Expected Payoff', fontsize=15)
-plt.ylabel('Expert Average Signal', fontsize=15)
-ax1.legend(loc='upper left', shadow=True, fontsize=8)
-plt.xticks(range(4, 11))
-plt.yticks(range(4, 11))
-plt.show()
-fig1.savefig('The_Communication_Type_Effect_on_the_Experts_Cheating_Level.png', bbox_inches='tight')
 
 
 """Decision maker average expected payoff"""

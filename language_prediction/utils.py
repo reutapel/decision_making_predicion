@@ -18,9 +18,21 @@ per_round_predictions_name = 'per_round_predictions'
 per_round_labels_name = 'per_round_labels'
 
 
-def update_default_dict(orig_dict: defaultdict, dict2: defaultdict, dict3: defaultdict=None):
-    """This function get an orig defaultdict and 1-2 defaultdicts and merge them"""
-    for my_dict in (dict2, dict3):
+def update_default_dict(orig_dict: defaultdict, dict2: defaultdict=None, dict_list: list=None):
+    """This function get an orig defaultdict and 1 defaultdicts and merge them ot a list of defaultdicts -->
+     one of them have to be passed"""
+
+    if dict2 is not None:
+        dicts = [dict2]
+    elif dict_list is not None:
+        dicts = dict_list
+    elif type(orig_dict) == list:
+        dicts = orig_dict[1:]
+        orig_dict = orig_dict[0]
+    else:
+        print('Both dict2 and dict_list are None --> can not continue')
+        return orig_dict
+    for my_dict in dicts:
         if my_dict is not None:
             for k, v in my_dict.items():
                 if k in orig_dict.keys():
@@ -77,6 +89,47 @@ def create_bin_columns(predictions: pd.Series, validation_y: pd.Series, hotel_la
     bin_test_y = np.where(validation_y < 0.67, 1, high_entry_rate_class)
     bin_test_y[keep_mask] = low_entry_rate_class
     bin_test_y = pd.Series(bin_test_y, name='bin_label', index=validation_y.index)
+
+    return bin_prediction, bin_test_y
+
+
+def create_4_bin_columns(predictions: pd.Series, validation_y: pd.Series, hotel_label_0: bool=False):
+    """
+    Create the bin analysis column
+    :param predictions: the continues prediction column
+    :param validation_y: the continues label column
+    :param hotel_label_0: if the label of the hotel option is 0
+    :return:
+    """
+
+    # bin measures,
+    # class: hotel_label == 1: predictions < 0.25 --> 0, 0.25<predictions<0.5 --> 1, 0.5<predictions<0.75 --> 2,
+    #  predictions > 0.75 --> 3
+    #        hotel_label == 0: predictions < 0.25 --> 3, 0.25<predictions<0.5 --> 2, 0.5<predictions<0.75 --> 1,
+    #  predictions > 0.75 --> 0
+    low_entry_rate_class = 3 if hotel_label_0 else 0
+    med_1_entry_rate_class = 2 if hotel_label_0 else 1
+    med_2_entry_rate_class = 1 if hotel_label_0 else 2
+    high_entry_rate_class = 0 if hotel_label_0 else 3
+    # for prediction
+    med_1_mask = predictions.between(0.25, 0.5)
+    med_2_mask = predictions.between(0.5, 0.75)
+    high_mask = predictions.between(0.75, 2)
+    bin_prediction = np.where(predictions < 0.25, low_entry_rate_class, high_entry_rate_class)
+    bin_prediction[med_1_mask] = med_1_entry_rate_class
+    bin_prediction[med_2_mask] = med_2_entry_rate_class
+    bin_prediction[high_mask] = high_entry_rate_class
+    bin_prediction = pd.Series(bin_prediction, name='four_bin_predictions', index=validation_y.index)
+
+    # for test_y
+    med_1_mask = validation_y.between(0.25, 0.5)
+    med_2_mask = validation_y.between(0.5, 0.75)
+    high_mask = validation_y.between(0.75, 2)
+    bin_test_y = np.where(validation_y < 0.25, low_entry_rate_class, high_entry_rate_class)
+    bin_test_y[med_1_mask] = med_1_entry_rate_class
+    bin_test_y[med_2_mask] = med_2_entry_rate_class
+    bin_test_y[high_mask] = high_entry_rate_class
+    bin_test_y = pd.Series(bin_test_y, name='four_bin_label', index=validation_y.index)
 
     return bin_prediction, bin_test_y
 
@@ -168,6 +221,9 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
                                             total_payoff_label_column: str, label_options: list,
                                             raisha: str = 'All_raishas', round_number: str = 'All_rounds',
                                             bin_label: pd.Series=None, bin_predictions: pd.Series=None,
+                                            already_calculated: bool=False,
+                                            bin_label_column_name: str='bin_label',
+                                            bin_prediction_column_name: str='bin_predictions',
                                             prediction_type: str='') -> (pd.DataFrame, dict):
     """
     Calc and print the regression measures, including bin analysis
@@ -180,6 +236,9 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     :param bin_label: the bin label series, the index is the same as the total_payoff_label_column index
     :param bin_predictions: the bin predictions series, the index is the same as the total_payoff_label_column index
     :param prediction_type: if we want to use seq and reg predictions- so we have a different column for each.
+    :param already_calculated: if we already calculated the measures, need to calculate again only the bin measures
+    :param bin_label_column_name: the name of the bin label column if it is in the all_prediction df
+    :param bin_prediction_column_name: the name of the bin prediction column if it is in the all_prediction df
     :return:
     """
     dict_key = f'{raisha} {round_number}'
@@ -197,7 +256,7 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
     mse = round(100 * mse, 2)
 
     # calculate bin measures
-    if 'bin_label' and 'bin_predictions' in all_predictions.columns:
+    if bin_label_column_name and bin_prediction_column_name in all_predictions.columns:
         bin_label = all_predictions.bin_label
         bin_predictions = all_predictions.bin_predictions
     elif bin_label is None and bin_predictions is None:
@@ -206,26 +265,56 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
         raise Exception
 
     precision, recall, fbeta_score, support = metrics.precision_recall_fscore_support(bin_label, bin_predictions)
+    num_bins = len(label_options)
+    precision_micro, recall_micro, fbeta_score_micro, support_micro =\
+        metrics.precision_recall_fscore_support(bin_label, bin_predictions, average='micro')
+    precision_macro, recall_macro, fbeta_score_macro, support_macro =\
+        metrics.precision_recall_fscore_support(bin_label, bin_predictions, average='macro')
 
     # number of DM chose stay home
     final_labels = list(range(len(support)))
-    for bin in range(len(label_options)):
-        status_size = bin_label.where(bin_label == bin).dropna().shape[0]
+    for my_bin in range(len(label_options)):
+        status_size = bin_label.where(bin_label == my_bin).dropna().shape[0]
         if status_size in support:
-            index_in_support = np.where(support == status_size)[0][0]
-            final_labels[index_in_support] = label_options[bin]
+            index_in_support = np.where(support == status_size)[0]
+            if final_labels[index_in_support[0]] in label_options and index_in_support.shape[0] > 1:
+                # 2 bins with the same size --> already assign
+                index_in_support = index_in_support[1]
+            else:
+                index_in_support = index_in_support[0]
+            final_labels[index_in_support] = label_options[my_bin]
+        # else:
+        #     print(f'sizes not matched: bin: {my_bin}, status_size: {status_size}, support: {support},'
+        #           f'label_options[my_bin]: {label_options[my_bin]}, precision: {precision}, recall: {recall},'
+        #           f'f-score: {fbeta_score}')
+
+    for item in final_labels:
+        if item not in label_options:  # status_size = 0
+            final_labels.remove(item)
 
     accuracy = metrics.accuracy_score(bin_label, bin_predictions)
-    results_dict[dict_key][f'Bin_Accuracy'] = round(accuracy * 100, 2)
+    results_dict[dict_key][f'Bin_{num_bins}_bins_Accuracy{prediction_type}'] = round(accuracy * 100, 2)
 
     # create the results to return
     for measure, measure_name in [[precision, 'precision'], [recall, 'recall'], [fbeta_score, 'Fbeta_score']]:
         for i in range(len(measure)):
+            if f'Bin_{measure_name}_{final_labels[i]}{prediction_type}' in ['Bin_Fbeta_score_1', 'Bin_Fbeta_score_2',
+                                                                            'Bin_Fbeta_score_3', 'Bin_precision_1',
+                                                                            'Bin_precision_2', 'Bin_precision_3',
+                                                                            'Bin_recall_1', 'Bin_recall_2',
+                                                                            'Bin_recall_3']:
+                print(f'Error: final_labels: {final_labels}, label_options: {label_options},'
+                      f'already_calculated: {already_calculated}, raisha: {raisha}, rounds: {round_number}')
             results_dict[dict_key][f'Bin_{measure_name}_{final_labels[i]}{prediction_type}'] = round(measure[i]*100, 2)
+    for measure, measure_name in [[precision_micro, 'precision_micro'], [recall_micro, 'recall_micro'],
+                                  [fbeta_score_micro, 'Fbeta_score_micro'], [precision_macro, 'precision_macro'],
+                                  [recall_macro, 'recall_macro'], [fbeta_score_macro, 'Fbeta_score_macro']]:
+        results_dict[dict_key][f'Bin_{num_bins}_bins_{measure_name}{prediction_type}'] = round(measure * 100, 2)
 
-    results_dict[dict_key][f'MSE{prediction_type}'] = mse
-    results_dict[dict_key][f'RMSE{prediction_type}'] = rmse
-    results_dict[dict_key][f'MAE{prediction_type}'] = mae
+    if not already_calculated:
+        results_dict[dict_key][f'MSE{prediction_type}'] = mse
+        results_dict[dict_key][f'RMSE{prediction_type}'] = rmse
+        results_dict[dict_key][f'MAE{prediction_type}'] = mae
 
     results_pd = pd.DataFrame.from_dict(results_dict, orient='index')
 
@@ -241,6 +330,8 @@ def write_to_excel(table_writer: pd.ExcelWriter, sheet_name: str, headers: list,
     :param data: the data to write
     :return:
     """
+    if table_writer is None:
+        return
     workbook = table_writer.book
     if sheet_name not in table_writer.sheets:
         worksheet = workbook.add_worksheet(sheet_name)
@@ -670,6 +761,12 @@ def main(log_directory: str, model_output_file_name: str, final_total_payoff_pre
 
 if __name__ == '__main__':
     # final_results = pd.DataFrame()
+
+    # df = pd.read_excel(os.path.join(base_directory, 'logs', 'predict_best_models_30_06_2020_19_13',
+    #                                 'excel_best_models_results', 'Results_fold_5_model_25.xlsx'),
+    #                    sheet_name='Model_25_seq_fold_5', skiprows=[0])
+    # create_4_bin_columns(df.final_total_payoff_prediction, df.total_payoff_label, hotel_label_0=True)
+
 
     # for fold in range(6):
     #     total_payoff = pd.read_excel(join(base_directory, 'logs', 'compare_prediction_models_07_05_2020_11_49',

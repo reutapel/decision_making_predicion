@@ -42,13 +42,17 @@ class SVMTotal:
             validation_x = validation_x[self.features]
             predictions = self.model.predict(validation_x)
         validation_y.name = 'labels'
+        predictions = pd.Series(predictions, index=validation_y.index, name='predictions')
         if predictions.dtype == float:  # regression- create bins to measure the F-score
             bin_prediction, bin_test_y = utils.create_bin_columns(predictions, validation_y)
+            four_bin_prediction, four_bin_test_y = utils.create_4_bin_columns(predictions, validation_y)
         else:
             bin_prediction, bin_test_y = pd.Series(name='bin_prediction'), pd.Series(name='bin_label')
+            four_bin_prediction, four_bin_test_y =\
+                pd.Series(name='four_bin_prediction'), pd.Series(name='four_bin_label')
 
-        predictions = pd.DataFrame(predictions, columns=['predictions'], index=validation_y.index).join(validation_y).\
-            join(bin_test_y).join(bin_prediction)
+        predictions = pd.DataFrame(predictions).join(validation_y).join(bin_test_y).join(bin_prediction)
+        predictions = predictions.join(four_bin_test_y).join(four_bin_prediction)
 
         return predictions
 
@@ -184,9 +188,9 @@ class SVMTurn:
         elif 'stratified' in str.lower(self.model_name) or 'most_frequent' in str.lower(self.model_name):
             data = validation_x[validation_x.columns[1]].copy(deep=True)
             if 'stratified' in str.lower(self.model_name):
-                num_runs = 50
+                num_runs = 5000
                 predictions = self.model.predict(data)
-                for i in range(num_runs-1):
+                for i in range(num_runs):
                     predictions = np.add(predictions, self.model.predict(data))
                 predictions = predictions/num_runs
                 predictions = np.where(predictions > 0.5, 1, -1)
@@ -204,7 +208,7 @@ class SVMTurn:
 
 
 class RaishaMajorityBaseline:
-    def __init__(self, features, model_name):
+    def __init__(self, features, model_name, kernel: str=None, degree: int=None):
         self.model_name = model_name
         self.most_frequent = None
         self.mean = None
@@ -272,10 +276,15 @@ class RaishaMajorityBaseline:
             prediction.index = prediction.sample_id
             if prediction.predictions.dtype == float:  # regression- create bins to measure the F-score
                 bin_prediction, bin_test_y = utils.create_bin_columns(prediction.predictions, prediction.labels)
+                four_bin_prediction, four_bin_test_y = utils.create_4_bin_columns(prediction.predictions,
+                                                                                  prediction.labels)
             else:
                 bin_prediction, bin_test_y = pd.Series(name='bin_prediction'), pd.Series(name='bin_label')
+                four_bin_prediction, four_bin_test_y = \
+                    pd.Series(name='four_bin_prediction'), pd.Series(name='four_bin_label')
 
             prediction = prediction.join(bin_test_y).join(bin_prediction)
+            prediction = prediction.join(four_bin_test_y).join(four_bin_prediction)
 
         else:
             prediction = prediction.merge(validation_y, right_index=True, left_index=True)

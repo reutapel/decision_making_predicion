@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from data_analysis import autolabel
+import seaborn as sns
 
 base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
@@ -17,21 +18,89 @@ conditions = ['numeric', 'both', 'num_only', 'verbal']
 all_conditions = ['num_only', 'both', 'verbal', 'numeric']
 conditions_per_study = {1: ['verbal', 'numeric'], 2: ['num_only', 'both']}
 condition_names_per_study = {1: ['Verbal', 'Numerical'],
-                             2: ['Numerical-Numerical', 'Both-Both']}
+                             2: ['Only Numbers', 'Both']}
 base_directory = os.path.abspath(os.curdir)
 analysis_directory = os.path.join(base_directory, 'analysis', 'text_exp_2_tests')
 colors = {'verbal': 'pink', 'numeric': 'forestgreen', 'num_only': 'crimson', 'both': 'darkblue'}
 markers = {'verbal': 's', 'numeric': '.', 'num_only': 'v', 'both': 'd'}
 graph_directory = os.path.join(base_directory, 'per_study_graphs')
 
+
+# verbal condition only: for the computation paper
+enterence_per_round_dict = {
+    'All': [77, 65, 76, 71, 73, 69, 74, 67, 68, 68],
+    'Female': [76, 70, 76, 73, 73, 72, 75, 67, 69, 69],
+    'Male': [79, 61, 77, 70, 74, 67, 74, 68, 68, 68]
+}
+x = [2.5, 3.3, 3.8, 4.2, 5, 5.4, 5.8, 6.3, 7.1, 7.5, 7.9, 8.3, 8.8, 9.2, 9.6, 10]
+
+enterenc_per_score_dict = {
+    'All': [7, 9, 18, 9, 14, 21, 22, 19, 53, 69, 40, 65, 71, 80, 76, 84],
+    'Female': [12, 0, 14, 13, 0, 22, 24, 17, 50, 75, 25, 63, 73, 83, 77, 85],
+    'Male': [0, 18, 22, 3, 16, 16, 20, 21, 58, 64, 50, 67, 69, 78, 75, 83],
+}
+
+pct_dm_per_number_of_rounds_enter_dict = {
+    'All': [0.73, 1.22, 2.69, 9.8, 15.68, 25.24, 25.73, 14.21, 4.65]
+}
+
+
+pre_round_dict = {
+    'Previous Trial Chose And Lose': [59, 82, 74, 76, 69, 75, 64, 69, 72],
+    "Previous Trial Didn't Choose And Could Lose": [86, 80, 64, 73, 64, 75, 65, 66, 73],
+    'Previous Trial Chose And Earn': [63, 72, 72, 74, 72, 76, 68, 68, 69],
+    "Previous Trial Didn't Choose And Could Earn": [64, 74, 65, 65, 67, 69, 62, 70, 56],
+}
+
+models_index = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-T', 'Transformer-P', 'Transformer-TP']
+bert_domain_compare = {
+    'Domain-Based': [23.7, 27.45, 23.87, 24.05, 40.01, 27.21, 28.78],
+    'BERT': [24.7, 28.37, 24.77, 25.59, 75.15, 27.71, 27.43]
+}
+
+raisha_results_rmse = {
+    'SVM-P': [15.04, 17.20, 17.91, 18.45, 19.04, 19.9, 20.53, 24.08, 29.25, 42.41],
+    'CRF-T': [25.39, 26.92, 27.21, 28.86, 30.63, 31.6, 32.295, 36.73, 39.92, 54.825],
+    'LSTM-T': [17.1, 19.68, 19.41, 20.95, 22.15, 23.35, 24.68, 29.9, 34.525, 47.71],
+    'LSTM-P': [15, 16.76, 17.59, 18.99, 19.34, 20.45, 21.73, 24.80, 30.09, 41.49],
+    'LSTM-TP': [15.32, 17.67, 17.78, 19.19, 19.42, 20.78, 22.09, 25.35, 29.81, 41.305],
+    'Transformer-T': [None, 33.48, 33.63, 34.91, 35.53, 36.87, 37.59, 41.45, 45.26, 55.73],
+    'Transformer-P': [None, 18.34, 18.865, 19.8, 20.76, 22.18, 23.39, 27.63, 33.69, 46.74],
+    'Transformer-TP': [None, 21.46, 23.835, 23.46, 22.65, 23.51, 25.47, 27.91, 33.76, 46.41]
+}
+
+raisha_results_macro = {
+    'SVM-P': [42.36, 44.9, 45.02, 40.37, 42.335, 41.45, 48.03, 48.53, 48.38, 42.70],
+    'CRF-T': [30.7416666666667, 32.0433333333333, 35.2216666666667, 33.6833333333333, 34.6116666666667, 37.835, 38.3333333333333, 36.6216666666667, 44.8766666666667, 60.7783333333333],
+    'LSTM-T': [33.2416666666667, 32.6066666666667, 34.855, 29.6583333333333, 31.18, 27.2916666666667, 34.8283333333333, 34.9966666666667, 51.5666666666667, 68.73],
+    'LSTM-P': [29.3, 32.5583333333333, 29.0283333333333, 34.1883333333333, 30.5566666666667, 30.18, 28.1766666666667, 34.6883333333333, 21.7483333333333, 21.865],
+    'LSTM-TP': [27.88, 33.245, 31.74, 32.89, 29.6816666666667, 28.4633333333333, 26.0983333333333, 35.5283333333333, 24.2216666666667, 20.3683333333333],
+    'Transformer-T': [None, 18.6016666666667, 13.6066666666667, 15.2883333333333, 16.1833333333333, 17.3583333333333, 10.3933333333333, 12.4633333333333, 21.7683333333333, 40.6183333333333],
+    'Transformer-P': [None, 17.2483333333333, 17.355, 16.2683333333333, 12.7466666666667, 11.3616666666667, 13.2983333333333, 14.5233333333333, 2.98666666666667, 0],
+    'Transformer-TP': [None, 17.4716666666667, 15.3216666666667, 16.9366666666667, 13.84, 12.875, 11.5366666666667, 14.0433333333333, 2.98666666666667, 0]
+}
+
+raisha_results_micro = {
+    'SVM-P': [66.9116666666667, 58.33, 62.0116666666667, 63.4816666666667, 59.0666666666667, 62.9916666666667, 65.1966666666667, 62.7466666666667, 60.0483333333333, 70.345],
+    'CRF-T': [65.1966666666667, 53.675, 59.56, 62.255, 50.7366666666667, 55.145, 59.8016666666667, 52.9416666666667, 54.9, 69.855],
+    'LSTM-T': [45.59, 55.145, 47.5483333333333, 47.7933333333333, 45.0983333333333, 51.715, 40.9316666666667, 50, 63.725, 77.205],
+    'LSTM-P': [48.285, 53.6766666666667, 45.8333333333333, 52.94, 45.8333333333333, 50.0016666666667, 41.9116666666667, 51.96, 39.7083333333333, 52.94],
+    'LSTM-TP': [44.3633333333333, 53.43, 47.55, 50.49, 45.3433333333333, 49.265, 38.4816666666667, 48.775, 40.44, 45.3433333333333],
+    'Transformer-T': [None, 50.98, 33.5783333333333, 38.97, 44.6083333333333, 53.4316666666667, 26.715, 33.5783333333333, 48.7733333333333, 68.6283333333333],
+    'Transformer-P': [None, 45.0983333333333, 44.8566666666667, 41.9116666666667, 31.1266666666667, 29.1683333333333, 36.5183333333333, 41.175, 6.12666666666667, 0],
+    'Transformer-TP': [None, 47.0583333333333, 38.4816666666667, 42.8916666666667, 35.5383333333333, 36.03, 30.6366666666667, 39.4583333333333, 6.12666666666667, 0]
+}
+
+
+# all conditions: for the behavior paper
 rounds_dict = {
     'all rounds': {
         'numeric_p_enter': [0.27, 0.11, 0.11, 0.19, 0.11, 0.6, 0.32, 0.36, 0.53, 0.59, 0.75, 0.72, 0.76, 0.83, 0.84, 0.89],
         'both_p_enter': [0, 0.2, 0, 0, 0, 0, 0.21, 0.23, 0.5, 0.25, 0.5, 0.66, 0.83, 0.85, 0.8, 0.89],
         'numeric_experts': [22, 52, 17, 61, 9, 15, 166, 158, 66, 77, 37, 274, 177, 431, 658, 1669],
         'both_experts': [3, 5, 2, 12, 1, 0, 33, 21, 14, 12, 2, 30, 31, 75, 102, 249],
-        'verbal_p_enter': [0.06, 0.08, 0.19, 0.09, 0.09, 0.15, 0.22, 0.19, 0.54, 0.69, 0.34, 0.65, 0.71, 0.8, 0.76, 0.85],
-        'verbal_experts': [17, 37, 16, 55, 11, 26, 187, 189, 67, 55, 29, 237, 156, 430, 717, 1835],
+        'verbal_p_enter': [0.08, 0.09, 0.19, 0.09, 0.14, 0.21, 0.23, 0.19, 0.54, 0.69, 0.4, 0.65, 0.71, 0.81, 0.77, 0.85],
+        'verbal_experts': [13, 33, 16, 55, 7, 19, 184, 185, 67, 55, 25, 236, 156, 426, 713, 1835],
         'num_only_p_enter': [0.0, 0.33, 0.29, 0.36, 0.0, 0.0, 0.3, 0.29, 0.5, 0.57, 0.5, 0.73, 0.81, 0.88, 0.85, 0.91],
         'num_only_experts': [2, 9, 7, 11, 1, 2, 10, 35, 16, 30, 18, 52, 42, 77, 126, 148]},
     'round 1': {
@@ -39,8 +108,8 @@ rounds_dict = {
         'both_p_enter': [None, 1.0, None, None, None, None, None, 0.67, 0.5, 0.33, None, 0.78, 1.0, 0.78, 0.75, 0.9],
         'numeric_experts': [3, 2, 2, 4, 2, 5, 12, 13, 4, 18, 8, 32, 18, 47, 72, 148],
         'both_experts': [0, 1, 0, 0, 0, 0, 0, 3, 2, 3, 0, 9, 4, 9, 8, 20],
-        'verbal_p_enter': [0.0, 0.0, 0.4, 0.18, None, 0.0, 0.45, 0.15, 0.33, 1.0, 0.67, 0.7, 0.76, 0.92, 0.86, 0.93],
-        'verbal_experts': [2, 3, 5, 11, 0, 1, 20, 26, 3, 6, 3, 20, 17, 49, 85, 153],
+        'verbal_p_enter': [0.0, 0.0, 0.4, 0.18, None, 0.0, 0.45, 0.15, 0.33, 1.0, 0.67, 0.68, 0.76, 0.92, 0.86, 0.93],
+        'verbal_experts': [1, 3, 5, 11, 0, 1, 20, 26, 3, 6, 3, 19, 17, 48, 85, 153],
         'num_only_p_enter': [None, 0.0, 1.0, 0.5, None, None, None, None, 1.0, 0.88, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         'num_only_experts': [0, 1, 1, 2, 0, 0, 0, 0, 2, 8, 1, 5, 5, 5, 14, 15]},
     'round 2': {
@@ -48,8 +117,8 @@ rounds_dict = {
         'both_p_enter': [None, None, 0.0, 0.0, None, None, 0.0, 0.5, None, 0.33, 1.0, None, 1.0, 0.75, 0.62, 1.0],
         'numeric_experts': [1, 5, 5, 8, 0, 2, 18, 19, 9, 3, 3, 32, 21, 45, 65, 155],
         'both_experts': [0, 0, 1, 4, 0, 0, 3, 2, 0, 3, 1, 0, 4, 8, 8, 26],
-        'verbal_p_enter': [0.0, 0.25, 0.0, 0.11, None, None, 0.22, 0.27, 0.5, 0.57, 1.0, 0.74, 0.65, 0.74, 0.81, 0.81],
-        'verbal_experts': [2, 4, 3, 9, 0, 0, 32, 33, 12, 7, 1, 34, 20, 31, 78, 143],
+        'verbal_p_enter': [0.0, 0.33, 0.0, 0.11, None, None, 0.23, 0.28, 0.5, 0.57, 1.0, 0.74, 0.65, 0.74, 0.81, 0.81],
+        'verbal_experts': [1, 3, 3, 9, 0, 0, 31, 32, 12, 7, 1, 34, 20, 31, 78, 143],
         'num_only_p_enter': [None, None, 0.0, 0.67, None, None, 0.33, 0.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.83, 0.8, 1.0],
         'num_only_experts': [0, 0, 1, 3, 0, 0, 3, 3, 2, 1, 2, 5, 2, 18, 5, 14]},
 
@@ -58,8 +127,8 @@ rounds_dict = {
         'both_p_enter': [None, None, None, None, 0.0, None, 0.14, 0.5, None, 0.0, None, 0.57, 0.75, 0.75, 0.62, 0.88],
         'numeric_experts': [3, 4, 1, 13, 0, 1, 15, 11, 7, 4, 3, 18, 13, 45, 57, 196],
         'both_experts': [0, 0, 0, 0, 1, 0, 7, 2, 0, 1, 0, 7, 4, 12, 8, 17],
-        'verbal_p_enter': [0.0, 0.0, None, 0.0, None, 0.2, 0.1, 0.21, 0.67, 0.43, None, 0.86, 0.78, 0.8, 0.79, 0.88],
-        'verbal_experts': [6, 1, 0, 5, 0, 5, 10, 14, 6, 7, 0, 22, 18, 41, 62, 207],
+        'verbal_p_enter': [0.0, 0.0, None, 0.0, None, 0.2, 0.11, 0.21, 0.67, 0.43, None, 0.86, 0.78, 0.82, 0.8, 0.88],
+        'verbal_experts': [5, 1, 0, 5, 0, 5, 9, 14, 6, 7, 0, 22, 18, 40, 61, 207],
         'num_only_p_enter': [None, 1.0, None, None, None, None, 0.0, 0.29, 0.0, 0.4, 1.0, 0.71, 1.0, 0.8, 0.64, 0.8],
         'num_only_experts': [0, 1, 0, 0, 0, 0, 2, 7, 1, 5, 1, 7, 4, 5, 11, 15]},
 
@@ -68,8 +137,8 @@ rounds_dict = {
         'both_p_enter': [None, None, None, 0.0, None, None, 0.5, 0.0, 0.25, None, None, 0.0, 1.0, 0.78, 0.7, 0.96],
         'numeric_experts': [1, 6, 2, 4, 2, 1, 17, 10, 6, 6, 5, 26, 32, 47, 67, 158],
         'both_experts': [0, 0, 0, 3, 0, 0, 4, 2, 4, 0, 0, 2, 1, 9, 10, 24],
-        'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.09, 0.27, 0.43, 1.0, 0.0, 0.6, 0.85, 0.78, 0.78, 0.85],
-        'verbal_experts': [2, 5, 2, 5, 2, 1, 22, 15, 7, 2, 3, 15, 13, 32, 79, 202],
+        'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.5, None, 0.09, 0.27, 0.43, 1.0, 0.0, 0.6, 0.85, 0.78, 0.78, 0.85],
+        'verbal_experts': [2, 3, 2, 5, 2, 0, 22, 15, 7, 2, 2, 15, 13, 32, 79, 202],
         'num_only_p_enter': [None, 0.5, 0.33, 0.0, None, None, 0.5, 0.0, None, 0.5, 1.0, 0.5, 0.5, 1.0, 0.78, 1.0],
         'num_only_experts': [0, 2, 3, 3, 0, 0, 2, 3, 0, 4, 1, 2, 6, 6, 18, 8]},
 
@@ -78,8 +147,8 @@ rounds_dict = {
         'both_p_enter': [0.0, 0.0, 0.0, 0.0, None, None, 0.0, None, 0.0, 0.0, None, 1.0, 0.67, 0.8, 0.67, 0.81],
         'numeric_experts': [4, 6, 0, 5, 3, 0, 20, 15, 6, 10, 1, 34, 23, 35, 76, 152],
         'both_experts': [1, 2, 1, 2, 0, 0, 1, 0, 2, 1, 0, 4, 3, 5, 12, 26],
-        'verbal_p_enter': [0.0, 0.11, 0.0, 0.4, None, 0.0, 0.31, 0.21, 0.75, 0.83, 0.0, 0.62, 0.89, 0.85, 0.76, 0.86],
-        'verbal_experts': [1, 9, 1, 5, 0, 2, 16, 19, 4, 6, 4, 24, 9, 53, 71, 180],
+        'verbal_p_enter': [None, 0.11, 0.0, 0.4, None, 0.0, 0.31, 0.21, 0.75, 0.83, 0.0, 0.62, 0.89, 0.85, 0.77, 0.86],
+        'verbal_experts': [0, 9, 1, 5, 0, 1, 16, 19, 4, 6, 3, 24, 9, 53, 70, 180],
         'num_only_p_enter': [None, 0.0, None, 0.0, None, 0.0, 1.0, 0.67, 0.5, 0.0, 1.0, 1.0, 1.0, 1.0, 0.88, 0.85],
         'num_only_experts': [0, 3, 0, 2, 0, 1, 1, 3, 2, 1, 2, 5, 3, 7, 8, 20]},
 
@@ -88,8 +157,8 @@ rounds_dict = {
         'both_p_enter': [0.0, None, None, None, None, None, 0.33, 0.33, 0.67, 1.0, None, 0.0, 1.0, 0.5, 0.85, 0.9],
         'numeric_experts': [4, 7, 1, 4, 0, 0, 31, 22, 7, 4, 3, 27, 15, 38, 71, 156],
         'both_experts': [1, 0, 0, 0, 0, 0, 3, 3, 3, 1, 0, 1, 4, 2, 13, 29],
-        'verbal_p_enter': [0.0, 0.2, None, 0.0, 0.0, 0.0, 0.6, 0.1, 0.62, 0.86, 0.8, 0.45, 0.62, 0.79, 0.67, 0.81],
-        'verbal_experts': [1, 5, 0, 4, 2, 2, 10, 10, 8, 7, 5, 33, 13, 34, 81, 193],
+        'verbal_p_enter': [0.0, 0.2, None, 0.0, 0.0, 0.0, 0.67, 0.11, 0.62, 0.86, 0.8, 0.45, 0.62, 0.79, 0.68, 0.81],
+        'verbal_experts': [1, 5, 0, 4, 2, 1, 9, 9, 8, 7, 5, 33, 13, 34, 80, 193],
         'num_only_p_enter': [0.0, None, 0.0, None, None, None, None, 0.0, 0.0, 0.67, 0.0, 0.5, 0.67, 0.83, 0.91, 0.89],
         'num_only_experts': [1, 0, 1, 0, 0, 0, 0, 6, 1, 3, 1, 6, 3, 6, 11, 19]},
 
@@ -98,8 +167,8 @@ rounds_dict = {
         'both_p_enter': [None, None, None, 0.0, None, None, 0.5, 0.0, 1.0, 0.0, None, 1.0, 0.5, 1.0, 1.0, 0.93],
         'numeric_experts': [2, 6, 1, 2, 1, 1, 11, 11, 6, 6, 1, 31, 18, 38, 75, 179],
         'both_experts': [0, 0, 0, 1, 0, 0, 4, 1, 1, 1, 0, 1, 2, 5, 14, 28],
-        'verbal_p_enter': [None, 0.0, 0.0, 0.0, 0.0, 0.33, 0.33, 0.18, 0.67, 0.6, 0.0, 0.52, 0.64, 0.91, 0.75, 0.86],
-        'verbal_experts': [0, 4, 1, 4, 2, 3, 9, 17, 3, 5, 3, 21, 14, 47, 73, 200],
+        'verbal_p_enter': [None, 0.0, 0.0, 0.0, 0.0, 0.5, 0.33, 0.19, 0.67, 0.6, 0.0, 0.52, 0.64, 0.91, 0.75, 0.86],
+        'verbal_experts': [0, 4, 1, 4, 1, 2, 9, 16, 3, 5, 2, 21, 14, 47, 73, 200],
         'num_only_p_enter': [None, 0.0, 0.0, None, 0.0, None, 0.0, 0.33, 0.0, 1.0, 0.5, 0.8, 0.83, 0.92, 0.9, 0.85],
         'num_only_experts': [0, 1, 1, 0, 1, 0, 1, 3, 1, 1, 4, 5, 6, 12, 10, 13]},
 
@@ -108,8 +177,8 @@ rounds_dict = {
         'both_p_enter': [0.0, 0.0, None, 0.0, None, None, 0.0, 0.0, None, 0.0, None, 1.0, 1.0, 1.0, 0.8, 0.88],
         'numeric_experts': [0, 7, 2, 7, 0, 2, 16, 16, 4, 13, 5, 15, 12, 40, 56, 192],
         'both_experts': [1, 1, 0, 2, 0, 0, 6, 1, 0, 1, 0, 1, 4, 12, 5, 25],
-        'verbal_p_enter': [1.0, 0.0, 0.0, 0.0, None, 0.14, 0.15, 0.15, 0.56, 0.8, 0.33, 0.64, 0.62, 0.67, 0.76, 0.82],
-        'verbal_experts': [1, 1, 1, 7, 0, 7, 26, 13, 9, 5, 3, 22, 16, 46, 58, 191],
+        'verbal_p_enter': [1.0, 0.0, 0.0, 0.0, None, 0.2, 0.15, 0.15, 0.56, 0.8, 0.5, 0.64, 0.62, 0.69, 0.76, 0.82],
+        'verbal_experts': [1, 1, 1, 7, 0, 5, 26, 13, 9, 5, 2, 22, 16, 45, 58, 191],
         'num_only_p_enter': [None, None, None, 1.0, None, 0.0, None, 0.5, 0.75, 1.0, None, 0.6, 0.83, 1.0, 1.0, 0.87],
         'num_only_experts': [0, 0, 0, 1, 0, 1, 0, 2, 4, 1, 0, 5, 6, 6, 18, 15]},
 
@@ -118,8 +187,8 @@ rounds_dict = {
         'both_p_enter': [None, None, None, None, None, None, 0.0, 0.0, 1.0, 0.0, 0.0, None, 0.5, 1.0, 1.0, 0.86],
         'numeric_experts': [1, 2, 1, 6, 0, 1, 14, 13, 8, 6, 3, 26, 17, 40, 52, 196],
         'both_experts': [0, 0, 0, 0, 0, 0, 1, 3, 2, 1, 1, 0, 4, 7, 11, 28],
-        'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.08, 0.0, 0.33, 0.67, 0.2, 0.71, 0.65, 0.69, 0.77, 0.84],
-        'verbal_experts': [1, 2, 2, 3, 2, 2, 24, 13, 3, 3, 5, 24, 23, 54, 62, 184],
+        'verbal_p_enter': [0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.08, 0.0, 0.33, 0.67, 0.2, 0.71, 0.65, 0.7, 0.79, 0.84],
+        'verbal_experts': [1, 1, 2, 3, 1, 2, 24, 13, 3, 3, 5, 24, 23, 53, 61, 184],
         'num_only_p_enter': [None, 1.0, None, None, None, None, 0.0, 0.33, 0.0, 0.0, 0.2, 0.86, 0.67, 0.75, 0.69, 0.92],
         'num_only_experts': [0, 1, 0, 0, 0, 0, 1, 3, 2, 1, 5, 7, 3, 8, 16, 12]},
 
@@ -129,29 +198,40 @@ rounds_dict = {
         'numeric_experts': [3, 7, 2, 8, 1, 2, 12, 28, 9, 7, 5, 33, 8, 56, 67, 137],
         'both_experts': [0, 1, 0, 0, 0, 0, 4, 4, 0, 0, 0, 5, 1, 6, 13, 26],
         'verbal_p_enter': [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.17, 0.21, 0.5, 0.43, 0.5, 0.73, 0.77, 0.86, 0.65, 0.84],
-        'verbal_experts': [1, 3, 1, 2, 3, 3, 18, 29, 12, 7, 2, 22, 13, 43, 68, 182],
+        'verbal_experts': [1, 3, 1, 2, 1, 2, 18, 28, 12, 7, 2, 22, 13, 43, 68, 182],
         'num_only_p_enter': [0.0, None, None, None, None, None, None, 0.6, 0.0, 0.2, 0.0, 0.2, 0.75, 0.75, 0.87, 0.94],
         'num_only_experts': [1, 0, 0, 0, 0, 0, 0, 5, 1, 5, 1, 5, 4, 4, 15, 17]},
 }
 
 
 honesty_dict = {'numeric': [5.21, 8.45, 8.87, 9.13, 9.33, 9.59, 9.58, 9.59, 9.8, 9.86],
-                'verbal': [5.45, 8.51, 9.0, 9.21, 9.37, 9.56, 9.57, 9.64, 9.82, 9.87],
+                'verbal': [5.47, 8.56, 9.04, 9.24, 9.4, 9.6, 9.6, 9.66, 9.82, 9.87],
                 'num_only': [5.02, 8.16, 8.45, 8.89, 8.82, 8.95, 9.59, 9.38, 9.65, 9.75],
                 'both': [5.24, 8.58, 8.89, 9.24, 9.44, 9.48, 9.29, 9.68, 9.79, 9.85]}
+
+laying_dict = {
+    'numeric': [0.48692153, 0.70301703, 0.66246221, 0.57085051, 0.64515171, 0.75223023, 0.59929727, 0.49672462, 0.55856256, 0.38331854],
+    'verbal': [0.61221578, 0.74679636, 0.74139887, 0.62607457, 0.68487395, 0.76253376, 0.62032926, 0.58212297, 0.61210571, 0.43734015],
+    'num_only': [0.39762871,  0.58961698,  0.46641557,  0.45478834,  0.37494395,  0.37277986,0.61144867,  0.22996443,  0.23360354, -0.09064112],
+    'both': [0.50156495, 0.75656168, 0.66898148, 0.62479475, 0.7010582,  0.68862275, 0.33176101, 0.60493827, 0.55072464, 0.36231884]
+
+}
 
 
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data = data.loc[(data.status == 'play') & (data.player_id_in_group == 1)]
     # data['dm_expected_payoff'] = np.where(data.group_sender_payoff == 1, data.group_average_score - 8, 0)
     data = data[['group_sender_payoff',	'group_receiver_payoff', 'pair_id', 'group_lottery_result',
-                 'group_average_score', 'group_sender_answer_scores', 'dm_expected_payoff', 'subsession_round_number']]
+                 'group_average_score', 'group_sender_answer_scores', 'dm_expected_payoff', 'subsession_round_number',
+                 'group_score_6']]
     data['honesty'] = data['group_sender_answer_scores'] - data['group_average_score']
     data['expert_answer_above_8'] = np.where(data.group_sender_answer_scores > 8, 1, 0)
     data['best_reply'] = np.where((data['expert_answer_above_8'] == 1) & (data.group_sender_payoff == 1), 1,
                                   (np.where((data['expert_answer_above_8'] == 0) &
                                             (data.group_sender_payoff == 0), 1, 0)))
     data['first_half'] = np.where(data.subsession_round_number < 6, 1, 0)
+    data['laying'] = data.apply(lambda x: (x['group_sender_answer_scores'] - x['group_average_score']) /
+                                          (x['group_score_6'] - x['group_average_score']), axis=1)
 
     return data
 
@@ -165,6 +245,154 @@ def significant_tests(data_1: pd.DataFrame, data_2: pd.DataFrame, criterion: str
     kruskal = scipy.stats.kruskal(data_1, data_2)
     ttest = scipy.stats.ttest_ind(data_1, data_2)
     print(f'ANOVA test: {statistic},\nKruskal test: {kruskal}\nT_test: {ttest}\n')
+
+    return
+
+
+def computation_paper_graphs(corr_data_path):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    # first graph - enterance per round per gender
+    decision_data = pd.DataFrame(enterence_per_round_dict, index=list(range(1, 11)))
+    decision_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'darkblue', 'crimson'], ax=ax1)
+    ax1.set_title("(a) Hotel Choices Rate Per Trial Number")
+    ax1.set(xlabel='Trial Number', ylabel='% Decision-Makers')
+    # rects = axes[0, 0].patches
+    # autolabel(rects, axes[0, 0], rotation='horizontal', max_height=80, convert_to_int=True)
+    ax1.legend(loc='lower center', shadow=True)
+
+    # second graph - enterance per score
+    decision_data = pd.DataFrame(enterenc_per_score_dict, index=x)
+    decision_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'darkblue', 'crimson'], ax=ax2)
+    ax2.set_title("(b) Hotel Choices Rate Per Reviews' Score")
+    ax2.set(xlabel="Reviews' Score")
+    # rects = ax2.patches
+    # autolabel(rects, ax2, rotation='horizontal', max_height=80, convert_to_int=True)
+    ax2.legend(loc='upper left', shadow=True)
+
+    plt.savefig("computation_paper_graphs_enterance_rate_1.png", bbox_inches='tight')
+
+    # third graph - chose-lose
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    inner_colors = ['orange', 'green', 'red', 'blue']
+    decision_data = pd.DataFrame(pre_round_dict, index=list(range(2, 11)))
+    for i, column in enumerate(decision_data.columns):
+        ax1.plot(list(range(2, 11)), decision_data[column], linestyle='-', color=inner_colors[i], label=column)
+    # decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=axes[1, 0])
+    ax1.set_title("(a) Hotel Choices Rate Per Previous Trial Result")
+    ax1.set(xlabel='Trial Number', ylabel='% Decision-Makers')
+    # rects = ax3.patches
+    # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
+    ax1.legend(loc='upper right', shadow=True, prop={"size": 8})
+
+    """Analyze the correlation between rounds"""
+    data = pd.read_csv(corr_data_path)
+    data = data.loc[data.raisha == 0]
+    data.labels = np.where(data.labels == 1, 1, 0)
+    avg_enter_rate = data.groupby(by='pair_id').labels.sum()
+    print(f'avg_enter_rate is: {avg_enter_rate.mean()}, median_enter_rate is {avg_enter_rate.median()}, '
+          f'std_enter_rate is {avg_enter_rate.std()}')
+    rounds_list = list(range(1, 11))
+    df_list = list()
+    for my_round in rounds_list:
+        df = data.loc[data.round_number == my_round].labels
+        df.reset_index(drop=True, inplace=True)
+        df_list.append(df)
+
+    labels = pd.concat(df_list, axis=1, ignore_index=True)
+    labels.columns = list(range(1, 11))
+    corr = labels.corr()
+    mask = np.zeros_like(corr, dtype=np.bool)
+    mask[np.triu_indices_from(mask)] = True
+    # plt.figure(figsize=(5, 5))
+    sns.heatmap(corr, cmap='coolwarm', annot=True, mask=mask, fmt='.2f', annot_kws={"size": 8}, ax=ax2)
+    ax2.set(xlabel='Trial Number', ylabel='Trial Number')
+    ax2.set_title('(b) Correlation Between Decisions in Different Trials')
+    corr.to_csv(os.path.join('rounds_correlation_analysis.csv'))
+    plt.savefig('correlation_heat_map.png')
+
+    # forth graph- % decision makers enters each number
+    fig, ax = plt.subplots()
+    decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict, index=list(range(2, 11)))
+    decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=ax)
+    # ax.set_title("% Decision-Makers Per Total Hotel Choices")
+    ax.set(xlabel='Hotel Choices Throughout the Trials', ylabel='% Decision-Makers')
+    ax.get_legend().remove()
+    # rects = ax3.patches
+    # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
+
+    plt.savefig("computation_paper_graphs_enterance_rate_2.png", bbox_inches='tight')
+
+    # enterance rate per manual features
+    enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+                                                     'experiment/decision_prediction/data_analysis/analysis/'
+                                                     'text_exp_2_tests/verbal/% DM entered based on review features '
+                                                     'for condition verbal and gender all genders for graph.csv',
+                                                     index_col=1)
+    axes = list()
+    fig = plt.figure(figsize=(12, 5))
+    axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
+    axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
+    axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
+    axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
+    axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
+
+    for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
+        high_level_data =\
+            enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
+        high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i], fontsize=8)
+        axes[i].set_title(high_level, fontsize=8)
+        axes[i].get_legend().remove()
+        axes[i].set_xlabel('')
+
+    # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
+    # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
+    fig.text(0.5, 0.04, 'Attribute Number', ha='center')
+    fig.text(0.08, 0.5, '% Decision-Makers', va='center', rotation='vertical')
+    fig.legend(axes,  # The line objects
+               labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
+               loc="upper center",  # Position of legend
+               shadow=True, prop={"size": 8})
+    plt.savefig("enterance_rate_per_manual_features.png", bbox_inches='tight')
+
+    # compare besrt-domain features
+    fig, ax = plt.subplots()
+    results_data = pd.DataFrame(bert_domain_compare, index=models_index)
+    results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson'], ax=ax, alpha=0.75)
+    plt.xticks(rotation=45)
+    ax.set(ylabel='RMSE')
+    ax.legend(loc='upper right', shadow=True)
+    plt.savefig("bert_domain_features_compare.png", bbox_inches='tight')
+
+    # per raisha comapre only RMSE
+    fig, ax = plt.subplots()
+    data = pd.DataFrame(raisha_results_rmse, index=list(range(10)))
+    for i, column in enumerate(data.columns):
+        ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+    # ax.set_title(f"{measure} As a Function of the Raisha Size")
+    ax.set(xlabel='Raisha Size', ylabel='RMSE')
+    plt.xticks(list(range(10)))
+    ax.legend(loc='upper left', shadow=True)
+
+    plt.savefig("raisha_compare_RMSE.png", bbox_inches='tight')
+
+    # per raisha comapre
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+    for results_dict, measure, ax in [[raisha_results_rmse, 'RMSE', ax1],
+                                      [raisha_results_micro, 'Bin F-score Micro', ax2],
+                                      [raisha_results_macro, 'Bin F-score Macro', ax3]]:
+        data = pd.DataFrame(results_dict, index=list(range(10)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+        ax.set(xlabel='Raisha Size', ylabel=measure)
+
+    lines, labels = fig.axes[-1].get_legend_handles_labels()
+
+    fig.legend(lines, labels, loc='upper center', shadow=True, prop={"size": 10})
+    plt.xticks(list(range(10)))
+    plt.savefig("raisha_compare.png", bbox_inches='tight')
+
+    plt.show()
 
     return
 
@@ -338,6 +566,66 @@ def honesty_graph(study: int):
                  bbox_inches='tight')
 
 
+def laying_graph(study: int):
+    """The Communication Type Effect on the Experts Cheating Level"""
+    fig1, ax1 = plt.subplots()
+    x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
+
+    ax1.plot(x, laying_dict[conditions_per_study[study][0]], color=colors[conditions_per_study[study][0]],
+             label=condition_names_per_study[study][0], marker=markers[conditions_per_study[study][0]])
+    ax1.plot(x, laying_dict[conditions_per_study[study][1]], color=colors[conditions_per_study[study][1]],
+             label=condition_names_per_study[study][1], marker=markers[conditions_per_study[study][1]])
+
+    # plt.title(f"The Selected Score as a Function of the Hotels' Average Score\nby Condition for study {study}")
+    plt.xlabel('Hotel Average Score: Decision-Maker Expected Payoff', fontsize=15)
+    plt.ylabel('Expert Dishonesty Measure', fontsize=15)
+    ax1.legend(loc='upper left', shadow=True, fontsize=8)
+    plt.xticks(range(4, 11))
+    plt.show()
+    fig1.savefig(os.path.join(graph_directory, f'Laying_graph_{study}.png'), bbox_inches='tight')
+
+
+def both_exp_laying_graph(role_dict: dict, ylabel: str, title: str):
+    fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
+
+    ax1.plot(x, laying_dict[conditions_per_study[1][0]], color=colors[conditions_per_study[1][0]],
+             label=condition_names_per_study[1][0], marker=markers[conditions_per_study[1][0]])
+    ax1.plot(x, laying_dict[conditions_per_study[1][1]], color=colors[conditions_per_study[1][1]],
+             label=condition_names_per_study[1][1], marker=markers[conditions_per_study[1][1]])
+    ax1.plot(x, laying_dict[conditions_per_study[2][0]], color=colors[conditions_per_study[2][0]],
+             label=condition_names_per_study[2][0], marker=markers[conditions_per_study[2][0]])
+    ax1.plot(x, laying_dict[conditions_per_study[2][1]], color=colors[conditions_per_study[2][1]],
+             label=condition_names_per_study[2][1], marker=markers[conditions_per_study[2][1]])
+
+    ax1.set_title(f"(a) Experts Dishonesty as a function of the Hotel's average score")
+    ax1.set(xlabel='Hotel Average Score: Decision-Maker Expected Payoff', ylabel='Expert Dishonesty Measure')
+    ax1.legend(loc='lower left', shadow=True, fontsize=8)
+
+    index = list(range(1, 11))
+    ax2.plot(index, role_dict[conditions_per_study[1][0]], color=colors[conditions_per_study[1][0]],
+             label=condition_names_per_study[1][0], marker=markers[conditions_per_study[1][0]], linestyle='-')
+    ax2.plot(index, role_dict[conditions_per_study[1][1]], color=colors[conditions_per_study[1][1]],
+             label=condition_names_per_study[1][1], marker=markers[conditions_per_study[1][1]], linestyle='-')
+
+    ax2.plot(index, role_dict[conditions_per_study[2][0]], color=colors[conditions_per_study[2][0]],
+             label=condition_names_per_study[2][0], marker=markers[conditions_per_study[2][0]], linestyle='-')
+    ax2.plot(index, role_dict[conditions_per_study[2][1]], color=colors[conditions_per_study[2][1]],
+             label=condition_names_per_study[2][1], marker=markers[conditions_per_study[2][1]], linestyle='-')
+
+    # plt.title(title)
+    ax2.set_title(f"(b) {title}")
+    ax2.set(xlabel='Trial Number', ylabel=ylabel)
+    ax2.legend(loc='upper right', shadow=True, fontsize=8)
+    plt.xticks(index)
+    plt.show()
+    fig1.savefig(os.path.join(graph_directory, f'{title}.png'), bbox_inches='tight')
+
+    plt.xticks(range(4, 11))
+    plt.show()
+    fig1.savefig(os.path.join(graph_directory, f'Laying_graph_both_exps.png'), bbox_inches='tight')
+
+
 def payoff_graph(study: int, role_dict: dict, ylabel: str, title: str):
     fig1, ax1 = plt.subplots()
     index = list(range(1, 11))
@@ -398,7 +686,11 @@ class SignificanceTests:
                  linestyle='-')
 
         # plt.title(f"The Selected Score as a Function of the Hotels' Average Score\nby Condition for study {study}")
-        plt.xlabel('Expert Numerical Signal', fontsize=15)
+        if study == 1:
+            xlabel = 'Score (or score related to the review) Selected by The Expert'
+        else:
+            xlabel = 'Score Selected by The Expert'
+        plt.xlabel(xlabel, fontsize=15)
         plt.ylabel('Average Acceptance Rates', fontsize=15)
         ax1.legend(loc='upper left', shadow=True, fontsize=8)
         plt.xticks(range(2, 11))
@@ -421,6 +713,17 @@ class SignificanceTests:
                               f'{conditions_per_study[study][0]}, {conditions_per_study[study][1]}')
 
         return
+
+    def laying_test(self, study: int):
+        study_1_cond = self.all_data[conditions_per_study[study][0]]
+        study_2_cond = self.all_data[conditions_per_study[study][1]]
+
+        study_1_cond = study_1_cond.groupby(by='pair_id').laying.mean()
+        study_2_cond = study_2_cond.groupby(by='pair_id').laying.mean()
+
+        significant_tests(study_1_cond, study_2_cond,
+                          f'Laying Level Study {study}: '
+                          f'{conditions_per_study[study][0]}, {conditions_per_study[study][1]}')
 
     def trust_graph(self, study: int, split_half=True):
         data_dict = defaultdict(list)
@@ -603,6 +906,10 @@ class CalculationsForPaper:
             df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
             df = df.loc[df.status == 'play']
             df = df.drop_duplicates()
+            df['laying'] = df.apply(lambda x: (x['group_sender_answer_scores'] - x['group_average_score']) /
+                                              (x['group_score_6'] - x['group_average_score']), axis=1)
+            # print(f"condition: {condition}, average laying per hotel: "
+            #       f"{df.groupby(by='group_average_score').laying.mean().values}")
             time_spent = pd.read_csv(os.path.join(data_directory, date_directory, condition, 'TimeSpent.csv'))
             time_spent = time_spent.groupby(by='participant_code').seconds_on_page.sum()
             if 'seconds_on_page' in df.columns:
@@ -650,6 +957,11 @@ class CalculationsForPaper:
 
 
 def main():
+    computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
+                                            'decision_prediction/language_prediction/data/verbal/cv_framework/'
+                                            'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
+                                            'all_history_features_all_history_text_manual_binary_features_predict_first_'
+                                            'round_verbal_data.csv')
     calculation_obj = CalculationsForPaper()
     calculation_obj.number_participants()
     tests_obj = SignificanceTests()
@@ -662,8 +974,14 @@ def main():
                                 'numeric': [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04],
                                 'num_only': [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2],
                                 'both': [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]}
+    both_exp_laying_graph(role_dict=expert_payoff_dict, ylabel='Average acceptance rate (expert payoff)',
+                          title=f'Average acceptance rate (expert payoff) as a function of trial')
+
     for study in [1, 2]:
         print(f'Significant tests for study {study}')
+        tests_obj.laying_test(study=study)
+        laying_graph(study=study)
+
         tests_obj.understanding_graph(study=study)
         tests_obj.trust_graph(study=study, split_half=False)
         tests_obj.trust_graph(study=study, split_half=True)

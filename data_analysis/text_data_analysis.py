@@ -106,7 +106,7 @@ def compare_positive_negative_first(data: pd.DataFrame):
 
 
 class DataAnalysis:
-    def __init__(self, class_gender='all genders', class_condition='all_condition'):
+    def __init__(self, class_gender='all genders', class_condition='all_condition', use_pairs_models: bool=False):
         self.gender = class_gender
         self.condition = class_condition if split_condition else condition_directory
         print(f'Start running data analysis on data folder {date_directory} {condition_directory}')
@@ -144,6 +144,7 @@ class DataAnalysis:
             self.results.merge(self.payments, left_on=['participant_mturk_worker_id', 'participant_mturk_assignment_id',
                                                        'participant_code'],
                                right_on=['worker_id', 'assignment_id', 'participant_code'], how='left')
+
         self.results_payments = self.results_payments.assign(status='')
         self.results_payments = self.results_payments.assign(prob_status='')
         self.results_payments = self.results_payments.assign(player_timeout=0)
@@ -161,6 +162,11 @@ class DataAnalysis:
         if 'pair_id' not in self.results_payments.columns:
             self.results_payments['pair_id'] = self.results_payments['session_code'] + '_' +\
                                                self.results_payments['group_id_in_subsession'].map(str)
+        if use_pairs_models:
+            pairs_models = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/decision_'
+                                       'prediction/language_prediction/data/verbal/cv_framework/pairs_folds.csv')
+            self.results_payments = self.results_payments.loc[self.results_payments.pair_id.isin(pairs_models.pair_id)]
+
         self.personal_info = self.results.loc[self.results.player_age.notnull(),
                                               ['participant_code', 'participant_mturk_worker_id', 'player_residence',
                                                'participant_mturk_assignment_id', 'player_name', 'player_age',
@@ -178,6 +184,8 @@ class DataAnalysis:
         This function set the expert answer score in the verbal condition
         :return:
         """
+        print(f'start of set_expert_answer_scores_reviews_len_verbal_cond: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         if self.condition == 'verbal':
             # for each row set the group_sender_answer_scores using group_sender_answer_index
             # for index, row in self.results_payments.iterrows():
@@ -194,6 +202,8 @@ class DataAnalysis:
             self.results_payments['positive_negative_review_len_prop'] =\
                 round(self.results_payments['positive_review_len']/self.results_payments['negative_review_len'], 2)
 
+            print(f'end of set_expert_answer_scores_reviews_len_verbal_cond: '
+                  f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
             return
 
     def average_most_close_hotel_id(self):
@@ -201,7 +211,8 @@ class DataAnalysis:
         This function define the hotel ID and the review that most close to the score average
         :return:
         """
-
+        print(f'start of average_most_close_hotel_id: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         # define hotel ID
         hotels_scores_list = [f'score_{i}' for i in range(0, 7)]
         hotels_scores_list.append('hotel_id')
@@ -299,6 +310,8 @@ class DataAnalysis:
                                                               hotels_numerical_values['hotel median score']
         hotels_numerical_values.to_csv(os.path.join(data_analysis_directory, 'hotels_numerical_values.csv'))
 
+        print(f'end of average_most_close_hotel_id: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def set_player_partner_timeout_answer(self):
@@ -306,6 +319,7 @@ class DataAnalysis:
         This function arrange the player data. It set the player timeout and answer
         :return:
         """
+
         # if no p_lottery - consider as timeout
         self.results_payments['player_timeout'] = np.where(self.results_payments.player_id_in_group == 1,
                                                            self.results_payments.group_sender_timeout,
@@ -329,6 +343,7 @@ class DataAnalysis:
         This function create the previous round relevant measures
         :return:
         """
+
         # set the lottery result from the previous round
         # shift(2) because there are 2 rows for each pair in each subsession_round_number': expert and DM
         self.results_payments = self.results_payments.sort_values(by=['pair_id', 'subsession_round_number'])
@@ -414,12 +429,32 @@ class DataAnalysis:
 
         return
 
+    def enterance_per_number_of_enterences(self):
+        """
+        This function calculate the % of decision makers chose the hotel 0,1,2...,9 rounds
+        :return:
+        """
+        print(f'start of enterance_per_number_of_enterences: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
+        data_for_plot = self.results_payments.loc[(self.results_payments.status == 'play') &
+                                                  (self.results_payments.player_id_in_group == 1)]
+        data_for_plot = pd.DataFrame(data_for_plot.groupby(by='participant_code').group_sender_payoff.sum())
+        data_for_plot['participant_code'] = data_for_plot.index
+        data_for_plot = data_for_plot.groupby(by='group_sender_payoff').participant_code.count()
+
+        print(f'enterance_per_number_of_enterences:\n {data_for_plot}')
+        print(f'start of enterance_per_number_of_enterences: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
+
+        return
+
     def set_all_history_measures(self):
         """
         This function calculates some measures about all the history per round for each pair
         :return:
         """
-
+        print(f'start of set_all_history_measures: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         self.results_payments['10_result'] = np.where(self.results_payments.group_lottery_result == 10, 1, 0)
         columns_to_calc = ['group_lottery_result', 'group_sender_payoff', 'lottery_result_high', 'chose_lose',
                            'chose_earn', 'not_chose_lose', 'not_chose_earn', '10_result']
@@ -456,6 +491,8 @@ class DataAnalysis:
         new_columns = [f'history_{column}' for column in rename_columns] + ['pair_id', 'subsession_round_number']
         self.results_payments = self.results_payments.merge(data_to_create[new_columns],  how='left')
 
+        print(f'end of set_all_history_measures: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def time_spent_analysis(self):
@@ -463,7 +500,8 @@ class DataAnalysis:
         This function analyze the time spent in SenderPage, ReceiverPage, Introduction and PersonalInformation
         :return:
         """
-
+        print(f'start of time_spent_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         # arrange time spent
         if 'group_receiver_passed_test' in self.results_payments.columns:
             participant_role = self.results_payments[['participant_code', 'player_id_in_group', 'player_timeout',
@@ -555,6 +593,8 @@ class DataAnalysis:
         self.results_payments['time_spent_med'] = np.where(self.results_payments.seconds_on_page.between(15, 29), 1, 0)
         self.results_payments['time_spent_high'] = np.where(self.results_payments.seconds_on_page >= 30, 1, 0)
 
+        print(f'end of time_spent_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def how_much_pay(self):
@@ -562,6 +602,7 @@ class DataAnalysis:
         This function calculate how much we pay
         :return:
         """
+
         # workers that we pay them for participate - more than $2.5
         participants_paid = self.payments.loc[self.payments.total_pay >= 2.5]
         participants_paid = participants_paid.drop_duplicates('participant_code')
@@ -799,6 +840,8 @@ class DataAnalysis:
             'no_turker_assigned'
 
         self.results_payments.loc[self.results_payments.status == '', 'status'] = 'unknown'
+        print(f'start of define_player_status: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
 
         return
 
@@ -1057,6 +1100,8 @@ class DataAnalysis:
         This function analysis the rounds: when participants retired and the number of timeouts
         :return:
         """
+        print(f'start of round_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         # round of retired
         data_of_left = self.results_payments.loc[self.results_payments.status.isin(['left', 'both_left'])]
 
@@ -1078,7 +1123,8 @@ class DataAnalysis:
             pivot_to_merge = pivot[['left_round']]
             pivot_to_merge.loc[pivot_to_merge.left_round == '', 'left_round'] = 10
             create_histogram(title='trial_of_left', x=np.array(pivot_to_merge), xlabel='trial_number',
-                             ylabel='number_of_participants', add_labels=True, curr_date_directory=data_analysis_directory)
+                             ylabel='number_of_participants', add_labels=True,
+                             curr_date_directory=data_analysis_directory)
             self.results_payments = self.results_payments.merge(pivot_to_merge, how='left', left_on='participant_code',
                                                                 right_index=True)
 
@@ -1174,6 +1220,8 @@ class DataAnalysis:
                                       (self.results_payments.pair_id.isin(pair_ids_always_timeout)), 'status'] =\
                 'partner_always_timeout'
 
+        print(f'end of round_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def bonus_analysis(self):
@@ -1261,7 +1309,8 @@ class DataAnalysis:
         This function analyze the expert payoff (the sum of payoffs in all rounds)
         :return:
         """
-
+        print(f'start of expert_payoff_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         group_list = self.results_payments.prob_status.unique().tolist()
         groups_payoff_statistics_dict = dict()
         type_list = ['total_payoff', 'total_payoff_no_partner_timeout', 'score_average_num_positive',
@@ -1329,15 +1378,20 @@ class DataAnalysis:
             groups_payoff_statistics_dict[total_payoff_type].to_excel(writer, sheet_name=total_payoff_type)
         writer.save()
 
+        print(f'end of expert_payoff_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def define_prob_status_for_dm(self):
+        print(f'start of define_prob_status_for_dm: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         """assign the prob status of the expert to its decision maker partner"""
         expert_tyeps = self.results_payments.loc[self.results_payments.player_id_in_group == 1][
             ['pair_id', 'prob_status']].drop_duplicates('pair_id')
         expert_tyeps.columns = ['pair_id', 'player_expert_type']
         self.results_payments = self.results_payments.merge(expert_tyeps, on='pair_id', how='left')
-
+        print(f'end of define_prob_status_for_dm: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def pct_entered_file(self):
@@ -1346,6 +1400,8 @@ class DataAnalysis:
         per round number, per condition
         :return:
         """
+        print(f'start of pct_entered_file: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.status == 'play') &
                                                 (self.results_payments.player_id_in_group == 2)]
@@ -1385,7 +1441,8 @@ class DataAnalysis:
             self.create_review_compare_file(prev_review_id_data, column=column, after_merge_name=column[0],
                                             add_compare_positive_negative_first=False,
                                             second_merge_column=second_merge_column)
-
+        print(f'end of pct_entered_file: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def pct_entered_graph(self):
@@ -1394,6 +1451,8 @@ class DataAnalysis:
         per round number, per condition
         :return:
         """
+        print(f'start of pct_entered_graph: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.status == 'play') &
                                                 (self.results_payments.player_id_in_group == 2)]
@@ -1520,7 +1579,8 @@ class DataAnalysis:
                                          add_labels=False, curr_date_directory=data_analysis_directory)
 
         self.create_review_compare_file(review_id_data, column='review_id', add_compare_positive_negative_first=True)
-
+        print(f'end of pct_entered_graph: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def create_review_compare_file(self, review_id_data: pd.DataFrame, column: Union[str, list],
@@ -1567,6 +1627,8 @@ class DataAnalysis:
         This function plot the expert answer vs the round number
         :return:
         """
+        print(f'start of analyze_expert_answer: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 1) &
                                                 (self.results_payments.status == 'play')]
         expert_answer = data_to_use.groupby(by='subsession_round_number').group_sender_answer_scores.mean()
@@ -1627,6 +1689,8 @@ class DataAnalysis:
                                curr_date_directory=data_analysis_directory, add_text_label=True,
                                max_height=hotel_group_data.max(), convert_to_int=False, label_rotation='horizontal')
 
+        print(f'end of analyze_expert_answer: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def analyze_dm_payoff(self):
@@ -1634,6 +1698,8 @@ class DataAnalysis:
         This function plot the decision maker payoff vs the round number
         :return:
         """
+        print(f'start of analyze_dm_payoff: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')]
 
@@ -1658,6 +1724,8 @@ class DataAnalysis:
                                          f'and {self.gender} and round number {round_num}',
                                    max_height=dm_payoff.max()+10, curr_date_directory=data_analysis_directory,
                                    add_text_label=True, label_rotation='horizontal')
+        print(f'end of analyze_dm_payoff: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
 
         return
 
@@ -1666,7 +1734,8 @@ class DataAnalysis:
         This function compare the index that the experts chose in each hotel between the condition
         :return:
         """
-
+        print(f'start of compare_experts_choices: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_function = self.results_payments.loc[(self.results_payments.status == 'play') &
                                                   (self.results_payments.player_id_in_group == 1)]
         for param in ['hotel_id', 'positive_negative_review_len_prop', 'group_average_score', 'group_median_score']:
@@ -1685,7 +1754,7 @@ class DataAnalysis:
                     else:
                         pivot.columns = pivot.columns.levels[2]
                         add_table = False
-                        pivot.columns.name = 'score'
+                        pivot.columns.set_names('score')
                     title = f"Number of experts chose each review's {column} per {param} " \
                             f"\nfor condition {self.condition} and gender {self.gender}"
                     xlabel = param
@@ -1698,6 +1767,8 @@ class DataAnalysis:
                     else:
                         create_bar_from_df(data=pivot, title=title, xlabel=xlabel, ylabel=ylabel,
                                            curr_date_directory=data_analysis_directory, add_table=add_table)
+        print(f'end of compare_experts_choices: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def expert_answer_vs_ep(self):
@@ -1705,6 +1776,8 @@ class DataAnalysis:
         This function create a point plot for the expert answer vs the DM expected payoff (the average above the scores)
         :return:
         """
+        print(f'start of expert_answer_vs_ep: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 1) &
                                                 (self.results_payments.status == 'play')]
 
@@ -1719,6 +1792,8 @@ class DataAnalysis:
                           xlabel='Decision Maker Expected Payoff', ylabel='Expert Average Score',
                           curr_date_directory=data_analysis_directory, add_line_between_points=True)
 
+        print(f'end of expert_answer_vs_ep: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def pct_entered_two_parameters(self):
@@ -1727,7 +1802,8 @@ class DataAnalysis:
         :return:
         """
         # get only DM
-
+        print(f'start of pct_entered_two_parameters: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')]
         data_to_use = data_to_use[['group_sender_answer_index', 'subsession_round_number', 'group_sender_payoff']]
@@ -1750,6 +1826,8 @@ class DataAnalysis:
         create_bar_from_df(data=pivot, title=title, xlabel=xlabel, ylabel=ylabel,
                            curr_date_directory=data_analysis_directory, add_table=True)
 
+        print(f'end of pct_entered_two_parameters: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         return
 
     def compare_experts_choices_per_condition(self):
@@ -1779,7 +1857,8 @@ class DataAnalysis:
         the median score and the bias from the average
         :return:
         """
-
+        print(f'start of expert_answer_vs_average_score: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         expert_data = self.results_payments.loc[(self.results_payments.player_id_in_group == 1) &
                                                 (self.results_payments.status == 'play')]
 
@@ -1823,6 +1902,8 @@ class DataAnalysis:
                                      f'{self.condition} condition and {self.gender}',
                                curr_date_directory=data_analysis_directory, add_text_label=True,
                                max_height=expert_choices.max(), label_rotation='horizontal')
+        print(f'end of expert_answer_vs_average_score: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
 
     def dm_entered_per_review_features(self):
         """
@@ -1830,10 +1911,12 @@ class DataAnalysis:
         text features I extracted from the reviws
         :return:
         """
+        print(f'start of dm_entered_per_review_features: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
         manual_features = pd.read_excel('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
                                         'experiment/decision_prediction/language_prediction/data/verbal/'
-                                        'manual_binary_features.xlsx')
+                                        'manual_binary_features_for_analysis.xlsx')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][
@@ -1862,6 +1945,8 @@ class DataAnalysis:
         data_df.to_csv(os.path.join(data_analysis_directory,
                                     f'% DM entered based on review features for condition {self.condition} and gender '
                                     f'{self.gender}.csv'))
+        print(f'end of dm_entered_per_review_features: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
 
     def eval_real_score_analysis(self):
         """
@@ -1869,7 +1954,8 @@ class DataAnalysis:
         and the average estimation
         :return:
         """
-
+        print(f'start of eval_real_score_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         data_to_use = self.results_payments.loc[(self.results_payments.player_id_in_group == 1) &
                                                 (self.results_payments.status == 'play')]
         unique_averages = data_to_use.group_average_score.unique().tolist()
@@ -1901,6 +1987,8 @@ class DataAnalysis:
                            ylabel='% experts chose each index', stacked=False, figsize=(17, 5), add_text_label=True,
                            convert_to_int=False, autolabel_text=autolabel_text, autolabel_fontsize=8,
                            y_ticks_list=list(range(0, 85, 10)))
+        print(f'end of eval_real_score_analysis: '
+              f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
 
         return
 
@@ -1931,11 +2019,13 @@ class DataAnalysis:
 
 
 def main(main_gender='all genders', main_condition='all_condition'):
-    data_analysis_obj = DataAnalysis(main_gender, main_condition)
+    data_analysis_obj = DataAnalysis(main_gender, main_condition, use_pairs_models=False)
     data_analysis_obj.set_player_partner_timeout_answer()
     data_analysis_obj.set_current_round_measures()
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
+    data_analysis_obj.round_analysis()
+    data_analysis_obj.enterance_per_number_of_enterences()
     data_analysis_obj.calculate_linear_score()
     data_analysis_obj.eval_real_score_analysis()
     data_analysis_obj.average_most_close_hotel_id()
@@ -1952,7 +2042,6 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.compare_experts_choices_per_condition()
     data_analysis_obj.compare_experts_choices()
     data_analysis_obj.pct_entered_two_parameters()
-    data_analysis_obj.round_analysis()
     data_analysis_obj.how_much_pay()
     data_analysis_obj.sender_answer_analysis()
     data_analysis_obj.bonus_analysis()

@@ -46,6 +46,8 @@ svm_gridsearch_params = [{'kernel': 'poly', 'degree': 3}, {'kernel': 'poly', 'de
                          {'kernel': 'poly', 'degree': 8}, {'kernel': 'rbf', 'degree': ''},
                          {'kernel': 'linear', 'degree': ''}]
 
+crf_gridsearch_params = [{'squared_sigma': squared_sigma} for squared_sigma in [0.005, 0.006, 0.007, 0.008]]
+
 
 def execute_create_fit_predict_eval_model(
         function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
@@ -98,8 +100,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                                       sheet_name='table_to_load', skiprows=[0])
     fold_dir = utils.set_folder(f'fold_{fold}', run_dir)
     excel_models_results = utils.set_folder(folder_name='excel_models_results', father_folder_path=fold_dir)
-    table_writer = pd.ExcelWriter(os.path.join(excel_models_results, f'Results_fold_{fold}_all_models.xlsx'),
-                                  engine='xlsxwriter')
+    # table_writer = pd.ExcelWriter(os.path.join(excel_models_results, f'Results_fold_{fold}_all_models.xlsx'),
+    #                               engine='xlsxwriter')
+    table_writer = None
     log_file_name = os.path.join(fold_dir, f'LogFile_fold_{fold}.log')
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
@@ -112,11 +115,15 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     # all_model_types = ['LSTM_avg', 'LSTM_avg_turn', 'Transformer_avg_turn', 'Transformer_avg',
     #                    'LSTM_avg_turn_linear', 'Attention_avg']
     # all_model_types = ['Attention_avg']
-    all_model_nums = models_to_compare.model_num.unique()
-    # all_model_nums = [14]
+    all_model_nums = list(set(models_to_compare.model_num))
+    # already_trained_models = list(range(15, 21)) + list(range(11))
+    # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
+    all_model_nums = [30, 31, 44, 45]
 
     all_models_results = pd.DataFrame()
     for model_num in all_model_nums:  # compare all versions of each model type
+        # if model_num < 42:
+        #     continue
         model_type_versions = models_to_compare.loc[models_to_compare.model_num == model_num]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
@@ -142,16 +149,23 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
             # it needs to return a dict with the final results over the evaluation data: {measure_name: measure}
             if hyper_parameters_tune_mode:
                 if 'LSTM' in model_type or 'Transformer' in model_type:
-                    if 'LSTM' in model_type:
+                    if 'LSTM' in model_type and not 'use_transformer' in model_type:
                         greadsearch = lstm_gridsearch_params
-                    else:
+                    else:  # for Transformer models and LSTM_use_transformer models
                         greadsearch = transformer_gridsearch_params
                     for i, parameters_dict in enumerate(greadsearch):
                         # if i > 0:
-                        #     break
+                        #     continue
+                        if (fold == 0 and (model_num == 30 or (model_num == 31 and i <= 25))) or \
+                                (fold == 1 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
+                                (fold == 2 and ((model_num == 30) or (model_num == 31 and i <= 17))) or \
+                                (fold == 3 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
+                                (fold == 4 and (model_num == 30 and i <= 46)) or \
+                                (fold == 5 and (model_num == 30 and i <= 38)):
+                            continue
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
-                        if 'linear' in model_type and 'lstm_hidden_dim' in greadsearch:
+                        if 'linear' in model_type and 'lstm_hidden_dim' in new_hyper_parameters_dict:
                             new_hyper_parameters_dict['linear_hidden_dim'] =\
                                 int(0.5*new_hyper_parameters_dict['lstm_hidden_dim'])
                         if '_avg_turn' in model_type:
@@ -161,33 +175,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                                 new_hyper_parameters_dict.update(inner_parameters_dict)
                                 new_model_name = f'{model_name}'
                                 new_model_num = f'{model_num}_{i}_{inner_i}'
-                                if 'use_transformer' in model_type:
-                                    for inner_j, feedforward_hidden_dim_prod in enumerate([0.5, 1, 2]):
-                                        new_hyper_parameters_dict['feedforward_hidden_dim_prod'] =\
-                                            feedforward_hidden_dim_prod
-                                        new_model_name = f'{model_name}'
-                                        new_model_num = f'{model_num}_{i}_{inner_i}_{inner_j}'
-                                        all_models_results = execute_create_fit_predict_eval_model(
-                                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
-                                            data_file_name,
-                                            fold_split_dict, table_writer, new_hyper_parameters_dict,
-                                            excel_models_results, all_models_results)
-                                else:
-                                    all_models_results = execute_create_fit_predict_eval_model(
-                                        function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
-                                        data_file_name,
-                                        fold_split_dict, table_writer, new_hyper_parameters_dict,
-                                        excel_models_results, all_models_results)
-                        elif 'use_transformer' in model_type:
-                            for inner_j, feedforward_hidden_dim_prod in enumerate([0.5, 1, 2]):
-                                new_hyper_parameters_dict['feedforward_hidden_dim_prod'] = \
-                                    feedforward_hidden_dim_prod
-                                new_model_name = f'{model_name}'
-                                new_model_num = f'{model_num}_{i}_{inner_j}'
                                 all_models_results = execute_create_fit_predict_eval_model(
                                     function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
-                                    data_file_name,
-                                    fold_split_dict, table_writer, new_hyper_parameters_dict,
+                                    data_file_name, fold_split_dict, table_writer, new_hyper_parameters_dict,
                                     excel_models_results, all_models_results)
                         else:
                             new_model_name = f'{model_name}'
@@ -198,6 +188,20 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                                 excel_models_results, all_models_results)
                 elif 'SVM' in model_type:
                     for i, parameters_dict in enumerate(svm_gridsearch_params):
+                        # if i > 0:
+                        #     continue
+                        new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
+                        new_hyper_parameters_dict.update(parameters_dict)
+                        new_model_name = f'{model_name}'
+                        new_model_num = f'{model_num}_{i}'
+                        all_models_results = execute_create_fit_predict_eval_model(
+                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name, data_file_name,
+                            fold_split_dict, table_writer, new_hyper_parameters_dict, excel_models_results,
+                            all_models_results)
+                elif 'CRF' in model_type:
+                    for i, parameters_dict in enumerate(crf_gridsearch_params):
+                        # if i > 0:
+                        #     continue
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
                         new_model_name = f'{model_name}'
@@ -207,7 +211,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                             fold_split_dict, table_writer, new_hyper_parameters_dict, excel_models_results,
                             all_models_results)
                 else:
-                    print('Model type must be LSTM-kind, Transformer-kind or SVM-kind')
+                    print('Model type must be LSTM-kind, Transformer-kind, CRF-kind or SVM-kind')
 
             else:
                 all_models_results = execute_create_fit_predict_eval_model(
@@ -215,7 +219,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                     table_writer, hyper_parameters_dict, excel_models_results, all_models_results)
 
     utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
-    table_writer.save()
+    if table_writer is not None:
+        table_writer.save()
 
     logging.info(f'fold {fold} finish compare models')
     print(f'fold {fold} finish compare models')
@@ -235,17 +240,21 @@ def parallel_main():
     cuda_devices = {0: 0, 1: 1,
                     2: 0, 3: 1,
                     4: 0, 5: 1}
+
+    # cuda_devices = {0: 0, 1: 0,
+    #                 2: 0, 3: 0,
+    #                 4: 0, 5: 0}
     """For debug"""
     # participants_fold_split = participants_fold_split.iloc[:50]
     # for fold in range(6):
-    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device=str(cuda_devices[fold]),
+    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
     #                           hyper_parameters_tune_mode=True)
 
     ray.init()
     all_ready_lng =\
         ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
                                               hyper_parameters_tune_mode=True)
-                 for i in range(3)])
+                 for i in range(6)])
 
     print(f'Done! {all_ready_lng}')
     logging.info(f'Done! {all_ready_lng}')
@@ -263,7 +272,7 @@ def parallel_main():
     # all_ready_lng_2 = \
     #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
     #                                           hyper_parameters_tune_mode=True)
-    #              for i in range(3, 6)])
+    #              for i in range(4, 6)])
     #
     # print(f'Done! {all_ready_lng_2}')
     # logging.info(f'Done! {all_ready_lng_2}')

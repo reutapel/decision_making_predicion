@@ -7,6 +7,7 @@ import json
 import execute_cv_models
 import joblib
 import numpy as np
+import torch
 
 
 base_directory = os.path.abspath(os.curdir)
@@ -17,9 +18,7 @@ run_dir = utils.set_folder(datetime.now().strftime(f'predict_best_models_%d_%m_%
 
 def predict_best_models(best_model_file_name: str):
     all_models_results = pd.DataFrame()
-    best_models = pd.read_excel(os.path.join(base_directory, 'logs', best_model_file_name))
-    models_to_compare = pd.read_excel(os.path.join(base_directory, 'models_to_hyper_parameters.xlsx'),
-                                      sheet_name='table_to_load', skiprows=[0])
+    best_models = pd.read_excel(os.path.join(base_directory, 'logs', best_model_file_name), sheet_name='table_to_load')
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'
     participants_fold = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
     participants_fold.index = participants_fold.pair_id
@@ -39,20 +38,37 @@ def predict_best_models(best_model_file_name: str):
         fold_split_dict = dict()
         for data_set in ['train', 'test', 'validation']:
             fold_split_dict[data_set] = pair_ids_in_fold.loc[pair_ids_in_fold == data_set].index.tolist()
-        fold_best_models = best_models.loc[best_models.fold == fold]
-        for index, row in fold_best_models.iterrows():
+        for index, row in best_models.iterrows():
             model_name = row['model_name']
             model_num = row['model_num']
-            model_info = models_to_compare.loc[models_to_compare.model_name == model_name]
-            model_type = model_info['model_type']
-            function_to_run = model_info['function_to_run']
-            data_file_name = model_info['data_file_name']
-            hyper_parameters_str = model_info['hyper_parameters']
-            model_folder = row['model_folder']
-            model_file_name = row['model_file_name']
-            inner_model_folder = row['inner_model_folder']  # foe EvalLSTM models
-            trained_model_dir = os.path.join(base_directory, 'logs', model_folder, inner_model_folder)
+            if model_num not in [30, 31, 42, 43, 46, 47]:
+                continue
+
+            model_type = row['model_type']
+            function_to_run = row['function_to_run']
+            data_file_name = row['data_file_name']
+            hyper_parameters_str = row[f'hyper_parameters_fold_{fold}']
+            model_folder = row[f'model_folder_fold_{fold}']
+            if not os.path.exists(os.path.join(base_directory, 'logs', model_folder, f'fold_{fold}')):
+                if not os.path.exists(os.path.join(base_directory, 'logs', f'{model_folder}_hyper', f'fold_{fold}')):
+                    # the folder we need not exists
+                    print(f'fold {fold} in folder {model_folder} is not exists')
+                    continue
+                else:
+                    model_folder = f'{model_folder}_hyper'
+            model_version_num = row[f'model_version_num_fold_{fold}']
+            model_file_name = f'{model_version_num}_{model_type}_{model_name}_fold_{fold}.pkl'
+            if function_to_run == 'ExecuteEvalLSTM':
+                inner_model_folder = f'{model_version_num}_{model_type}_{model_name}_100_epochs_fold_num_{fold}'
+            else:
+                inner_model_folder = ''
+            trained_model_dir = os.path.join(base_directory, 'logs', model_folder, f'fold_{fold}', inner_model_folder)
+            # if torch.cuda.is_available() or function_to_run != 'ExecuteEvalLSTM':
             trained_model = joblib.load(os.path.join(trained_model_dir, model_file_name))
+            # else:
+            #     trained_model = torch.load(os.path.join(trained_model_dir, model_file_name),
+            #                                map_location=torch.device('cpu'))
+
             # get hyper parameters as dict
             if type(hyper_parameters_str) == str:
                 hyper_parameters_dict = json.loads(hyper_parameters_str)
@@ -62,14 +78,15 @@ def predict_best_models(best_model_file_name: str):
             metadata_dict = {'model_num': model_num, 'model_type': model_type, 'model_name': model_name,
                              'data_file_name': data_file_name, 'hyper_parameters_str': hyper_parameters_dict,
                              'fold': fold}
+
             metadata_df = pd.DataFrame.from_dict(metadata_dict, orient='index').T
             model_class = getattr(execute_cv_models, function_to_run)(
                 model_num, fold, run_dir, model_type, model_name, data_file_name, fold_split_dict, table_writer,
                 data_directory, hyper_parameters_dict, excel_models_results, trained_model_dir=trained_model_dir,
-                trained_model=trained_model)
+                trained_model=trained_model, model_file_name=model_file_name)
             model_class.load_data_create_model()
-            model_class.predict()
-            results_dict = model_class.eval_model()
+            model_class.predict(predict_type='test')
+            results_dict = model_class.eval_model(predict_type='test')
             results_df = pd.DataFrame.from_dict(results_dict).T
             results_df['raisha_round'] = results_df.index
             results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
@@ -88,4 +105,4 @@ def predict_best_models(best_model_file_name: str):
 
 
 if __name__ == '__main__':
-    predict_best_models('best_model_file_name.xslx')
+    predict_best_models('best_model_file_name.xlsx')

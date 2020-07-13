@@ -55,7 +55,7 @@ def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, 
             prediction_df[metadata[i]['sample_id']] = \
                 {'is_train': is_train, f'labels': gold_labels_list,
                  f'total_payoff_label': sum(gold_labels_list) / len(gold_labels_list)}
-            if 'raisha' in metadata[i].keys():  # TODO: debug this
+            if 'raisha' in metadata[i].keys():
                 prediction_df[metadata[i]['sample_id']]['raisha'] = metadata[i]['raisha']
         predictions_list = predictions[i][:mask[i].sum()].argmax(1).tolist()
         # if hotel_label_0:
@@ -781,7 +781,12 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             self.mse_loss = nn.MSELoss()
 
         if use_last_hidden_vec:
-            self.last_hidden_reg = LinearLayer(input_size=encoder_input_dim, output_size=1, dropout=dropout)
+            if linear_dim is not None:  # add linear layer before last_hidden_reg
+                self.linear_layer = LinearLayer(input_size=encoder_input_dim, output_size=linear_dim, dropout=dropout)
+                self.last_hidden_reg = LinearLayer(input_size=linear_dim, output_size=1, dropout=dropout)
+            else:
+                self.linear_layer = None
+                self.last_hidden_reg = LinearLayer(input_size=encoder_input_dim, output_size=1, dropout=dropout)
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg
@@ -841,6 +846,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                     last_hidden_vec = encoder_out[seq_id][max_raisha - seq_raisha]
                     all_last_hidden_vectors.append(last_hidden_vec)
                 all_last_hidden_vectors = torch.stack(all_last_hidden_vectors, dim=0)
+                if self.linear_layer is not None:
+                    all_last_hidden_vectors = self.linear_layer(all_last_hidden_vectors)
                 regression_output = self.last_hidden_reg(all_last_hidden_vectors)
             else:
                 attention_output = self.attention(self.attention_vector, encoder_out, mask)
@@ -1251,18 +1258,43 @@ class Predictor:
         self.model = model
         self.iterator = iterator
         self.cuda_device = cuda_device
+        self.seq_predictions = defaultdict(dict)
+        self.reg_predictions = pd.DataFrame()
 
-    def _extract_data(self, batch) -> np.ndarray:
+    def _extract_data(self, batch):
         out_dict = self.model(**batch)
-        return tonp(out_dict["class_logits"])
+        if 'regression_output' in out_dict:
+            self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
+                                                    predictions=out_dict['regression_output'],
+                                                    gold_labels=batch['reg_labels'],
+                                                    metadata=batch['metadata'], epoch=0, is_train=False,
+                                                    int_label=False)
+            return
+        elif 'decision_logits' in out_dict:
+            if 'sequence_review' in batch:
+                mask = get_text_field_mask({'tokens': batch['sequence_review']})
+            elif 'target' in batch:
+                mask = get_text_field_mask({'tokens': batch['target']})
+            else:
+                print('Error: either sequence_review or target need to be in batch')
+                raise TypeError
+            self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,
+                                                               predictions=out_dict['decision_logits'],
+                                                               gold_labels=batch['seq_labels'],
+                                                               metadata=batch['metadata'],
+                                                               epoch=0, is_train=False)
+            return
+        else:
+            print('Error: regression_output and decision_logits are not in out_dict keys')
+            raise TypeError
 
-    def predict(self, ds: Iterable[Instance]) -> np.ndarray:
+    def predict(self, ds: Iterable[Instance]):
         pred_generator = self.iterator(ds, num_epochs=1, shuffle=False)
         self.model.eval()
         pred_generator_tqdm = tqdm(pred_generator, total=self.iterator.get_num_batches(ds))
-        preds = []
         with torch.no_grad():
             for batch in pred_generator_tqdm:
                 batch = nn_util.move_to_device(batch, self.cuda_device)
-                preds.append(self._extract_data(batch))
-        return np.concatenate(preds, axis=0)
+                self._extract_data(batch)
+
+        return

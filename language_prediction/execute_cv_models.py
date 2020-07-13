@@ -5,7 +5,7 @@ import logging
 from sklearn import metrics
 import math
 import numpy as np
-import utils as utils
+import utils
 import SVM_models
 import crf
 import models
@@ -41,7 +41,7 @@ class ExecuteEvalModel:
     """
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, excel_models_results: str,
-                 hyper_parameters_dict: dict, trained_model=None, trained_model_dir=None):
+                 hyper_parameters_dict: dict, trained_model=None, trained_model_dir=None, model_file_name=None):
 
         self.model_num = model_num
         self.fold = fold
@@ -59,6 +59,7 @@ class ExecuteEvalModel:
         self.test_pair_ids = self.fold_split_dict['test']
         self.trained_model = trained_model
         self.trained_model_dir = trained_model_dir
+        self.model_file_name = model_file_name
         self.model_table_writer = pd.ExcelWriter(
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
         print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
@@ -76,11 +77,14 @@ class ExecuteEvalModel:
         raise NotImplementedError
 
     def eval_model(self, predict_type: str=None):
-        """This function should use the prediction of the model and eval these results"""
+        """This function should use the prediction of the model and eval these results
+        :param predict_type: need to be validation or test"""
+
         raise NotImplementedError
 
     def predict(self, predict_type: str):
-        """This function use trained model to predict the labels of the test set"""
+        """This function use trained model to predict the labels of the test set
+        :param predict_type: need to be validation or test"""
         raise NotImplementedError
 
     def save_model_prediction(self, data_to_save: pd.DataFrame, save_model=True, sheet_prefix_name: str='All',
@@ -107,13 +111,14 @@ class ExecuteEvalModel:
 
         for table_writer in [self.table_writer, self.model_table_writer]:
             utils.write_to_excel(
-                table_writer, f'Model_{self.model_num}_{sheet_prefix_name}',
+                table_writer, f'Model_{self.model_num}_{sheet_prefix_name}_fold_{self.fold}',
                 headers=[f'{sheet_prefix_name} predictions for model {self.model_num}: {self.model_name} of type '
                          f'{self.model_type} in fold {self.fold}'], data=data_to_save)
 
     def total_payoff_calculate_measures(self, final_total_payoff_prediction_column: str, total_payoff_label_column: str,
                                         raisha_column_name: str = 'raisha', prediction_df: pd.DataFrame=None,
                                         bin_label: pd.Series = None, bin_predictions: pd.Series = None,
+                                        four_bin_label: pd.Series = None, four_bin_predictions: pd.Series = None,
                                         prediction_type: str=''):
         """
         Calculate the measures for seq models per raisha
@@ -122,6 +127,10 @@ class ExecuteEvalModel:
         :param raisha_column_name:
         :param prediction_df: if we don't want to use self.prediction
         :param prediction_type: if we want to use seq and reg predictions- so we have a different column for each.
+        :param bin_label: the 3 bin label
+        :param bin_predictions: the 3 bin prediction
+        :param four_bin_label: the 4 bin label
+        :param four_bin_predictions: the 4 bin prediction
         :return:
         """
 
@@ -136,12 +145,29 @@ class ExecuteEvalModel:
             only_bin_predictions = copy.deepcopy(bin_predictions['bin_predictions'])
         else:
             only_bin_predictions = bin_predictions
+        if four_bin_label is not None:
+            only_four_bin_label = copy.deepcopy(four_bin_label['four_bin_label'])
+        else:
+            only_four_bin_label = four_bin_label
+        if four_bin_predictions is not None:
+            only_four_bin_predictions = copy.deepcopy(four_bin_predictions['four_bin_predictions'])
+        else:
+            only_four_bin_predictions = four_bin_predictions
         _, results_dict = utils.calculate_measures_for_continues_labels(
                 prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                 total_payoff_label_column=total_payoff_label_column,
                 bin_label=only_bin_label, bin_predictions=only_bin_predictions,
                 label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                'total future payoff > 2/3'], prediction_type=prediction_type)
+        _, results_dict_four_bins = utils.calculate_measures_for_continues_labels(
+                prediction_df, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                total_payoff_label_column=total_payoff_label_column, already_calculated=True,
+                bin_label=only_four_bin_label, bin_predictions=only_four_bin_predictions,
+                bin_label_column_name='four_bin_label', bin_prediction_column_name='four_bin_predictions',
+                label_options=['total future payoff < 1/4', '1/4 < total future payoff < 1/2',
+                               '1/2 < total future payoff < 3/4',
+                               'total future payoff > 3/4'], prediction_type=prediction_type)
+        results_dict = utils.update_default_dict(results_dict, results_dict_four_bins)
         if raisha_column_name in prediction_df.columns:  # do the raisha analysis
             raisha_options = prediction_df[raisha_column_name].unique()
             all_raisha_dict = defaultdict(dict)
@@ -156,6 +182,18 @@ class ExecuteEvalModel:
                         bin_predictions.loc[bin_predictions[raisha_column_name] == raisha]['bin_predictions']
                 else:
                     raisha_bin_predictions = bin_predictions
+
+                if four_bin_label is not None:
+                    raisha_four_bin_label = four_bin_label.loc[four_bin_label[raisha_column_name] == raisha][
+                        'four_bin_label']
+                else:
+                    raisha_four_bin_label = four_bin_label
+                if four_bin_predictions is not None:
+                    raisha_four_bin_predictions = \
+                        four_bin_predictions.loc[four_bin_predictions[raisha_column_name] == raisha][
+                            'four_bin_predictions']
+                else:
+                    raisha_four_bin_predictions = four_bin_predictions
                 _, results_dict_raisha = utils.calculate_measures_for_continues_labels(
                     raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
                     total_payoff_label_column=total_payoff_label_column,
@@ -163,7 +201,16 @@ class ExecuteEvalModel:
                     label_options=['total future payoff < 1/3', '1/3 < total future payoff < 2/3',
                                    'total future payoff > 2/3'], raisha=f'raisha_{str(int(raisha))}',
                     prediction_type=prediction_type)
+                _, four_results_dict_raisha = utils.calculate_measures_for_continues_labels(
+                    raisha_data, final_total_payoff_prediction_column=final_total_payoff_prediction_column,
+                    total_payoff_label_column=total_payoff_label_column,
+                    bin_label=raisha_four_bin_label, bin_predictions=raisha_four_bin_predictions,
+                    label_options=['total future payoff < 1/4', '1/4 < total future payoff < 1/2',
+                                   '1/2 < total future payoff < 3/4', 'total future payoff > 3/4'],
+                    raisha=f'raisha_{str(int(raisha))}', already_calculated=True, prediction_type=prediction_type)
                 all_raisha_dict.update(results_dict_raisha)
+                all_raisha_dict = utils.update_default_dict(all_raisha_dict, four_results_dict_raisha)
+
             results_dict = utils.update_default_dict(results_dict, all_raisha_dict)
 
         return results_dict
@@ -276,10 +323,10 @@ class ExecuteEvalModel:
 class ExecuteEvalCRF(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
         super(ExecuteEvalCRF, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory, excel_models_results,
-                                             hyper_parameters_dict, trained_model, trained_model_dir)
+                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
         self.squared_sigma = float(hyper_parameters_dict['squared_sigma'])
         self.predict_future = False if hyper_parameters_dict['predict_future'] == 'False' else True
         self.use_forward_backward_fix_history =\
@@ -295,12 +342,14 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         # if it is test time, use the correct folder of the model
         if self.trained_model_dir is not None:
             folder = self.trained_model_dir
+            model_file_name = self.model_file_name
         else:
             folder = self.fold_dir
+            model_file_name = f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'
         self.args = parser.parse_args([
                 os.path.join(self.data_directory, self.data_file_name),
                 os.path.join(self.data_directory, features_file_name),
-                os.path.join(folder, f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'),
+                os.path.join(folder, model_file_name),
             ])
         self.correct_count = None
         self.total_count = None
@@ -339,6 +388,10 @@ class ExecuteEvalCRF(ExecuteEvalModel):
             bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.total_payoff_prediction,
                                                                   self.prediction.total_payoff_label)
             self.prediction = self.prediction.join(bin_test_y).join(bin_prediction)
+            # four bin analysis
+            four_bin_prediction, four_bin_test_y = utils.create_4_bin_columns(self.prediction.total_payoff_prediction,
+                                                                              self.prediction.total_payoff_label)
+            self.prediction = self.prediction.join(four_bin_test_y).join(four_bin_prediction)
         self.save_model_prediction(data_to_save=self.prediction, save_model=False)
 
     def eval_model(self, predict_type: str=None):
@@ -374,10 +427,10 @@ class ExecuteEvalCRF(ExecuteEvalModel):
 class ExecuteEvalSVM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
         super(ExecuteEvalSVM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory, excel_models_results,
-                                             hyper_parameters_dict, trained_model, trained_model_dir)
+                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
         self.label_name = hyper_parameters_dict['label_name']
         self.train_x, self.train_y, self.validation_x, self.validation_y, self.test_y, self.test_x =\
             None, None, None, None, None, None
@@ -437,14 +490,16 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         if predict_type == 'validation':
             x = self.validation_x
             y = self.validation_y
+            save_model = True
         elif predict_type == 'test':
             x = self.test_x
             y = self.test_y
+            save_model = False
         else:
             print(f'predict_type must be validation or test, {predict_type} was passed')
             return
         self.prediction = self.model.predict(x, y)
-        self.save_model_prediction(data_to_save=self.prediction)
+        self.save_model_prediction(data_to_save=self.prediction, save_model=save_model)
 
     def eval_model(self, predict_type: str=None):
         if predict_type == 'validation':
@@ -509,6 +564,12 @@ class ExecuteEvalSVM(ExecuteEvalModel):
                 total_payoff_label_predictions.total_payoff_prediction,
                 total_payoff_label_predictions.total_payoff_label)
             total_payoff_label_predictions = total_payoff_label_predictions.join(bin_test_y).join(bin_prediction)
+            # four bin analysis
+            four_bin_prediction, four_bin_test_y = utils.create_4_bin_columns(
+                total_payoff_label_predictions.total_payoff_prediction,
+                total_payoff_label_predictions.total_payoff_label)
+            total_payoff_label_predictions =\
+                total_payoff_label_predictions.join(four_bin_test_y).join(four_bin_prediction)
             results_dict_total_future_payoff = self.total_payoff_calculate_measures(
                 final_total_payoff_prediction_column='total_payoff_prediction',
                 total_payoff_label_column='total_payoff_label', prediction_df=total_payoff_label_predictions)
@@ -524,10 +585,10 @@ class ExecuteEvalSVM(ExecuteEvalModel):
 class ExecuteEvalLSTM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
         super(ExecuteEvalLSTM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                               fold_split_dict, table_writer, data_directory, excel_models_results,
-                                              hyper_parameters_dict, trained_model, trained_model_dir)
+                                              hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
         if 'lstm_hidden_dim' in hyper_parameters_dict.keys():
             self.lstm_hidden_dim = int(hyper_parameters_dict['lstm_hidden_dim'])
         else:
@@ -623,6 +684,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 self.feedforward_hidden_dim_prod = 4
 
+            if 'BiLSTM' in hyper_parameters_dict.keys():
+                self.BiLSTM = True
+            else:
+                self.BiLSTM = False
+
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return
@@ -680,7 +746,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
                                                            batch_first=True, num_layers=self.num_layers,
-                                                           dropout=self.lstm_dropout))
+                                                           dropout=self.lstm_dropout, bidirectional=self.BiLSTM))
             self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
                 encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=self.vocab,
                 predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
@@ -747,12 +813,26 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         print(f'fit and predict model {self.model_name}')
         logging.info(f'fit and predict model {self.model_name}')
         model_dict = self.trainer.train()
-        element_to_save = {'model_dict': model_dict}
+        self.organize_predictions(model_dict)
 
         # print(f'{self.model_name}: evaluation measures for fold {self.fold} are:')
         # for key, value in model_dict.items():
         #     print(f'{key}: {value}')
 
+        # delete all items in the folder, except of the final model, the logs, the metrics and the bets model
+        print('Delete all items in the folder in ExecuteEvalLSTM')
+        for file in os.listdir(self.run_log_directory):
+            if 'metrics_epoch' in file or 'model_state_epoch' in file or 'training_state_epoch' in file:
+                os.remove(os.path.join(self.run_log_directory, file))
+
+    def organize_predictions(self, model_dict: dict=None):
+        if model_dict is None:
+            model_dict = {'best_epoch': 0}
+            save_model = False
+            element_to_save = None
+        else:
+            element_to_save = {'model_dict': model_dict}
+            save_model = True
         if self.predict_seq:
             self.all_seq_predictions = pd.DataFrame.from_dict(self.model.seq_predictions, orient='index')
             # select the  best epoch if exists
@@ -775,7 +855,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.all_seq_predictions['final_total_payoff_prediction'] =\
                     self.all_seq_predictions[f'total_payoff_prediction_{max_total_payoff_predict_column}']
             self.save_model_prediction(data_to_save=self.all_seq_predictions, sheet_prefix_name='seq',
-                                       save_fold=self.run_log_directory, element_to_save=element_to_save)
+                                       save_model=save_model, save_fold=self.run_log_directory,
+                                       element_to_save=element_to_save)
             self.all_seq_predictions = self.all_seq_predictions[['is_train', 'labels', 'total_payoff_label', 'raisha',
                                                                  'final_prediction', 'final_total_payoff_prediction']]
             self.all_seq_predictions = self.all_seq_predictions.loc[self.all_seq_predictions.is_train==False]
@@ -793,7 +874,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.all_reg_predictions['final_total_payoff_prediction'] =\
                     self.all_reg_predictions[f'prediction_{max_predict_column}']
             self.save_model_prediction(data_to_save=self.all_reg_predictions, sheet_prefix_name='reg',
-                                       save_fold=self.run_log_directory, element_to_save=element_to_save)
+                                       save_fold=self.run_log_directory, element_to_save=element_to_save,
+                                       save_model=save_model)
             self.all_reg_predictions = self.all_reg_predictions[['is_train', 'sample_id', 'total_payoff_label',
                                                                  'raisha', 'final_total_payoff_prediction']]
             self.all_reg_predictions = self.all_reg_predictions.loc[self.all_reg_predictions.is_train==False]
@@ -813,21 +895,26 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             for df, prediction_type in [[self.all_reg_predictions, ''], [self.all_seq_predictions, seq_pred_type]]:
                 if not df.empty:
                     self.prediction = df
-                    bin_prediction, bin_test_y = utils.create_bin_columns(self.prediction.final_total_payoff_prediction,
-                                                                          self.prediction.total_payoff_label,
-                                                                          hotel_label_0=self.hotel_label_0)
+                    bin_prediction, bin_test_y = utils.create_bin_columns(
+                        self.prediction.final_total_payoff_prediction, self.prediction.total_payoff_label,
+                        hotel_label_0=self.hotel_label_0)
                     bin_prediction = self.prediction[['raisha']].join(bin_prediction)
                     bin_test_y = self.prediction[['raisha']].join(bin_test_y)
-                    # self.prediction = self.prediction.merge(bin_test_y, left_index=True, right_index=True)
-                    # self.prediction = self.prediction.merge(bin_prediction, left_index=True, right_index=True)
+                    four_bin_prediction, four_bin_test_y = utils.create_4_bin_columns(
+                        self.prediction.final_total_payoff_prediction, self.prediction.total_payoff_label,
+                        hotel_label_0=self.hotel_label_0)
+                    four_bin_prediction = self.prediction[['raisha']].join(four_bin_prediction)
+                    four_bin_test_y = self.prediction[['raisha']].join(four_bin_test_y)
+
                     # this function return mae, rmse, mse and bin analysis: prediction, recall, fbeta
                     results_dict.append(self.total_payoff_calculate_measures(
                         prediction_type=prediction_type,
                         final_total_payoff_prediction_column='final_total_payoff_prediction',
                         total_payoff_label_column='total_payoff_label',
-                        bin_label=bin_test_y, bin_predictions=bin_prediction))
-            if len(results_dict) > 1:  # the loop happened twice
-                results_dict = utils.update_default_dict(results_dict[0], results_dict[1])
+                        bin_label=bin_test_y, bin_predictions=bin_prediction,
+                        four_bin_label=four_bin_test_y, four_bin_predictions=four_bin_prediction))
+            if len(results_dict) > 1:  # the loop happened more than once
+                results_dict = utils.update_default_dict(results_dict)
             else:
                 results_dict = results_dict[0]
 
@@ -883,4 +970,5 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         # And here's how to reload the model.
         self.model.load_state_dict(self.trained_model.state_dict())
         predictor = models.Predictor(self.model, iterator=iterator, cuda_device=self.cuda_device)
-        self.prediction = predictor.predict(ds=test_instances)
+        predictor.predict(ds=test_instances)
+        self.organize_predictions()
