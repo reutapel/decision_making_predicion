@@ -14,7 +14,7 @@ from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 import joblib
 import math
-
+import copy
 
 class TextExpDataSetReader(DatasetReader):
     """
@@ -194,24 +194,51 @@ class LSTMDatasetReader(DatasetReader):
                  label_column: Optional[str] = 'labels',
                  pair_ids: list = None,
                  num_attention_heads: int=8,
-                 use_transformer: bool= False) -> None:
+                 use_transformer: bool=False,
+                 use_raisha_attention: bool=False,
+                 use_raisha_LSTM: bool=False,
+                 raisha_num_features: int=0) -> None:
+        """
+
+        :param lazy:
+        :param label_column:
+        :param pair_ids:
+        :param num_attention_heads:
+        :param use_transformer: if the model is a transformer
+        :param use_raisha_attention: if the model first use attention to create a raisha vector
+        :param use_raisha_LSTM: add the raisha rounds as is to the LSTM --> need to put -1 in the saifa features to
+        get the same vector shape in all rounds
+        """
         super().__init__(lazy)
         self._label_column = label_column
         self.num_features = 0
+        self.raisha_num_features = raisha_num_features
         self.num_labels = 2
         self.pair_ids = pair_ids
         self.input_dim = 0
         self.use_transformer = use_transformer
         self.num_attention_heads = num_attention_heads
+        self.use_raisha_attention = use_raisha_attention
+        self.use_raisha_LSTM = use_raisha_LSTM
+
+        if self.use_raisha_LSTM and self.raisha_num_features == 0:
+            print(f'When using use_raisha_LSTM, raisha_num_features must be the correct number and not 0')
+            raise TypeError
 
     @overrides
-    def text_to_instance(self, features_list: List[ArrayField], labels: List[str] = None,
-                         metadata: Dict=None) -> Instance:
+    def text_to_instance(self, features_list: List[ArrayField], raisha_text_list: List[ArrayField],
+                         labels: List[str] = None, metadata: Dict=None) -> Instance:
         sentence_field = ListField(features_list)
         fields = {'sequence_review': sentence_field}
 
-        if labels:
-            seq_labels_field = SequenceLabelField(labels=labels, sequence_field=sentence_field)
+        if raisha_text_list is not None:
+            fields['raisha_sequence_review'] = ListField(raisha_text_list)
+
+        if labels is not None:
+            sentence_field_for_labels = copy.deepcopy(sentence_field)
+            if self.use_raisha_LSTM:
+                sentence_field_for_labels.field_list = sentence_field_for_labels.field_list[metadata['raisha']:]
+            seq_labels_field = SequenceLabelField(labels=labels, sequence_field=sentence_field_for_labels)
             fields['seq_labels'] = seq_labels_field
             reg_labels = [0 if label == 'hotel' else 1 for label in labels]
             reg_label_field = FloatLabelField(sum(reg_labels) / len(reg_labels))
@@ -245,26 +272,45 @@ class LSTMDatasetReader(DatasetReader):
 
         for i, row in tqdm.tqdm(df.iterrows()):
             text_list = list()
+            if self.use_raisha_attention:
+                raisha_text_list = list()
+            else:
+                raisha_text_list = None
+            raisha = row['raisha']
             for round_num in rounds:
                 # use only available rounds
                 if row[f'features_round_{round_num}'] is not None:
-                    if self.num_features == 0:
-                        self.num_features = len(row[f'features_round_{round_num}'])
-                        if self.use_transformer:  # for transformer the input dim should be // self.num_attention_heads
-                            check = self.num_features // self.num_attention_heads
-                            if check * self.num_attention_heads != self.num_features:
-                                self.input_dim = (check + 1) * self.num_attention_heads
-                            else:
-                                self.input_dim = self.num_features
-                    if self.use_transformer:
-                        extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
-                        raisha_data = row[f'features_round_{round_num}'] + extra_columns
-                        text_list.append(ArrayField(np.array(raisha_data), padding_value=-1))
+                    if self.use_raisha_attention and round_num <= raisha:
+                        if self.raisha_num_features == 0:
+                            self.raisha_num_features = len(row[f'features_round_{round_num}'])
+                        raisha_text_list.append(ArrayField(np.array(row[f'features_round_{round_num}']),
+                                                           padding_value=-1))
                     else:
-                        text_list.append(ArrayField(np.array(row[f'features_round_{round_num}'])))
+                        if self.num_features == 0:
+                            self.num_features = len(row[f'features_round_{round_num}'])
+                            # for transformer the input dim should be // self.num_attention_heads
+                            if self.use_transformer:
+                                check = self.num_features // self.num_attention_heads
+                                if check * self.num_attention_heads != self.num_features:
+                                    self.input_dim = (check + 1) * self.num_attention_heads
+                                else:
+                                    self.input_dim = self.num_features
+                        if self.use_transformer:
+                            extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
+                            raisha_data = row[f'features_round_{round_num}'] + extra_columns
+                        # add -1 to saifa rounds to get the same vector length
+                        elif self.use_raisha_LSTM and round_num > raisha and \
+                                self.raisha_num_features > self.num_features:
+                            extra_columns = [-1] * (self.raisha_num_features - self.num_features)
+                            raisha_data = row[f'features_round_{round_num}'] + extra_columns
+                        else:
+                            raisha_data = row[f'features_round_{round_num}']
+                        text_list.append(ArrayField(np.array(raisha_data), padding_value=-1))
             labels = row[self._label_column]
             metadata_dict = {column: row[column] for column in metadata_columns}
-            yield self.text_to_instance(text_list, labels, metadata_dict)
+            if raisha_text_list is not None and len(raisha_text_list) == 0:  # raisha = 0 and use_raisha_attention
+                raisha_text_list.append(ArrayField(np.array([-1] * self.raisha_num_features), padding_value=-1))
+            yield self.text_to_instance(text_list, raisha_text_list, labels, metadata_dict)
 
 
 class TransformerDatasetReader(DatasetReader):

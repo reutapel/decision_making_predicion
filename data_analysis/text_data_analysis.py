@@ -18,7 +18,8 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'verbal'
+condition_directory = 'num_only'
+data_type = 'train_data'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -138,7 +139,7 @@ class DataAnalysis:
                                                    'TimeSpent.csv'))
         self.payments = pd.read_excel(os.path.join(data_directory, date_directory, condition_directory,
                                                    'all_Approved_assignments.xlsx'))
-        self.hotel_reviews = pd.read_csv(os.path.join(data_directory, date_directory, '10_reviews.csv'))
+        self.hotel_reviews = pd.read_csv(os.path.join(data_directory, date_directory, f'10_reviews_{data_type}.csv'))
         # self.all_reviews = pd.read_csv(os.path.join(data_directory, date_directory, 'all_reviews.csv'))
         self.results_payments =\
             self.results.merge(self.payments, left_on=['participant_mturk_worker_id', 'participant_mturk_assignment_id',
@@ -757,20 +758,26 @@ class DataAnalysis:
                                   (self.results_payments.participant_payoff < -2.5) &
                                   (self.results_payments.first_test_status != 0), 'status'] = 'wait_but_not_got_paid'
         # left: played and left in the middle. They started, but not got money
-        left_participants =\
+        left_pairs =\
             self.results_payments.loc[(self.results_payments['participant_code'].isin(self.participants_started)) &
                                       (self.results_payments.total_pay.isnull()) &
                                       (self.results_payments.first_test_status == 1) &
                                       (self.results_payments.group_sender_payoff.isnull()) &
                                       (self.results_payments.status.isin(['', 'expert_pass_first_test'])) &
-                                      (~self.results_payments.participant_code.isin(
-                                          partner_left_before_start_after_test)) &
-                                      (~self.results_payments.participant_code.isin(left_before_start_after_test)) &
-                                      (self.results_payments.second_test_status.isnull())].participant_code.unique()
+                                      # (~self.results_payments.participant_code.isin(
+                                      #     partner_left_before_start_after_test)) &
+                                      # (~self.results_payments.participant_code.isin(left_before_start_after_test)) &
+                                      (self.results_payments.second_test_status.isnull())][
+                ['participant_code', 'pair_id']]
+        left_participants = left_pairs.participant_code.unique()
+        partner_left = self.results_payments.loc[
+            (self.results_payments.pair_id.isin(left_pairs.pair_id)) &
+            (~self.results_payments.participant_code.isin(left_pairs.participant_code))].participant_code.unique()
         self.results_payments.loc[self.results_payments.participant_code.isin(left_participants), 'status'] = 'left'
+        self.results_payments.loc[self.results_payments.participant_code.isin(partner_left), 'status'] = 'partner_left'
 
         all_left_participants = np.concatenate((left_participants, partner_left_before_start_after_test,
-                                                left_before_start_after_test))
+                                                left_before_start_after_test, partner_left))
         # if the player left, but in the last 2 rounds he played - no timeout --> so he played
         # played_not_paid = self.results_payments.loc[(self.results_payments.status == 'left') &
         #                                             (self.results_payments.subsession_round_number.isin(
@@ -840,8 +847,12 @@ class DataAnalysis:
             'no_turker_assigned'
 
         self.results_payments.loc[self.results_payments.status == '', 'status'] = 'unknown'
-        print(f'start of define_player_status: '
+        print(f'end of define_player_status: '
               f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
+
+        participants = self.results_payments.loc[self.results_payments.subsession_round_number == 1]
+        print(f'Status:\n {participants.groupby(by="status").participant_code.count()}')
+        print(f'Second test status:\n {participants.groupby(by="second_test_status").participant_code.count()}')
 
         return
 
@@ -1914,9 +1925,9 @@ class DataAnalysis:
         print(f'start of dm_entered_per_review_features: '
               f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
-        manual_features = pd.read_excel('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
-                                        'experiment/decision_prediction/language_prediction/data/verbal/'
-                                        'manual_binary_features_for_analysis.xlsx')
+        manual_features = pd.read_excel(f'/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+                                        f'experiment/decision_prediction/language_prediction/data/verbal/'
+                                        f'manual_binary_features_{data_type}.xlsx')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][
@@ -2025,9 +2036,10 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
     data_analysis_obj.round_analysis()
+    data_analysis_obj.print_pairs()
     data_analysis_obj.enterance_per_number_of_enterences()
     data_analysis_obj.calculate_linear_score()
-    data_analysis_obj.eval_real_score_analysis()
+    # data_analysis_obj.eval_real_score_analysis()
     data_analysis_obj.average_most_close_hotel_id()
     data_analysis_obj.dm_entered_per_review_features()
     data_analysis_obj.expert_answer_vs_average_score()
@@ -2037,7 +2049,6 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_all_history_measures()
     data_analysis_obj.time_spent_analysis()
     data_analysis_obj.pct_entered_graph()
-    data_analysis_obj.print_pairs()
     data_analysis_obj.set_expert_answer_scores_reviews_len_verbal_cond()
     data_analysis_obj.compare_experts_choices_per_condition()
     data_analysis_obj.compare_experts_choices()

@@ -610,6 +610,10 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.features_max_size = int(hyper_parameters_dict['features_max_size'])
         else:
             self.features_max_size = 0
+        if 'raisha_num_features' in hyper_parameters_dict.keys():
+            self.raisha_num_features = int(hyper_parameters_dict['raisha_num_features'])
+        else:
+            self.raisha_num_features = 0
         if 'num_encoder_layers' in hyper_parameters_dict.keys():
             self.num_encoder_layers = int(hyper_parameters_dict['num_encoder_layers'])
         else:
@@ -665,6 +669,16 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 self.use_transformer_encoder = False
 
+            if 'use_raisha_attention' in model_type:
+                self.use_raisha_attention = True
+            else:
+                self.use_raisha_attention = False
+
+            if 'use_raisha_LSTM' in model_type:
+                self.use_raisha_LSTM = True
+            else:
+                self.use_raisha_LSTM = False
+
             if 'avg_loss' in hyper_parameters_dict.keys():
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
             if 'turn_loss' in hyper_parameters_dict.keys():
@@ -700,9 +714,15 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         # load train data
         if 'LSTM' in self.model_type or 'Attention' in self.model_type:
             train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids,
-                                             use_transformer=self.use_transformer_encoder)
+                                             use_transformer=self.use_transformer_encoder,
+                                             use_raisha_attention=self.use_raisha_attention,
+                                             use_raisha_LSTM=self.use_raisha_LSTM,
+                                             raisha_num_features=self.raisha_num_features)
             validation_reader = LSTMDatasetReader(pair_ids=self.val_pair_ids,
-                                                  use_transformer=self.use_transformer_encoder)
+                                                  use_transformer=self.use_transformer_encoder,
+                                                  use_raisha_attention=self.use_raisha_attention,
+                                                  use_raisha_LSTM=self.use_raisha_LSTM,
+                                                  raisha_num_features=self.raisha_num_features)
 
         elif 'Transformer' in self.model_type:
             train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids,
@@ -744,7 +764,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 encoder_norm = LayerNorm(train_reader.input_dim)
                 lstm = TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
             else:
-                lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(train_reader.num_features, self.lstm_hidden_dim,
+                if self.use_raisha_LSTM:
+                    LSTM_input_size = train_reader.raisha_num_features
+                else:
+                    LSTM_input_size = train_reader.num_features
+                lstm = PytorchSeq2SeqWrapper(torch.nn.LSTM(LSTM_input_size, self.lstm_hidden_dim,
                                                            batch_first=True, num_layers=self.num_layers,
                                                            dropout=self.lstm_dropout, bidirectional=self.BiLSTM))
             self.model = models.LSTMAttention2LossesFixTextFeaturesDecisionResultModel(
@@ -753,7 +777,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
                 reg_weight_loss=self.avg_loss, dropout=self.linear_dropout,
                 use_last_hidden_vec=self.use_last_hidden_vec, use_transformer_encode=self.use_transformer_encoder,
-                input_dim=train_reader.input_dim)
+                input_dim=train_reader.input_dim, use_raisha_attention=self.use_raisha_attention,
+                raisha_num_features=train_reader.raisha_num_features, use_raisha_LSTM=self.use_raisha_LSTM)
         elif 'Transformer' in self.model_type:
             if 'turn_linear' in self.model_type:
                 self.linear_hidden_dim = int(0.5 * train_reader.input_dim)

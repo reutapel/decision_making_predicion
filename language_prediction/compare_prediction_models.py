@@ -118,12 +118,12 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     all_model_nums = list(set(models_to_compare.model_num))
     # already_trained_models = list(range(15, 21)) + list(range(11))
     # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
-    all_model_nums = [30, 31, 44, 45]
+    # all_model_nums = [69]
 
     all_models_results = pd.DataFrame()
     for model_num in all_model_nums:  # compare all versions of each model type
-        # if model_num < 42:
-        #     continue
+        if model_num < 47:
+            continue
         model_type_versions = models_to_compare.loc[models_to_compare.model_num == model_num]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
@@ -149,20 +149,20 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
             # it needs to return a dict with the final results over the evaluation data: {measure_name: measure}
             if hyper_parameters_tune_mode:
                 if 'LSTM' in model_type or 'Transformer' in model_type:
-                    if 'LSTM' in model_type and not 'use_transformer' in model_type:
+                    if 'LSTM' in model_type and 'use_transformer' not in model_type:
                         greadsearch = lstm_gridsearch_params
                     else:  # for Transformer models and LSTM_use_transformer models
                         greadsearch = transformer_gridsearch_params
                     for i, parameters_dict in enumerate(greadsearch):
                         # if i > 0:
                         #     continue
-                        if (fold == 0 and (model_num == 30 or (model_num == 31 and i <= 25))) or \
-                                (fold == 1 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
-                                (fold == 2 and ((model_num == 30) or (model_num == 31 and i <= 17))) or \
-                                (fold == 3 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
-                                (fold == 4 and (model_num == 30 and i <= 46)) or \
-                                (fold == 5 and (model_num == 30 and i <= 38)):
-                            continue
+                        # if (fold == 0 and (model_num == 30 or (model_num == 31 and i <= 25))) or \
+                        #         (fold == 1 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
+                        #         (fold == 2 and ((model_num == 30) or (model_num == 31 and i <= 17))) or \
+                        #         (fold == 3 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
+                        #         (fold == 4 and (model_num == 30 and i <= 46)) or \
+                        #         (fold == 5 and (model_num == 30 and i <= 38)):
+                        #     continue
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
                         if 'linear' in model_type and 'lstm_hidden_dim' in new_hyper_parameters_dict:
@@ -235,7 +235,7 @@ def parallel_main():
     # participants_fold_split should have the following columns: fold_0, fold_1,...,fold_5
     # the index should be the participant code
     # the values will be train/test/validation
-    participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds.csv'))
+    participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds_new_test_data.csv'))
     participants_fold_split.index = participants_fold_split.pair_id
     cuda_devices = {0: 0, 1: 1,
                     2: 0, 3: 1,

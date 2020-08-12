@@ -30,6 +30,8 @@ from allennlp.data.iterators import DataIterator
 from tqdm import tqdm
 from allennlp.data import Instance
 from allennlp.nn import util as nn_util
+from allennlp.nn.util import masked_softmax
+import copy
 
 
 def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
@@ -754,39 +756,59 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  dropout: float=None,
                  use_last_hidden_vec: bool=False,
                  use_transformer_encode: bool=False,
-                 input_dim: int=0) -> None:
+                 input_dim: int=0,
+                 use_raisha_attention: bool=False,
+                 raisha_num_features: int=0,
+                 use_raisha_LSTM: bool=False) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
+        self.use_raisha_LSTM = use_raisha_LSTM
         if use_transformer_encode:
-            encoder_input_dim = input_dim
+            encoder_output_dim = input_dim
         else:
-            encoder_input_dim = encoder.get_output_dim()
+            encoder_output_dim = encoder.get_output_dim()
+
+        self.use_raisha_LSTM = use_raisha_LSTM
+
+        if use_raisha_attention and raisha_num_features > 0:  # add attention layer to create raisha representation
+            self.raisha_attention_layer = attention
+            self.raisha_attention_vector = torch.randn((batch_size, raisha_num_features), requires_grad=True)
+            # linear layer: raisha num features -> saifa num features (encoder.get_input_dim())
+            self.linear_after_raisha_attention_layer = LinearLayer(input_size=raisha_num_features,
+                                                                   output_size=encoder.get_input_dim())
+            if torch.cuda.is_available():
+                self.raisha_attention_vector = self.raisha_attention_vector.cuda()
+        else:
+            self.raisha_attention_layer = None
+            self.raisha_attention_vector = None
+
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=encoder_input_dim, output_size=linear_dim, dropout=dropout)
+                self.linear_layer = LinearLayer(input_size=encoder_output_dim, output_size=linear_dim, dropout=dropout)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
-                hidden2tag_input_size = encoder_input_dim
+                hidden2tag_input_size = encoder_output_dim
             self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'),
                                           dropout=dropout)
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
-            self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+            self.linear_after_attention_layer = LinearLayer(input_size=encoder_output_dim, output_size=batch_size)
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1)
             # self.sigmoid = nn.Sigmoid()
-            self.attention_vector = torch.randn((batch_size, encoder_input_dim), requires_grad=True)
+            self.attention_vector = torch.randn((batch_size, encoder_output_dim), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
 
         if use_last_hidden_vec:
             if linear_dim is not None:  # add linear layer before last_hidden_reg
-                self.linear_layer = LinearLayer(input_size=encoder_input_dim, output_size=linear_dim, dropout=dropout)
+                self.linear_layer = LinearLayer(input_size=encoder_output_dim, output_size=linear_dim, dropout=dropout)
                 self.last_hidden_reg = LinearLayer(input_size=linear_dim, output_size=1, dropout=dropout)
             else:
                 self.linear_layer = None
-                self.last_hidden_reg = LinearLayer(input_size=encoder_input_dim, output_size=1, dropout=dropout)
+                self.last_hidden_reg = LinearLayer(input_size=encoder_output_dim, output_size=1, dropout=dropout)
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg
@@ -803,8 +825,9 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
     def forward(self,
                 sequence_review: torch.Tensor,
                 metadata: dict,
-                seq_labels: torch.Tensor = None,
-                reg_labels: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+                raisha_sequence_review: torch.Tensor = None,
+                seq_labels: torch.Tensor=None,
+                reg_labels: torch.Tensor=None) -> Dict[str, torch.Tensor]:
 
         if self._first_pair is not None:
             if self._first_pair == metadata[0]['pair_id']:
@@ -822,7 +845,41 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             if reg_labels is not None:
                 reg_labels = reg_labels.cuda()
 
+        if self.raisha_attention_layer is not None:
+            raisha_mask = get_text_field_mask({'tokens': raisha_sequence_review})
+            # (batch_size, max_raisha_len, raisha_dimensions) * (batch_size, raisha_dimensions, 1) ->
+            # (batch_size, max_raisha_len)
+            raisha_attention_outpus = self.raisha_attention_layer(self.raisha_attention_vector, raisha_sequence_review,
+                                                                  raisha_mask)
+            # (batch_size, 1, max_raisha_len) * (batch_size, max_raisha_len, raisha_dimensions) ->
+            # (batch_size, raisha_dimensions)
+            attention_output = torch.bmm(raisha_attention_outpus.unsqueeze(1), raisha_sequence_review).squeeze()
+            # (batch_size, raisha_dimensions) -> (batch_size, saifa_dimensions)
+            raisha_representation = self.linear_after_raisha_attention_layer(attention_output)
+            all_raisha_saifa_representations = list()
+            for seq_id in range(sequence_review.shape[0]):
+                seq_raisha_saifa_representations = \
+                    torch.cat([raisha_representation[seq_id].unsqueeze(0), sequence_review[seq_id]], dim=0)
+                all_raisha_saifa_representations.append(seq_raisha_saifa_representations)
+            sequence_review = torch.stack(all_raisha_saifa_representations, dim=0)
+            # create the mask with all the first enter with 1 --> for the raisha representation
+            ones_tensor = torch.ones(mask.shape[0]).type(torch.LongTensor).unsqueeze(0)
+            original_mask = copy.deepcopy(mask)
+            if torch.cuda.is_available():  # change to cuda
+                ones_tensor = ones_tensor.cuda()
+            mask = torch.cat((ones_tensor.T, mask), dim=1)
+            mask[0][0] = 0  # for raisha 0 --> the first column is not really the raisha representation
+
         encoder_out = self.encoder(sequence_review, mask)
+        # remove raisha hidden vectors from encoder_out and mask
+        if self.raisha_attention_layer is not None:
+            encoder_out = encoder_out[:, 1:, :]
+            mask = original_mask
+
+        if self.use_raisha_LSTM:  # change mask to cover the raisha rounds
+            for seq_id in range(encoder_out.shape[0]):
+                seq_raisha = metadata[seq_id]['raisha']
+                mask[seq_id, :seq_raisha] = 0
 
         if self.predict_seq:
             if self.linear_layer is not None:
@@ -830,7 +887,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                 decision_logits = self.hidden2tag(encoder_out_linear)
             else:
                 decision_logits = self.hidden2tag(encoder_out)
-            output['decision_logits'] = decision_logits
+            output['decision_logits'] = masked_softmax(decision_logits, mask.unsqueeze(2))
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,
                                                                predictions=output['decision_logits'],
                                                                gold_labels=seq_labels, metadata=metadata,
@@ -850,9 +907,14 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                     all_last_hidden_vectors = self.linear_layer(all_last_hidden_vectors)
                 regression_output = self.last_hidden_reg(all_last_hidden_vectors)
             else:
+                # (batch_size, seq_len, dimensions) * (batch_size, dimensions, 1) -> (batch_size, seq_len)
                 attention_output = self.attention(self.attention_vector, encoder_out, mask)
-                regression_output = self.regressor(attention_output)
-                # regression_output = self.sigmoid(regression_output)
+                # (batch_size, 1, seq_len) * (batch_size, seq_len, dimensions) -> (batch_size, dimensions)
+                attention_output = torch.bmm(attention_output.unsqueeze(1), encoder_out).squeeze()
+                # (batch_size, dimensions) -> (batch_size, batch_size)
+                linear_out = self.linear_after_attention_layer(attention_output)
+                # (batch_size, batch_size) -> (batch_size, 1)
+                regression_output = self.regressor(linear_out)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                     predictions=output['regression_output'], gold_labels=reg_labels,
@@ -868,7 +930,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                 temp_loss += self.seq_weight_loss * output['seq_loss']
             if self.predict_avg_total_payoff and reg_labels is not None:
                 for metric_name, metric in self.metrics_dict_reg.items():
-                    metric(regression_output, reg_labels, mask)
+                    metric(regression_output, reg_labels.unsqueeze(1))
                 output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
                 temp_loss += self.reg_weight_loss * output['reg_loss']
 
@@ -950,10 +1012,10 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
                 reg_labels = reg_labels.cuda()
 
         attention_output = self.attention(self.attention_vector, sequence_review, mask)
+        attention_output = sequence_review.bmm(attention_output.unsqueeze(-1)).squeeze(-1)
         # attention_output = self.attention(sequence_review, mask)
         regression_output = self.regressor(attention_output)
         # regression_output = self.sigmoid(regression_output)
-        output['regression_output'] = regression_output
         self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                 predictions=output['regression_output'], gold_labels=reg_labels,
                                                 metadata=metadata, epoch=self._epoch, is_train=self.training,
@@ -988,9 +1050,10 @@ class LinearLayer(nn.Module):
         self.activation = activation
 
     def forward(self, x):
-        linear_out = self.linear(x)
+        linear_out = x
         if self.dropout is not None:
             linear_out = self.dropout(linear_out)
+        linear_out = self.linear(linear_out)
         if self.activation:
             linear_out = self.activation(linear_out)
         return linear_out
@@ -1182,7 +1245,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             if self.linear_layer is not None:
                 decoder_output = self.linear_layer(decoder_output)  # add linear layer before hidden2tag
             decision_logits = self.hidden2tag(decoder_output)
-            output['decision_logits'] = decision_logits
+            output['decision_logits'] = masked_softmax(decision_logits, tgt_key_padding_mask_byte)
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions,
                                                                mask=tgt_key_padding_mask,
                                                                predictions=output['decision_logits'],
@@ -1191,6 +1254,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
 
         if self.predict_avg_total_payoff:
             attention_output = self.attention(self.attention_vector, decoder_output, tgt_key_padding_mask)
+            attention_output = decoder_output.bmm(attention_output.unsqueeze(-1)).squeeze(-1)
             regression_output = self.regressor(attention_output)
             # regression_output = self.sigmoid(regression_output)
             output['regression_output'] = regression_output
