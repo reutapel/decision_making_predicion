@@ -168,8 +168,10 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
     # new_column = all_rounds_all_raisha.model_num.str.split('_', expand=True)
     # all_rounds_all_raisha['model_num'] = new_column[0]
     # all_rounds_all_raisha['model_dropout'] = new_column[1]
-    all_rounds_all_raisha['text_features'] = \
-        np.where(all_rounds_all_raisha.model_name.str.contains('bert'), 'BERT', 'Manual')
+    # all_rounds_all_raisha['text_features'] = \
+    #     np.where(all_rounds_all_raisha.model_name.str.contains('bert'), 'BERT', 'Manual')
+    all_rounds_all_raisha =\
+        all_rounds_all_raisha.merge(models_to_compare[['model_name', 'text_features']], on='model_name')
     if 'fold_0' in all_rounds_all_raisha.fold.unique():
         prefix_fold = 'fold_'
     else:
@@ -232,14 +234,16 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
                      f'Seq is better for {fold}': use_seq}
                 if all_measures is not None:  # add all other measures of the best model
                     for measure in all_measures:
-                        best_results[f'{model_type}_{text_features}'][f'Best {measure} for fold {fold}'] = data[measure]
+                        if measure in data:
+                            best_results[f'{model_type}_{text_features}'][f'Best {measure} for fold {fold}'] =\
+                                data[measure]
 
         all_best_results = update_default_dict(all_best_results, best_results)
 
     all_best_results = pd.DataFrame.from_dict(all_best_results).T
     if per_model_num:
-        models_to_compare['text_features'] =\
-            np.where(models_to_compare.model_name.str.contains('bert'), 'BERT', 'manual')
+        # models_to_compare['text_features'] =\
+        #     np.where(models_to_compare.model_name.str.contains('bert'), 'BERT', 'manual')
         model_types = models_to_compare[['model_num', 'model_type', 'text_features']]
         index_to_insert = model_types.shape[1]
         model_types.model_num = model_types.model_num.astype(str)
@@ -258,12 +262,13 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
 
     if all_measures is not None:  # add all other measures of the best model
         for measure in all_measures:
-            measure_all_folds = [f'Best {measure} for fold {fold}' for fold in range(6)]
-            all_best_results.insert(index_to_insert, f'Average_{measure}',
-                                    all_best_results[measure_all_folds].mean(axis=1))
-            index_to_insert += 1
-            all_best_results.insert(index_to_insert, f'STD_{measure}', all_best_results[measure_all_folds].std(axis=1))
-            index_to_insert += 1
+            if measure in data:
+                measure_all_folds = [f'Best {measure} for fold {fold}' for fold in range(6)]
+                all_best_results.insert(index_to_insert, f'Average_{measure}',
+                                        all_best_results[measure_all_folds].mean(axis=1))
+                index_to_insert += 1
+                all_best_results.insert(index_to_insert, f'STD_{measure}', all_best_results[measure_all_folds].std(axis=1))
+                index_to_insert += 1
 
     if measure_to_select_best == 'RMSE':
         sort_ascending = True
@@ -363,16 +368,17 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     #             'compare_prediction_models_21_06_2020_18_02']:
     #     find_all_best_models_of_directory(dir)
     # return
-    # total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    # results_path = combine_models_results(['compare_prediction_models_04_07_2020_13_25_hyper'],
-    #                                       total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
-    results_path = combine_models_all_results(['predict_best_models_05_07_2020_01_52'],
-                                              hyper_parameters=hyper_parameters)
-    # new_results_file_name = results_path
-    # results_path = "all_server_results_['compare_prediction_models_04_07_2020_13_25_hyper'].csv"
+    total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
+    results_path = combine_models_results(['compare_prediction_models_13_08_2020_15_33'],
+                                          total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
+    # results_path = combine_models_all_results(['predict_best_models_05_07_2020_01_52'],
+    #                                           hyper_parameters=hyper_parameters)
+    # results_path = "all_server_results_['compare_prediction_models_12_08_2020_19_00'].csv"
+    new_results_file_name = results_path
+
     # return
-    concat_new_results(results_path, old_results_name=old_results_name,
-                       new_results_file_name_to_save=new_results_file_name)
+    # concat_new_results(results_path, old_results_name=old_results_name,
+    #                    new_results_file_name_to_save=new_results_file_name)
 
     # concat_new_results("all_server_results_['compare_prediction_models_23_06_2020_10_41_hyper', "
     #                    "'compare_prediction_models_23_06_2020_16_44_hyper'].csv",
@@ -405,8 +411,8 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     raishas = [f'raisha_{raisha}' for raisha in range(10)]
     raishas.append('All_raishas')
     if hyper_parameters:
-        best_model_file_name = 'Best models analysis hyper parameters tunning.xlsx'
-        best_model_to_plot_file_name = 'Best models to plot hyper parameters tunning.csv'
+        best_model_file_name = 'Best models analysis hyper parameters tunning new test data.xlsx'
+        best_model_to_plot_file_name = 'Best models to plot hyper parameters tunning new test data.csv'
     else:
         best_model_file_name = 'Best models analysis best models.xlsx'
         best_model_to_plot_file_name = 'Best models to plot best models.csv'
@@ -421,33 +427,31 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     #         all_not_include_model_num.append(f'{str(num)}_{dropout}')
 
     best_results_to_plot = list()
-    if hyper_parameters:
-        measures_list = [['Bin_Fbeta_score_total future payoff < 1/3', 'Bin_Fbeta_1_3'],
-                         ['Bin_Fbeta_score_total future payoff > 2/3', 'Bin_Fbeta_2_3'],
-                         ['Bin_Fbeta_score_1/3 < total future payoff < 2/3', 'Bin_Fbeta_1_3_2_3'],
-                         ['RMSE', 'RMSE'], ['Bin_Accuracy', 'Bin_Accuracy']]
-    else:
-        all_measures = ['Bin_3_bins_Accuracy', 'Bin_3_bins_Fbeta_score_macro', 'Bin_3_bins_Fbeta_score_micro',
-                        'Bin_3_bins_precision_macro', 'Bin_3_bins_precision_micro', 'Bin_3_bins_recall_macro',
-                        'Bin_3_bins_recall_micro', 'Bin_4_bins_Accuracy', 'Bin_4_bins_Fbeta_score_macro',
-                        'Bin_4_bins_Fbeta_score_micro', 'Bin_4_bins_precision_macro', 'Bin_4_bins_precision_micro',
-                        'Bin_4_bins_recall_macro', 'Bin_4_bins_recall_micro',
-                        'Bin_Fbeta_score_1/2 < total future payoff < 3/4',
-                        'Bin_Fbeta_score_1/3 < total future payoff < 2/3',
-                        'Bin_Fbeta_score_1/4 < total future payoff < 1/2', 'Bin_Fbeta_score_total future payoff < 1/3',
-                        'Bin_Fbeta_score_total future payoff < 1/4', 'Bin_Fbeta_score_total future payoff > 2/3',
-                        'Bin_Fbeta_score_total future payoff > 3/4', 'Bin_precision_1/2 < total future payoff < 3/4',
-                        'Bin_precision_1/3 < total future payoff < 2/3',
-                        'Bin_precision_1/4 < total future payoff < 1/2', 'Bin_precision_total future payoff < 1/3',
-                        'Bin_precision_total future payoff < 1/4', 'Bin_precision_total future payoff > 2/3',
-                        'Bin_precision_total future payoff > 3/4', 'Bin_recall_1/2 < total future payoff < 3/4',
-                        'Bin_recall_1/3 < total future payoff < 2/3', 'Bin_recall_1/4 < total future payoff < 1/2',
-                        'Bin_recall_total future payoff < 1/3', 'Bin_recall_total future payoff < 1/4',
-                        'Bin_recall_total future payoff > 2/3', 'Bin_recall_total future payoff > 3/4', 'MAE', 'MSE',
-                        'Per_round_Accuracy', 'Per_round_Fbeta_score_DM chose hotel',
-                        'Per_round_Fbeta_score_DM chose stay home', 'Per_round_precision_DM chose hotel',
-                        'Per_round_precision_DM chose stay home', 'Per_round_recall_DM chose hotel',
-                        'Per_round_recall_DM chose stay home', 'RMSE']
+    # measures_list = [['Bin_Fbeta_score_total future payoff < 1/3', 'Bin_Fbeta_1_3'],
+    #                  ['Bin_Fbeta_score_total future payoff > 2/3', 'Bin_Fbeta_2_3'],
+    #                  ['Bin_Fbeta_score_1/3 < total future payoff < 2/3', 'Bin_Fbeta_1_3_2_3'],
+    #                  ['RMSE', 'RMSE'], ['Bin_Accuracy', 'Bin_Accuracy']]
+    all_measures = ['Bin_3_bins_Accuracy', 'Bin_3_bins_Fbeta_score_macro', 'Bin_3_bins_Fbeta_score_micro',
+                    'Bin_3_bins_precision_macro', 'Bin_3_bins_precision_micro', 'Bin_3_bins_recall_macro',
+                    'Bin_3_bins_recall_micro', 'Bin_4_bins_Accuracy', 'Bin_4_bins_Fbeta_score_macro',
+                    'Bin_4_bins_Fbeta_score_micro', 'Bin_4_bins_precision_macro', 'Bin_4_bins_precision_micro',
+                    'Bin_4_bins_recall_macro', 'Bin_4_bins_recall_micro',
+                    'Bin_Fbeta_score_1/2 < total future payoff < 3/4',
+                    'Bin_Fbeta_score_1/3 < total future payoff < 2/3',
+                    'Bin_Fbeta_score_1/4 < total future payoff < 1/2', 'Bin_Fbeta_score_total future payoff < 1/3',
+                    'Bin_Fbeta_score_total future payoff < 1/4', 'Bin_Fbeta_score_total future payoff > 2/3',
+                    'Bin_Fbeta_score_total future payoff > 3/4', 'Bin_precision_1/2 < total future payoff < 3/4',
+                    'Bin_precision_1/3 < total future payoff < 2/3',
+                    'Bin_precision_1/4 < total future payoff < 1/2', 'Bin_precision_total future payoff < 1/3',
+                    'Bin_precision_total future payoff < 1/4', 'Bin_precision_total future payoff > 2/3',
+                    'Bin_precision_total future payoff > 3/4', 'Bin_recall_1/2 < total future payoff < 3/4',
+                    'Bin_recall_1/3 < total future payoff < 2/3', 'Bin_recall_1/4 < total future payoff < 1/2',
+                    'Bin_recall_total future payoff < 1/3', 'Bin_recall_total future payoff < 1/4',
+                    'Bin_recall_total future payoff > 2/3', 'Bin_recall_total future payoff > 3/4', 'MAE', 'MSE',
+                    'Per_round_Accuracy', 'Per_round_Fbeta_score_DM chose hotel',
+                    'Per_round_Fbeta_score_DM chose stay home', 'Per_round_precision_DM chose hotel',
+                    'Per_round_precision_DM chose stay home', 'Per_round_recall_DM chose hotel',
+                    'Per_round_recall_DM chose stay home', 'RMSE']
     measures_list = [['RMSE', 'RMSE']]
     for measure_to_analyze in measures_list:
         for raisha in raishas:
@@ -475,4 +479,4 @@ if __name__ == '__main__':
     main(new_results_file_name='all_results_05_07_predict_best_models.csv',
          old_results_name="all_server_results_['predict_best_models_30_06_2020_21_04', "
                           "'predict_best_models_30_06_2020_21_07', "
-                          "'predict_best_models_30_06_2020_21_41'].csv", hyper_parameters=False)
+                          "'predict_best_models_30_06_2020_21_41'].csv", hyper_parameters=True)

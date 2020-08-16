@@ -389,7 +389,7 @@ class CreateSaveData:
                                'no_text_' if self.no_text else '',
                                f'{self.features_file_list}_' if self.use_manual_features and not self.no_text else '',
                                'predict_first_round_' if self.predict_first_round else '',
-                               'decisions_payoffs_columns_' if self.decisions_payoffs_columns else '',
+                               'no_decision_features_' if no_decision_features else '',
                                f'{condition}_{data_type}']
         self.base_file_name = ''.join(file_name_component)
         print(f'Create data for: {self.base_file_name}')
@@ -518,9 +518,8 @@ class CreateSaveData:
                 rounds = list(range(1, 11))
             # concat history numbers
             if self.use_all_history:
-                temp_numbers = self.data.loc[self.data.pair_id == pair][
-                    ['10_result', 'group_sender_payoff', 'lottery_result_high',  # 'group_lottery_result',
-                     'chose_lose', 'chose_earn', 'not_chose_lose', 'not_chose_earn', 'subsession_round_number']]
+                temp_numbers = self.data.loc[self.data.pair_id == pair][self.decisions_payoffs_columns +
+                                                                        ['subsession_round_number']]
                 temp_numbers = temp_numbers.reset_index(drop=True)
                 all_history = flat_reviews_numbers(temp_numbers, rounds, columns_to_drop=['subsession_round_number'],
                                                    last_round_to_use=9, first_round_to_use=1)
@@ -1584,13 +1583,13 @@ def main():
                    'use_prev_round_label': False,
                    'use_manual_features': True,
                    'use_all_history_average': False,
-                   'use_all_history': False,
+                   'use_all_history': True,
                    'use_all_history_text_average': False,
-                   'use_all_history_text': False,
+                   'use_all_history_text': True,
                    'raisha_data_first_round': False,  # use the raisha data only for the first round in the saifa
                    'saifa_average_text': False,
                    'no_saifa_text': False,
-                   'no_decision_features': True,  # if we want to check models without decision features
+                   'no_decision_features': False,  # if we want to check models without decision features
                    'saifa_only_prev_rounds_text': False,
                    'no_text': False,
                    'use_score': False,
@@ -1598,7 +1597,7 @@ def main():
                    'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
                    'transformer_model': False,   # for transformer models-we need to create features also for the raisha
                    'raisha_data_in_sequence': True,  # if the raisha data is not in the saifa features but in the seq
-                   'label': 'single_round',
+                   'label': 'future_total_payoff',
                    },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
@@ -1623,9 +1622,9 @@ def main():
                     }
     }
     use_seq = False
-    use_crf = False  # levant to old version of crf
-    use_crf_raisha = True  # relevant to all sequential models in the raisha-saifa setting
-    string_labels = True  # labels are string --> for LSTM and transformer model
+    use_crf = False  # relevant to old version of crf
+    use_crf_raisha = False  # relevant to all sequential models in the raisha-saifa setting
+    string_labels = False  # labels are string --> for LSTM and transformer model
     data_type = 'train_data'  # it can be train_data or test_data
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
     # features_to_drop = ['topic_room_positive', 'list', 'negative_buttom_line_recommendation',
