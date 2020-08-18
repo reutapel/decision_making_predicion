@@ -1086,6 +1086,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                  reg_weight_loss: float = 0.5,
                  batch_size: int = 9,
                  linear_dim: int=None,
+                 only_raisha: bool=False,  # if not saifa input is given
                  ):
         super(TransformerFixTextFeaturesDecisionResultModel, self).__init__(vocab)
 
@@ -1123,6 +1124,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
+            self.linear_after_attention_layer = LinearLayer(input_size=input_dim, output_size=batch_size)
             self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
             # self.sigmoid = nn.Sigmoid()
             self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
@@ -1150,6 +1152,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         self.reg_weight_loss = reg_weight_loss
         self.predict_avg_total_payoff = predict_avg_total_payoff
         self.predict_seq = predict_seq
+        self.only_raisha = only_raisha
 
     def get_input_dim(self) -> int:
         return self._input_dim
@@ -1207,6 +1210,17 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             self._first_pair = metadata[0]['pair_id']
 
         output = dict()
+        src_key_padding_mask = get_text_field_mask({'tokens': source})
+        tgt_key_padding_mask = get_text_field_mask({'tokens': target})
+        # The torch transformer takes the mask backwards.
+        src_key_padding_mask_byte = ~src_key_padding_mask.bool()
+        tgt_key_padding_mask_byte = ~tgt_key_padding_mask.bool()
+        # create mask where only the first round is not masked --> need to be the same first round for all sequances
+        if self.only_raisha:
+            temp_mask = torch.ones(tgt_key_padding_mask_byte.shape, dtype=torch.bool)
+            temp_mask[:, 0] = False
+            tgt_key_padding_mask_byte = temp_mask
+
         if self._sinusoidal_positional_encoding:
             source = add_positional_features(source)
             target = add_positional_features(target)
@@ -1230,12 +1244,6 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         if source.size(2) != self._input_dim or target.size(2) != self._input_dim:
             raise RuntimeError("the feature number of src and tgt must be equal to d_model")
 
-        src_key_padding_mask = get_text_field_mask({'tokens': source})
-        tgt_key_padding_mask = get_text_field_mask({'tokens': target})
-        # The torch transformer takes the mask backwards.
-        src_key_padding_mask_byte = ~src_key_padding_mask.bool()
-        tgt_key_padding_mask_byte = ~tgt_key_padding_mask.bool()
-
         encoder_out = self.encoder(source, src_key_padding_mask=src_key_padding_mask_byte)
         decoder_output = self.decoder(target, encoder_out, tgt_key_padding_mask=tgt_key_padding_mask_byte,
                                       memory_key_padding_mask=src_key_padding_mask_byte)
@@ -1245,7 +1253,7 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
             if self.linear_layer is not None:
                 decoder_output = self.linear_layer(decoder_output)  # add linear layer before hidden2tag
             decision_logits = self.hidden2tag(decoder_output)
-            output['decision_logits'] = masked_softmax(decision_logits, tgt_key_padding_mask_byte)
+            output['decision_logits'] = masked_softmax(decision_logits, tgt_key_padding_mask.unsqueeze(2))
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions,
                                                                mask=tgt_key_padding_mask,
                                                                predictions=output['decision_logits'],
@@ -1253,10 +1261,14 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                                                                epoch=self._epoch, is_train=self.training,)
 
         if self.predict_avg_total_payoff:
+            # (batch_size, seq_len, dimensions) * (batch_size, dimensions, 1) -> (batch_size, seq_len)
             attention_output = self.attention(self.attention_vector, decoder_output, tgt_key_padding_mask)
-            attention_output = decoder_output.bmm(attention_output.unsqueeze(-1)).squeeze(-1)
-            regression_output = self.regressor(attention_output)
-            # regression_output = self.sigmoid(regression_output)
+            # (batch_size, 1, seq_len) * (batch_size, seq_len, dimensions) -> (batch_size, dimensions)
+            attention_output = torch.bmm(attention_output.unsqueeze(1), decoder_output).squeeze()
+            # (batch_size, dimensions) -> (batch_size, batch_size)
+            linear_out = self.linear_after_attention_layer(attention_output)
+            # (batch_size, batch_size) -> (batch_size, 1)
+            regression_output = self.regressor(linear_out)
             output['regression_output'] = regression_output
             self.reg_predictions = save_predictions(prediction_df=self.reg_predictions,
                                                     predictions=output['regression_output'], gold_labels=reg_labels,

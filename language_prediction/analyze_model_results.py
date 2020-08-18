@@ -170,8 +170,8 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
     # all_rounds_all_raisha['model_dropout'] = new_column[1]
     # all_rounds_all_raisha['text_features'] = \
     #     np.where(all_rounds_all_raisha.model_name.str.contains('bert'), 'BERT', 'Manual')
-    all_rounds_all_raisha =\
-        all_rounds_all_raisha.merge(models_to_compare[['model_name', 'text_features']], on='model_name')
+    # all_rounds_all_raisha =\
+    #     all_rounds_all_raisha.merge(models_to_compare[['model_name', 'text_features']], on='model_name')
     if 'fold_0' in all_rounds_all_raisha.fold.unique():
         prefix_fold = 'fold_'
     else:
@@ -182,61 +182,58 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
         all_rounds_all_raisha = all_rounds_all_raisha.loc[
             ~all_rounds_all_raisha.model_num.isin(all_not_include_model_num)]
     all_rounds_all_raisha = all_rounds_all_raisha.fillna(0)
-    all_model_types = all_rounds_all_raisha.model_type.unique()
+    all_model_names = all_rounds_all_raisha.model_name.unique()
     if per_model_num:
-        all_model_types = all_rounds_all_raisha.model_num.unique()
+        all_model_names = all_rounds_all_raisha.model_num.unique()
     all_best_results = defaultdict(dict)
     for fold in range(6):
         best_results = defaultdict(dict)
-        for model_type in all_model_types:
-            for text_features in ['BERT', 'Manual']:
-                if per_model_num:
-                    data = pd.DataFrame(all_rounds_all_raisha.loc[
-                                            (all_rounds_all_raisha.model_num == model_type) &
-                                            (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}') &
-                                            (all_rounds_all_raisha.text_features == text_features)])
-                else:
-                    data = pd.DataFrame(all_rounds_all_raisha.loc[
-                                            (all_rounds_all_raisha.model_type == model_type) &
-                                            (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}') &
-                                            (all_rounds_all_raisha.text_features == text_features)])
-                if data.empty:
-                    # print(f'data empty for model_type {model_type} and fold {fold}')
-                    continue
-                # best models need to have only 1 row per model, fold, text_features
-                if not hyper_parameters and data.shape[0] > 1:
-                    print('best models need to have only 1 row per model, fold, text_features')
-                    return
-                use_seq = False
-                if measure_to_select_best == 'RMSE':
-                    argmin_index = data[measure_to_select_best].idxmin()
-                    if f'{measure_to_select_best}_seq' in data.columns:
-                        argmin_index_seq = data[f'{measure_to_select_best}_seq'].idxmin()
-                        if data.loc[argmin_index][measure_to_select_best] >\
-                                data.loc[argmin_index_seq][measure_to_select_best]:
-                            argmin_index = argmin_index_seq
-                            use_seq = True
-                else:
-                    argmin_index = data[measure_to_select_best].idxmax()
-                    if f'{measure_to_select_best}_seq' in data.columns:
-                        argmin_index_seq = data[f'{measure_to_select_best}_seq'].idxmax()
-                        if data.loc[argmin_index][measure_to_select_best] <\
-                                data.loc[argmin_index_seq][measure_to_select_best]:
-                            argmin_index = argmin_index_seq
-                            use_seq = True
-                data = data.loc[argmin_index]
-                best_results[f'{model_type}_{text_features}'] =\
-                    {f'Best {measure_to_select_best} for fold {fold}': data[measure_to_select_best],
-                     f'Best Model number for fold {fold}': data.model_num,
-                     f'Best Model folder for fold {fold}': data.folder,
-                     f'Best Model name for fold {fold}': data.model_name,
-                     f'Best Model Hyper-parameters for fold {fold}': data.hyper_parameters_str,
-                     f'Seq is better for {fold}': use_seq}
-                if all_measures is not None:  # add all other measures of the best model
-                    for measure in all_measures:
-                        if measure in data:
-                            best_results[f'{model_type}_{text_features}'][f'Best {measure} for fold {fold}'] =\
-                                data[measure]
+        for model_name in all_model_names:
+            if per_model_num:
+                data = pd.DataFrame(all_rounds_all_raisha.loc[
+                                        (all_rounds_all_raisha.model_num == model_name) &
+                                        (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}')])
+            else:
+                data = pd.DataFrame(all_rounds_all_raisha.loc[
+                                        (all_rounds_all_raisha.model_name == model_name) &
+                                        (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}')])
+            if data.empty:
+                # print(f'data empty for model_type {model_type} and fold {fold}')
+                continue
+            # best models need to have only 1 row per model, fold, text_features
+            if not hyper_parameters and data.shape[0] > 1:
+                print('best models need to have only 1 row per model, fold, text_features')
+                return
+            use_seq = False
+            if measure_to_select_best == 'RMSE':
+                argmin_index = data[measure_to_select_best].idxmin()
+                if f'{measure_to_select_best}_seq' in data.columns:
+                    argmin_index_seq = data[f'{measure_to_select_best}_seq'].idxmin()
+                    if data.loc[argmin_index][measure_to_select_best] >\
+                            data.loc[argmin_index_seq][measure_to_select_best]:
+                        argmin_index = argmin_index_seq
+                        use_seq = True
+            else:
+                argmin_index = data[measure_to_select_best].idxmax()
+                if f'{measure_to_select_best}_seq' in data.columns:
+                    argmin_index_seq = data[f'{measure_to_select_best}_seq'].idxmax()
+                    if data.loc[argmin_index][measure_to_select_best] <\
+                            data.loc[argmin_index_seq][measure_to_select_best]:
+                        argmin_index = argmin_index_seq
+                        use_seq = True
+            data = data.loc[argmin_index]
+            best_results[f'{model_name}'] =\
+                {f'Best {measure_to_select_best} for fold {fold}': data[measure_to_select_best],
+                 f'Best Model number for fold {fold}': data.model_num,
+                 f'Best Model folder for fold {fold}': data.folder,
+                 f'Best Model name for fold {fold}': data.model_name,
+                 f'Best Model Hyper-parameters for fold {fold}': data.hyper_parameters_str,
+                 f'Seq is better for {fold}': use_seq}
+            if all_measures is not None:  # add all other measures of the best model
+                for measure in all_measures:
+                    if measure in data:
+                        best_results[f'{model_name}'][f'Best {measure} for fold {fold}'] =\
+                            data[measure]
 
         all_best_results = update_default_dict(all_best_results, best_results)
 
@@ -368,12 +365,14 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     #             'compare_prediction_models_21_06_2020_18_02']:
     #     find_all_best_models_of_directory(dir)
     # return
-    total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    results_path = combine_models_results(['compare_prediction_models_13_08_2020_15_33'],
-                                          total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
+    # total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
+    # results_path = combine_models_results(['compare_prediction_models_13_08_2020_11_48',
+    #                                        'compare_prediction_models_13_08_2020_15_33'],
+    #                                       total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
     # results_path = combine_models_all_results(['predict_best_models_05_07_2020_01_52'],
     #                                           hyper_parameters=hyper_parameters)
-    # results_path = "all_server_results_['compare_prediction_models_12_08_2020_19_00'].csv"
+    results_path = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
+                   "'compare_prediction_models_13_08_2020_15_33'].csv"
     new_results_file_name = results_path
 
     # return

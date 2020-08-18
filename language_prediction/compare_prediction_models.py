@@ -118,12 +118,13 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     all_model_nums = list(set(models_to_compare.model_num))
     # already_trained_models = list(range(15, 21)) + list(range(11))
     # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
-    # all_model_nums = [69]
+    # all_model_nums = [79]
+    all_model_nums = list(range(48, 78))
 
     all_models_results = pd.DataFrame()
     for model_num in all_model_nums:  # compare all versions of each model type
-        if model_num < 87:
-            continue
+        # if model_num != 79:
+        #     continue
         model_type_versions = models_to_compare.loc[models_to_compare.model_num == model_num]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
@@ -241,9 +242,14 @@ def parallel_main():
                     2: 0, 3: 1,
                     4: 0, 5: 1}
 
-    cuda_devices = {0: 0, 1: 0,
-                    2: 0, 3: 0,
-                    4: 0, 5: 0}
+    # cuda_devices = {0: 0, 1: 0,
+    #                 2: 0, 3: 0,
+    #                 4: 0, 5: 0}
+    #
+    # cuda_devices = {0: 1, 1: 1,
+    #                 2: 1, 3: 1,
+    #                 4: 1, 5: 1}
+
     """For debug"""
     # participants_fold_split = participants_fold_split.iloc[:50]
     # for fold in range(6):

@@ -322,12 +322,14 @@ class TransformerDatasetReader(DatasetReader):
                  num_attention_heads: int=8,
                  lazy: bool = False,
                  label_column: Optional[str] = 'labels',
-                 pair_ids: list = None) -> None:
+                 pair_ids: list = None,
+                 only_raisha: bool=False) -> None:
         super().__init__(lazy)
         self._label_column = label_column
         self.num_labels = 2
         self.pair_ids = pair_ids
         self.input_dim = features_max_size
+        self.only_raisha = only_raisha
         check = features_max_size // num_attention_heads
         if check * num_attention_heads != features_max_size:
             self.input_dim = (check + 1) * num_attention_heads
@@ -386,9 +388,12 @@ class TransformerDatasetReader(DatasetReader):
                         extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
                         raisha_data = row[f'features_round_{round_num}'] + extra_columns
                         raisha_text_list.append(ArrayField(np.array(raisha_data), padding_value=-1))
-                    else:
-                        extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
-                        saifa_data = row[f'features_round_{round_num}'] + extra_columns
+                    else:  # rounds in saifa
+                        if self.only_raisha and round_num == raisha+1:
+                            saifa_data = [100] * self.input_dim  # special vector to indicate the start of the saifa
+                        else:
+                            extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
+                            saifa_data = row[f'features_round_{round_num}'] + extra_columns
                         saifa_text_list.append(ArrayField(np.array(saifa_data), padding_value=-1))
             labels = row[self._label_column]
             metadata_dict = {column: row[column] for column in metadata_columns}

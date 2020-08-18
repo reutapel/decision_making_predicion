@@ -679,6 +679,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 self.use_raisha_LSTM = False
 
+            if 'only_raisha' in model_type:
+                self.only_raisha = True
+            else:
+                self.only_raisha = False
+
             if 'avg_loss' in hyper_parameters_dict.keys():
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
             if 'turn_loss' in hyper_parameters_dict.keys():
@@ -725,9 +730,9 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                                                   raisha_num_features=self.raisha_num_features)
 
         elif 'Transformer' in self.model_type:
-            train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids,
+            train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids, only_raisha=self.only_raisha,
                                                     features_max_size=self.features_max_size)
-            validation_reader = TransformerDatasetReader(pair_ids=self.val_pair_ids,
+            validation_reader = TransformerDatasetReader(pair_ids=self.val_pair_ids, only_raisha=self.only_raisha,
                                                          features_max_size=self.features_max_size)
         else:
             logging.exception(f'Model type should include LSTM or Transformer to use this class')
@@ -789,7 +794,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 feedforward_hidden_dim=int(self.feedforward_hidden_dim_prod * train_reader.input_dim),
                 num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
                 seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss, transformer_dropout=self.lstm_dropout,
-                positional_encoding=self.positional_encoding, dropout=self.linear_dropout,
+                positional_encoding=self.positional_encoding, dropout=self.linear_dropout, only_raisha=self.only_raisha,
             )
         elif 'Attention' in self.model_type:
             input_size = train_reader.num_features
