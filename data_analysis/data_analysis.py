@@ -757,7 +757,7 @@ def create_histogram(title, x, xlabel, ylabel, add_labels=False, curr_date_direc
 
     fig_per_hour = plt.figure()
     per_hour = fig_per_hour.add_subplot(111)
-    counts, bins, patches = per_hour.hist(x, bins=75, normed=False, color='dodgerblue', linewidth=0)
+    counts, bins, patches = per_hour.hist(x, bins=75, density=False, color='dodgerblue', linewidth=0)
     if add_labels:
         gap = 1
     else:

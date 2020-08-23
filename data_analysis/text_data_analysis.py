@@ -18,8 +18,8 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'num_only'
-data_type = 'train_data'
+condition_directory = 'verbal_test_data'
+data_type = 'test_data'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -853,6 +853,14 @@ class DataAnalysis:
         participants = self.results_payments.loc[self.results_payments.subsession_round_number == 1]
         print(f'Status:\n {participants.groupby(by="status").participant_code.count()}')
         print(f'Second test status:\n {participants.groupby(by="second_test_status").participant_code.count()}')
+
+        check = self.results_payments.loc[self.results_payments.status == 'play']
+        male = check.loc[check.player_gender == 'Male']
+        female = check.loc[check.player_gender == 'Female']
+        print(f'number of female: {female.participant_code.unique().shape}')
+        print(f'number of male: {male.participant_code.unique().shape}')
+        print(f'average age {check.player_age.mean()}, median {check.player_age.median()} '
+              f'and STD {check.player_age.std()}')
 
         return
 
@@ -1925,9 +1933,9 @@ class DataAnalysis:
         print(f'start of dm_entered_per_review_features: '
               f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
-        manual_features = pd.read_excel(f'/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
-                                        f'experiment/decision_prediction/language_prediction/data/verbal/'
-                                        f'manual_binary_features_{data_type}.xlsx')
+        manual_features = pd.read_excel(os.path.join(
+            os.path.abspath(os.chdir('..')), 'language_prediction', 'data', 'verbal',
+            f'manual_binary_features_{data_type}.xlsx'))
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][

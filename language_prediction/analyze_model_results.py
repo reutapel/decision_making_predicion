@@ -365,14 +365,17 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     #             'compare_prediction_models_21_06_2020_18_02']:
     #     find_all_best_models_of_directory(dir)
     # return
-    # total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    # results_path = combine_models_results(['compare_prediction_models_13_08_2020_11_48',
-    #                                        'compare_prediction_models_13_08_2020_15_33'],
-    #                                       total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
+    total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
+    results_path = combine_models_results(['compare_prediction_models_13_08_2020_11_48',
+                                           'compare_prediction_models_16_08_2020_17_17',
+                                           'compare_prediction_models_17_08_2020_19_10',
+                                           'compare_prediction_models_17_08_2020_21_15',
+                                           'compare_prediction_models_19_08_2020_16_02'],
+                                          total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
     # results_path = combine_models_all_results(['predict_best_models_05_07_2020_01_52'],
     #                                           hyper_parameters=hyper_parameters)
-    results_path = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
-                   "'compare_prediction_models_13_08_2020_15_33'].csv"
+    # results_path = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
+    #                "'compare_prediction_models_13_08_2020_15_33'].csv"
     new_results_file_name = results_path
 
     # return
