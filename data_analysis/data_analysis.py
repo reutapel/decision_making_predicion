@@ -8,6 +8,8 @@ from datetime import datetime
 import logging
 from matplotlib.font_manager import FontProperties
 import math
+import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 
 
 base_directory = os.path.abspath(os.curdir)
@@ -88,7 +90,7 @@ def create_bar_from_df(data: pd.DataFrame, title: str='', xlabel: str='', ylabel
     else:
         # colors = ['orange', 'seagreen', 'navy', 'orchid', 'dimgray', 'purple', 'skyblue', 'yellow', 'black',
         #           'orangered']
-        # plot_colors = [colors[i] for i in data.index]
+        # plot_colors = [colors[i] for i in data.indexƒ]
         if rot:
             ax = data.plot(kind="bar", stacked=stacked, rot=1, figsize=figsize)  # , colormap=plot_colors)
         else:
@@ -434,8 +436,17 @@ def create_point_plot(points_x, points_y, legend, title, xlabel, ylabel, points_
     ax.axis([x_min - gap, x_max + gap, y_min - gap, y_max + gap])
     # print('Create plot for', title)
 
-    markers = [".", "x", "+", "1"]
-    colors = ['orange', 'seagreen', 'navy', 'crimson']
+    if len(points_x) <= 4:
+        markers = [".", "x", "+", "1"]
+        colors = ['orange', 'seagreen', 'navy', 'crimson']
+    else:
+        colors = (list(mcolors.BASE_COLORS.keys()) + list(mcolors.TABLEAU_COLORS.keys()))
+        colors.remove('tab:olive')
+        colors.remove('y')
+        colors.remove('w')
+        colors = colors * 8
+        markers = list(Line2D.markers.keys())
+        markers = markers * 8
     didnt_take_color = 'limegreen'
 
     for i, (x, y) in enumerate(zip(points_x, points_y)):
@@ -493,9 +504,14 @@ def create_point_plot(points_x, points_y, legend, title, xlabel, ylabel, points_
                 ax.plot(points_x_other_color[i], points_y_other_color[i], color=didnt_take_color)
 
     # add some text for labels, title and axes ticks
-    ax.legend(loc=9, bbox_to_anchor=(0.5, -0.3))
+    if print_max_min_values:
+        ax.legend(loc=9, bbox_to_anchor=(0.5, -0.3))
+        plt.xlabel(xlabel, labelpad=55)
+    else:
+        ax.legend(loc=9, bbox_to_anchor=(-0.35, 0.3))
+        plt.xlabel(xlabel)
+
     plt.title(title)
-    plt.xlabel(xlabel, labelpad=55)
     plt.ylabel(ylabel)
 
     if batch_average is not None:

@@ -41,7 +41,27 @@ class ExecuteEvalModel:
     """
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, excel_models_results: str,
-                 hyper_parameters_dict: dict, trained_model=None, trained_model_dir=None, model_file_name=None):
+                 hyper_parameters_dict: dict, trained_model=None, trained_model_dir=None, model_file_name=None,
+                 test_data_file_name: str=None, predict_type: str='validation'):
+        """
+
+        :param model_num:
+        :param fold:
+        :param fold_dir:
+        :param model_type:
+        :param model_name:
+        :param data_file_name:
+        :param fold_split_dict:
+        :param table_writer:
+        :param data_directory:
+        :param excel_models_results:
+        :param hyper_parameters_dict:
+        :param trained_model:
+        :param trained_model_dir:
+        :param model_file_name:
+        :param test_data_file_name:
+        :param predict_type: need to be validation or test
+        """
 
         self.model_num = model_num
         self.fold = fold
@@ -49,6 +69,7 @@ class ExecuteEvalModel:
         self.model_type = model_type
         self.model_name = model_name
         self.data_file_name = data_file_name
+        self.test_data_file_name = test_data_file_name
         self.fold_split_dict = fold_split_dict
         self.table_writer = table_writer
         self.model = None
@@ -60,6 +81,7 @@ class ExecuteEvalModel:
         self.trained_model = trained_model
         self.trained_model_dir = trained_model_dir
         self.model_file_name = model_file_name
+        self.predict_type = predict_type
         self.model_table_writer = pd.ExcelWriter(
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
         print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
@@ -76,15 +98,13 @@ class ExecuteEvalModel:
         """This function should fit the model on the train data, predict on the validation data and dave the results"""
         raise NotImplementedError
 
-    def eval_model(self, predict_type: str=None):
-        """This function should use the prediction of the model and eval these results
-        :param predict_type: need to be validation or test"""
+    def eval_model(self):
+        """This function should use the prediction of the model and eval these results"""
 
         raise NotImplementedError
 
-    def predict(self, predict_type: str):
-        """This function use trained model to predict the labels of the test set
-        :param predict_type: need to be validation or test"""
+    def predict(self):
+        """This function use trained model to predict the labels of the test set"""
         raise NotImplementedError
 
     def save_model_prediction(self, data_to_save: pd.DataFrame, save_model=True, sheet_prefix_name: str='All',
@@ -323,10 +343,12 @@ class ExecuteEvalModel:
 class ExecuteEvalCRF(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None,
+                 test_data_file_name: str=None, predict_type: str='validation'):
         super(ExecuteEvalCRF, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory, excel_models_results,
-                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
+                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name,
+                                             test_data_file_name=test_data_file_name, predict_type=predict_type)
         self.squared_sigma = float(hyper_parameters_dict['squared_sigma'])
         self.predict_future = False if hyper_parameters_dict['predict_future'] == 'False' else True
         self.use_forward_backward_fix_history =\
@@ -337,6 +359,7 @@ class ExecuteEvalCRF(ExecuteEvalModel):
         self.model = None
         parser = argparse.ArgumentParser()
         parser.add_argument('train_data_file', help="data file for training input")
+        parser.add_argument('test_data_file', help="data file for test input")
         parser.add_argument('features_file', help="the features file name input.")
         parser.add_argument('model_file', help="the model file name. (output)")
         # if it is test time, use the correct folder of the model
@@ -348,6 +371,7 @@ class ExecuteEvalCRF(ExecuteEvalModel):
             model_file_name = f'{self.model_num}_{self.model_type}_{self.model_name}_fold_{self.fold}.pkl'
         self.args = parser.parse_args([
                 os.path.join(self.data_directory, self.data_file_name),
+                os.path.join(self.data_directory, self.test_data_file_name),
                 os.path.join(self.data_directory, features_file_name),
                 os.path.join(folder, model_file_name),
             ])
@@ -367,21 +391,21 @@ class ExecuteEvalCRF(ExecuteEvalModel):
                          vector_rep_input=True, pair_ids=self.train_pair_ids,
                          use_forward_backward_fix_history=self.use_forward_backward_fix_history)
 
-        self.predict(predict_type='validation')
+        self.predict()
 
-    def predict(self, predict_type: str):
+    def predict(self):
         print(f'predict model {self.model_name}')
         logging.info(f'predict model {self.model_name}')
         self.model.load(self.args.model_file, self.args.features_file, vector_rep_input=True)
-        if predict_type == 'validation':
+        if self.predict_type == 'validation':
             pair_ids = self.val_pair_ids
-        elif predict_type == 'test':
+        elif self.predict_type == 'test':
             pair_ids = self.test_pair_ids
         else:
-            print(f'predict_type must be validation or test, {predict_type} was passed')
+            print(f'predict_type must be validation or test, {self.predict_type} was passed')
             return
         self.correct_count, self.total_count, self.prediction, self.total_seq_count = \
-            self.model.test(self.args.train_data_file, predict_only_last=self.predict_only_last,
+            self.model.test(self.args.test_data_file_name, predict_only_last=self.predict_only_last,
                             pair_ids=pair_ids, use_viterbi_fix_history=self.use_viterbi_fix_history)
         # create the bin analysis columns in self.prediction
         if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
@@ -394,7 +418,7 @@ class ExecuteEvalCRF(ExecuteEvalModel):
             self.prediction = self.prediction.join(four_bin_test_y).join(four_bin_prediction)
         self.save_model_prediction(data_to_save=self.prediction, save_model=False)
 
-    def eval_model(self, predict_type: str=None):
+    def eval_model(self):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
         if 'total_payoff_label' in self.prediction.columns and 'total_payoff_prediction' in self.prediction.columns:
@@ -427,14 +451,17 @@ class ExecuteEvalCRF(ExecuteEvalModel):
 class ExecuteEvalSVM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None,
+                 test_data_file_name: str=None, predict_type: str='validation'):
         super(ExecuteEvalSVM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                              fold_split_dict, table_writer, data_directory, excel_models_results,
-                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
+                                             hyper_parameters_dict, trained_model, trained_model_dir, model_file_name,
+                                             test_data_file_name=test_data_file_name, predict_type=predict_type)
         self.label_name = hyper_parameters_dict['label_name']
         self.train_x, self.train_y, self.validation_x, self.validation_y, self.test_y, self.test_x =\
             None, None, None, None, None, None
         self.features_file_name = 'features_' + self.data_file_name.split('all_data_', 1)[1].split('.pkl')[0]+'.xlsx'
+        print(f'Features file name: {self.features_file_name}')
 
         if 'kernel' in hyper_parameters_dict.keys():
             self.kernel = hyper_parameters_dict['kernel']
@@ -448,10 +475,16 @@ class ExecuteEvalSVM(ExecuteEvalModel):
     def load_data_create_model(self):
         print(f'Load and create Data file name: {self.data_file_name}')
         logging.info(f'Load and create Data file name: {self.data_file_name}')
+        print(f'Load and create Test Data file name: {self.test_data_file_name}')
+        logging.info(f'Load and create Test Data file name: {self.test_data_file_name}')
         if 'pkl' in self.data_file_name:
             data = joblib.load(os.path.join(self.data_directory, self.data_file_name))
+            if self.test_data_file_name is not None:
+                test_data = joblib.load(os.path.join(self.data_directory, self.test_data_file_name))
         else:
             data = pd.read_csv(os.path.join(self.data_directory, self.data_file_name))
+            if self.test_data_file_name is not None:
+                test_data = joblib.load(os.path.join(self.data_directory, self.test_data_file_name))
 
         # get the feature columns
         x_columns = data.columns.tolist()
@@ -466,9 +499,12 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         self.validation_y = validation_data[self.label_name]
         self.validation_x = validation_data[x_columns]
         # get test data
-        test_data = data.loc[data.pair_id.isin(self.test_pair_ids)]
-        self.test_y = test_data[self.label_name]
-        self.test_x = test_data[x_columns]
+        if self.test_data_file_name is not None:
+            if 'sample_id' in test_data.columns:
+                test_data.index = test_data.sample_id
+            test_data = test_data.loc[test_data.pair_id.isin(self.test_pair_ids)]
+            self.test_y = test_data[self.label_name]
+            self.test_x = test_data[x_columns]
 
         # load features file:
         features = pd.read_excel(os.path.join(self.data_directory, self.features_file_name))
@@ -484,30 +520,34 @@ class ExecuteEvalSVM(ExecuteEvalModel):
         print(f'fit and predict model {self.model_name}')
         logging.info(f'fit and predict model {self.model_name}')
         self.model.fit(self.train_x, self.train_y)
-        self.predict(predict_type='validation')
+        self.predict()
 
-    def predict(self, predict_type: str):
-        if predict_type == 'validation':
+    def predict(self):
+        if self.predict_type == 'validation':
             x = self.validation_x
             y = self.validation_y
             save_model = True
-        elif predict_type == 'test':
-            x = self.test_x
-            y = self.test_y
-            save_model = False
+        elif self.predict_type == 'test':
+            if self.test_data_file_name is not None:
+                x = self.test_x
+                y = self.test_y
+                save_model = False
+            else:
+                print("If predict_type is test, test_data_file_name can't be None")
+                return
         else:
-            print(f'predict_type must be validation or test, {predict_type} was passed')
+            print(f'predict_type must be validation or test, {self.predict_type} was passed')
             return
         self.prediction = self.model.predict(x, y)
         self.save_model_prediction(data_to_save=self.prediction, save_model=save_model)
 
-    def eval_model(self, predict_type: str=None):
-        if predict_type == 'validation':
+    def eval_model(self):
+        if self.predict_type == 'validation':
             x = self.validation_x
-        elif predict_type == 'test':
+        elif self.predict_type == 'test':
             x = self.test_x
         else:
-            print(f'predict_type must be validation or test, {predict_type} was passed')
+            print(f'predict_type must be validation or test, {self.predict_type} was passed')
             return
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
@@ -585,10 +625,12 @@ class ExecuteEvalSVM(ExecuteEvalModel):
 class ExecuteEvalLSTM(ExecuteEvalModel):
     def __init__(self, model_num: int, fold: int, fold_dir: str, model_type: str, model_name: str, data_file_name: str,
                  fold_split_dict: dict, table_writer: pd.ExcelWriter, data_directory: str, hyper_parameters_dict: dict,
-                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None):
+                 excel_models_results: str, trained_model=None, trained_model_dir=None, model_file_name=None,
+                 test_data_file_name: str=None, predict_type: str='validation'):
         super(ExecuteEvalLSTM, self).__init__(model_num, fold, fold_dir, model_type, model_name, data_file_name,
                                               fold_split_dict, table_writer, data_directory, excel_models_results,
-                                              hyper_parameters_dict, trained_model, trained_model_dir, model_file_name)
+                                              hyper_parameters_dict, trained_model, trained_model_dir, model_file_name,
+                                              test_data_file_name=test_data_file_name, predict_type=predict_type)
         if 'lstm_hidden_dim' in hyper_parameters_dict.keys():
             self.lstm_hidden_dim = int(hyper_parameters_dict['lstm_hidden_dim'])
         else:
@@ -716,6 +758,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         print(f'Load and create Data file name: {self.data_file_name}')
         logging.info(f'Load and create Data file name: {self.data_file_name}')
         all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
+
         # load train data
         if 'LSTM' in self.model_type or 'Attention' in self.model_type:
             train_reader = LSTMDatasetReader(pair_ids=self.train_pair_ids,
@@ -911,7 +954,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.all_reg_predictions = self.all_reg_predictions.loc[self.all_reg_predictions.is_train==False]
             self.prediction = self.all_reg_predictions
 
-    def eval_model(self, predict_type: str=None):
+    def eval_model(self):
         print(f'Eval model {self.model_name}')
         logging.info(f'Eval model {self.model_name}')
         results_dict = list()
@@ -975,18 +1018,22 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             logging.exception(f'Error in eval model {self.model_name}')
             raise Exception(f'Error in eval model {self.model_name}')
 
-    def predict(self, predict_type: str):
+    def predict(self):
         if self.trained_model is None:
             print('Need to pass trained model for this models')
             return
         # load test data
-        all_data_file_path = os.path.join(self.data_directory, self.data_file_name)
+        all_data_file_path = os.path.join(self.data_directory, self.test_data_file_name)
         # load train data
         if 'LSTM' in self.model_type or 'Attention' in self.model_type:
-            test_reader = LSTMDatasetReader(pair_ids=self.test_pair_ids)
+            test_reader = LSTMDatasetReader(pair_ids=self.test_pair_ids,
+                                            use_transformer=self.use_transformer_encoder,
+                                            use_raisha_attention=self.use_raisha_attention,
+                                            use_raisha_LSTM=self.use_raisha_LSTM,
+                                            raisha_num_features=self.raisha_num_features)
 
         elif 'Transformer' in self.model_type:
-            test_reader = TransformerDatasetReader(pair_ids=self.test_pair_ids,
+            test_reader = TransformerDatasetReader(pair_ids=self.test_pair_ids, only_raisha=self.only_raisha,
                                                    features_max_size=self.features_max_size)
         else:
             logging.exception(f'Model type should include LSTM or Transformer to use this class')

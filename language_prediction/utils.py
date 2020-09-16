@@ -796,7 +796,7 @@ if __name__ == '__main__':
     #                                            'compare_prediction_models_31_05_2020_12_35',
     #                                            'compare_prediction_models_29_05_2020_15_10',
     #                                            'compare_prediction_models_25_05_2020_12_53',
-    #                                            'compare_prediction_models_01_06_2020_15_23',
+    #                     `                       'compare_prediction_models_01_06_2020_15_23',
     #                                            'compare_prediction_models_02_06_2020_13_18',
     #                                            'compare_prediction_models_30_05_2020_17_17'], fold, total_payoff)
     #     # curr_df = eval_model_total_prediction(['compare_prediction_models_22_04_2020_23_32'], fold, total_payoff)

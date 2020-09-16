@@ -60,7 +60,7 @@ def execute_create_fit_predict_eval_model(
         data_directory, hyper_parameters_dict, excel_models_results)
     model_class.load_data_create_model()
     model_class.fit_validation()
-    results_dict = model_class.eval_model(predict_type='validation')
+    results_dict = model_class.eval_model()
     results_df = pd.DataFrame.from_dict(results_dict).T
     results_df['raisha_round'] = results_df.index
     results_df[['Raisha', 'Round']] = results_df.raisha_round.str.split(expand=True)
@@ -118,13 +118,20 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     all_model_nums = list(set(models_to_compare.model_num))
     # already_trained_models = list(range(15, 21)) + list(range(11))
     # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
-    # all_model_nums = [79]
-    all_model_nums = list(range(48, 78))
+    # all_model_nums = [38, 39]
+    all_model_nums = list(range(125, 147))  # + list(range(15, 19)) + list(range(28, 32)) + list(range(176, 183))
 
     all_models_results = pd.DataFrame()
     for model_num in all_model_nums:  # compare all versions of each model type
         # if model_num != 79:
         #     continue
+        if (fold == 0 and model_num not in list(range(125, 145))) or \
+                (fold == 1 and model_num not in (list(range(83, 87)))) or \
+                (fold == 2 and model_num not in (list(range(83, 87)) + [146])) or \
+                (fold == 3 and model_num not in list(range(125, 147))) or \
+                (fold == 4 and model_num not in []) or \
+                (fold == 5 and model_num not in []):
+            continue
         model_type_versions = models_to_compare.loc[models_to_compare.model_num == model_num]
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
@@ -154,21 +161,22 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                         greadsearch = lstm_gridsearch_params
                     else:  # for Transformer models and LSTM_use_transformer models
                         greadsearch = transformer_gridsearch_params
-                    for i, parameters_dict in enumerate(greadsearch):
+                    for i, parameters_dict in enumerate(greadsearch):  # compare_prediction_models_28_08_2020_13_09
                         # if i > 0:
                         #     continue
-                        # if (fold == 0 and (model_num == 30 or (model_num == 31 and i <= 25))) or \
-                        #         (fold == 1 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
-                        #         (fold == 2 and ((model_num == 30) or (model_num == 31 and i <= 17))) or \
-                        #         (fold == 3 and ((model_num == 30) or (model_num == 31 and i <= 25))) or \
-                        #         (fold == 4 and (model_num == 30 and i <= 46)) or \
-                        #         (fold == 5 and (model_num == 30 and i <= 38)):
+                        # if (fold == 0 and ((model_num < 106) or (model_num == 106 and i <= 29))) or \
+                        #         (fold == 1 and ((model_num < 106) or (model_num == 106 and i <= 36))) or \
+                        #         (fold == 2 and ((model_num < 108) or (model_num == 108 and i <= 5))) or \
+                        #         (fold == 3 and ((model_num < 166) or (model_num == 166 and i <= 37))) or \
+                        #         (fold == 4 and ((model_num < 166) or (model_num == 166 and i <= 12))) or \
+                        #         (fold == 5 and ((model_num < 165) or (model_num == 165 and i <= 36))):
                         #     continue
+
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
                         if 'linear' in model_type and 'lstm_hidden_dim' in new_hyper_parameters_dict:
                             new_hyper_parameters_dict['linear_hidden_dim'] =\
-                                int(0.5*new_hyper_parameters_dict['lstm_hidden_dim'])
+                                int(0.5*int(new_hyper_parameters_dict['lstm_hidden_dim']))
                         if '_avg_turn' in model_type:
                             for inner_i, inner_parameters_dict in enumerate(avg_turn_gridsearch_params):
                                 # if inner_i > 0:
@@ -254,13 +262,13 @@ def parallel_main():
     # participants_fold_split = participants_fold_split.iloc[:50]
     # for fold in range(6):
     #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
-    #                           hyper_parameters_tune_mode=True)
+    #                           hyper_parameters_tune_mode=False)
 
     ray.init()
     all_ready_lng =\
         ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
                                               hyper_parameters_tune_mode=True)
-                 for i in range(6)])
+                 for i in [0, 3]])
 
     print(f'Done! {all_ready_lng}')
     logging.info(f'Done! {all_ready_lng}')

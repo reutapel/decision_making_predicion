@@ -61,8 +61,7 @@ def combine_models_results(folder_list: list, total_payoff_true_label: pd.DataFr
                             total_payoff_label = all_prediction[total_payoff_label_column]
                             if type(total_payoff_label.values[0]) == str:  # tensor(value, cuda=...) instead of float
                                 total_payoff_label = all_prediction[['sample_id']].merge(
-                                    total_payoff_true_label[[inner_folder, f'{inner_folder}_sample_id']],
-                                    right_on=f'{inner_folder}_sample_id', left_on='sample_id')
+                                    total_payoff_true_label, on='sample_id')
                                 total_payoff_label.index = total_payoff_label.sample_id
                                 total_payoff_label = total_payoff_label[inner_folder]
                                 all_prediction.index = all_prediction.sample_id
@@ -171,7 +170,9 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
     # all_rounds_all_raisha['text_features'] = \
     #     np.where(all_rounds_all_raisha.model_name.str.contains('bert'), 'BERT', 'Manual')
     # all_rounds_all_raisha =\
-    #     all_rounds_all_raisha.merge(models_to_compare[['model_name', 'text_features']], on='model_name')
+    #     all_rounds_all_raisha.merge(models_to_compare[['model_type', 'model_name', 'text_features']],
+    #                                 on=['model_type', 'model_name'])
+    all_rounds_all_raisha['modelID'] = all_rounds_all_raisha.model_type + '_' + all_rounds_all_raisha.model_name
     if 'fold_0' in all_rounds_all_raisha.fold.unique():
         prefix_fold = 'fold_'
     else:
@@ -182,7 +183,7 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
         all_rounds_all_raisha = all_rounds_all_raisha.loc[
             ~all_rounds_all_raisha.model_num.isin(all_not_include_model_num)]
     all_rounds_all_raisha = all_rounds_all_raisha.fillna(0)
-    all_model_names = all_rounds_all_raisha.model_name.unique()
+    all_model_names = all_rounds_all_raisha.modelID.unique()
     if per_model_num:
         all_model_names = all_rounds_all_raisha.model_num.unique()
     all_best_results = defaultdict(dict)
@@ -195,7 +196,7 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
                                         (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}')])
             else:
                 data = pd.DataFrame(all_rounds_all_raisha.loc[
-                                        (all_rounds_all_raisha.model_name == model_name) &
+                                        (all_rounds_all_raisha.modelID == model_name) &
                                         (all_rounds_all_raisha.fold == f'{prefix_fold}{fold}')])
             if data.empty:
                 # print(f'data empty for model_type {model_type} and fold {fold}')
@@ -225,6 +226,8 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
             best_results[f'{model_name}'] =\
                 {f'Best {measure_to_select_best} for fold {fold}': data[measure_to_select_best],
                  f'Best Model number for fold {fold}': data.model_num,
+                 f'Best Model type for fold {fold}': data.model_type,
+                 f'Best Model file name for fold {fold}': data.data_file_name,
                  f'Best Model folder for fold {fold}': data.folder,
                  f'Best Model name for fold {fold}': data.model_name,
                  f'Best Model Hyper-parameters for fold {fold}': data.hyper_parameters_str,
@@ -249,6 +252,7 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
     else:
         all_best_results.index.name = 'model_type'
         index_to_insert = 0
+
     measure_to_select_all_folds = [f'Best {measure_to_select_best} for fold {fold}' for fold in range(6)]
     all_best_results.insert(index_to_insert, f'Average_{measure_to_select_best}',
                             all_best_results[measure_to_select_all_folds].mean(axis=1))
@@ -288,20 +292,29 @@ def concat_new_results(new_results_name: str, old_results_name: str, new_results
     else:
         print('old_results_name is not csv or excel file')
         return
-    # all_results = all_results.loc[~all_results.model_type.isin(['SVMTurn'])]
-    new_results = pd.read_csv(os.path.join(base_directory, 'logs', new_results_name), index_col=[0])
-    # new_results.rename(columns={'Unnamed: 0': 'folder'}, inplace=True)
 
-    if 'hyper_parameters_dict' in new_results.columns:
-        new_results.rename(columns={'hyper_parameters_dict': 'hyper_parameters_str'}, inplace=True)
-    # all_results = all_results[new_results.columns]
+    if new_results_name == old_results_name:  # no need to concat
+        final = all_results
+    else:
+        new_results = pd.read_csv(os.path.join(base_directory, 'logs', new_results_name), index_col=[0])
+        # new_results.rename(columns={'Unnamed: 0': 'folder'}, inplace=True)
 
-    final = pd.concat([all_results, new_results], axis=0)
+        if 'hyper_parameters_dict' in new_results.columns:
+            new_results.rename(columns={'hyper_parameters_dict': 'hyper_parameters_str'}, inplace=True)
+        # all_results = all_results[new_results.columns]
+
+        if new_results_name == "all_server_results_['compare_prediction_models_27_08_2020_11_30'].csv":
+            new_results = new_results.loc[~new_results.model_num.str.contains('112')]
+            new_results = new_results.loc[~new_results.model_num.str.contains('113')]
+            new_results = new_results.loc[~new_results.model_num.str.contains('114')]
+
+        final = pd.concat([all_results, new_results], axis=0)
     # all_columns = final.columns.tolist()
     # all_columns.remove('folder')
     final = final.drop_duplicates()
     final.index.name = 'folder'
     # joblib.dump(final, os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}.pkl'))
+    print(f'Save new data to: {new_results_file_name_to_save} concat of {old_results_name} and {new_results_name}')
     final.to_csv(os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}'))
     # final.to_excel(os.path.join(base_directory, 'logs', f'{new_results_file_name_to_save}.xlsx'))
 
@@ -334,9 +347,8 @@ def correlation_analysis(data_path: str):
     return
 
 
-def find_all_best_models_of_directory(directory: str):
-    xls = pd.ExcelFile(os.path.join(base_directory, 'logs', 'analyze_results',
-                                    'Best models analysis hyper parameters tunning.xlsx'))
+def find_all_best_models_of_directory(directory: str, best_models_file_name: str):
+    xls = pd.ExcelFile(os.path.join(base_directory, 'logs', 'analyze_results', best_models_file_name))
     number_best_fold = defaultdict(list)
     for sheet in xls.sheet_names:
         if 'All_raishas' in sheet:
@@ -346,41 +358,65 @@ def find_all_best_models_of_directory(directory: str):
                 index_data = data.str.findall(directory)
                 for my_index in index_data.index:
                     if type(index_data[my_index]) == list and len(index_data[my_index]) > 0:
-                        number_best_fold[fold].append(f"Fold: {fold}, Model number: "
-                                                      f"{df.iloc[my_index][f'Best Model number for fold {fold}']}")
+                        if 'SVM' in df.iloc[my_index][f'Best Model type for fold {fold}']:
+                            number_best_fold[fold].append(
+                                f"mv {directory}/fold_{fold}/{df.iloc[my_index][f'Best Model number for fold {fold}']}_"
+                                f"{df.iloc[my_index][f'Best Model type for fold {fold}']}_"
+                                f"{df.iloc[my_index][f'Best Model name for fold {fold}']}"
+                                f"_fold_{fold}.pkl {directory}_best/fold_{fold}")
+                        else:
+                            number_best_fold[fold].append(
+                                f"mv {directory}/fold_{fold}/{df.iloc[my_index][f'Best Model number for fold {fold}']}_"
+                                f"{df.iloc[my_index][f'Best Model type for fold {fold}']}_"
+                                f"{df.iloc[my_index][f'Best Model name for fold {fold}']}"
+                                f"_100_epochs_fold_num_{fold}/ {directory}_best/fold_{fold}")
 
-    print(f'Best models in {directory}')
+    # print(f'\nBest models in {directory}')
+    print(f'mkdir {directory}_best')
     for fold in range(6):
         best_models_list = sorted(set(number_best_fold[fold]))
-        print(f'Number of best models for fold {fold} is {len(best_models_list)}')
+        # print(f'\nNumber of best models for fold {fold} is {len(best_models_list)}')
+        print(f'mkdir {directory}_best/fold_{fold}')
         for item in best_models_list:
             print(item)
 
     return
 
 
-def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=None, hyper_parameters=True):
-    # for dir in ['compare_prediction_models_24_06_2020_10_55', 'compare_prediction_models_09_06_2020_12_42',
-    #             'compare_prediction_models_11_06_2020_15_10', 'compare_prediction_models_13_06_2020_19_02',
-    #             'compare_prediction_models_21_06_2020_18_02']:
-    #     find_all_best_models_of_directory(dir)
+def main(new_results_file_name, old_results_name, best_model_file_name: str, best_model_to_plot_file_name: str,
+         results_to_use: pd.DataFrame=None, hyper_parameters=True,):
+    # for dir in ['compare_prediction_models_07_09_2020_11_12']:
+    #     find_all_best_models_of_directory(dir, best_model_file_name)
     # return
     total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    results_path = combine_models_results(['compare_prediction_models_13_08_2020_11_48',
-                                           'compare_prediction_models_16_08_2020_17_17',
-                                           'compare_prediction_models_17_08_2020_19_10',
-                                           'compare_prediction_models_17_08_2020_21_15',
-                                           'compare_prediction_models_19_08_2020_16_02'],
-                                          total_payoff_true_label=total_payoff_true_label_per_fold, baseline=False)
-    # results_path = combine_models_all_results(['predict_best_models_05_07_2020_01_52'],
-    #                                           hyper_parameters=hyper_parameters)
-    # results_path = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
+    for i, folder in enumerate([['compare_prediction_models_09_09_2020_22_58',
+                                 'compare_prediction_models_07_09_2020_12_15',
+                                 'compare_prediction_models_10_09_2020_11_35',]]):
+        results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
+                                                   baseline=False)
+        if i == 0:  # first folder
+            old_results_name = old_results_name
+        else:
+            old_results_name = new_results_file_name
+        concat_new_results(new_results_name=results_file_name,
+                           old_results_name=old_results_name,
+                           new_results_file_name_to_save=new_results_file_name)
+    # results_file_name = combine_models_all_results(['predict_best_models_10_09_2020_11_36',
+    #                                                 'predict_best_models_10_09_2020_15_20',
+    #                                                 'predict_best_models_07_09_2020_19_36'],
+    #                                                hyper_parameters=hyper_parameters)
+    # new_results_file_name = results_file_name
+    # results_file_name = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
     #                "'compare_prediction_models_13_08_2020_15_33'].csv"
-    new_results_file_name = results_path
 
     # return
-    # concat_new_results(results_path, old_results_name=old_results_name,
-    #                    new_results_file_name_to_save=new_results_file_name)
+    # for results_file_name in ["all_server_results_['compare_prediction_models_27_08_2020_11_30'].csv",
+    #                           "all_server_results_['compare_prediction_models_30_08_2020_11_25'].csv",
+    #                           "all_server_results_['compare_prediction_models_30_08_2020_11_27'].csv",
+    #                           "all_server_results_['compare_prediction_models_31_08_2020_10_23'].csv",
+    #                           "all_server_results_['compare_prediction_models_31_08_2020_10_18'].csv"]:
+    #     concat_new_results(results_file_name, old_results_name=old_results_name,
+    #                        new_results_file_name_to_save=new_results_file_name)
 
     # concat_new_results("all_server_results_['compare_prediction_models_23_06_2020_10_41_hyper', "
     #                    "'compare_prediction_models_23_06_2020_16_44_hyper'].csv",
@@ -413,11 +449,11 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     raishas = [f'raisha_{raisha}' for raisha in range(10)]
     raishas.append('All_raishas')
     if hyper_parameters:
-        best_model_file_name = 'Best models analysis hyper parameters tunning new test data.xlsx'
-        best_model_to_plot_file_name = 'Best models to plot hyper parameters tunning new test data.csv'
+        best_model_file_name = best_model_file_name
+        best_model_to_plot_file_name = best_model_to_plot_file_name
     else:
-        best_model_file_name = 'Best models analysis best models.xlsx'
-        best_model_to_plot_file_name = 'Best models to plot best models.csv'
+        best_model_file_name = best_model_file_name
+        best_model_to_plot_file_name = best_model_to_plot_file_name
     table_writer = pd.ExcelWriter(os.path.join(base_directory, 'logs', 'analyze_results', best_model_file_name),
                                   engine='xlsxwriter')
     # not_include_model_num = [16, 24, 32, 43, 47, 58, 69, 80, 94, 105, 119, 130, 145, 156, 170, 181, 187, 391, 402, 413,
@@ -476,9 +512,16 @@ def main(new_results_file_name, old_results_name, results_to_use: pd.DataFrame=N
     best_results_to_plot = pd.concat(best_results_to_plot, sort=False, axis=1)
     best_results_to_plot.to_csv(os.path.join(base_directory, 'logs', 'analyze_results', best_model_to_plot_file_name))
 
+    for dir in ['compare_prediction_models_09_09_2020_22_58',
+                'compare_prediction_models_10_09_2020_11_35',
+                'compare_prediction_models_07_09_2020_12_15']:
+        find_all_best_models_of_directory(dir, best_model_file_name)
+    return
+
 
 if __name__ == '__main__':
-    main(new_results_file_name='all_results_05_07_predict_best_models.csv',
-         old_results_name="all_server_results_['predict_best_models_30_06_2020_21_04', "
-                          "'predict_best_models_30_06_2020_21_07', "
-                          "'predict_best_models_30_06_2020_21_41'].csv", hyper_parameters=True)
+    main(new_results_file_name='all_results_16_09_new_models.csv',
+         old_results_name='all_results_09_09_new_models.csv', hyper_parameters=True,
+         best_model_file_name='Best models analysis hyper parameters tunning new test data.xlsx',
+         best_model_to_plot_file_name='Best models analysis hyper parameters tunning new test data for plot.csv'
+    )

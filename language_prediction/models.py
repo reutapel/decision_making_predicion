@@ -1228,6 +1228,10 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
         if torch.cuda.is_available():  # change to cuda
             source = source.cuda()
             target = target.cuda()
+            tgt_key_padding_mask = tgt_key_padding_mask.cuda()
+            src_key_padding_mask = src_key_padding_mask.cuda()
+            tgt_key_padding_mask_byte = tgt_key_padding_mask_byte.cuda()
+            src_key_padding_mask_byte = src_key_padding_mask_byte.cuda()
             if seq_labels is not None:
                 seq_labels = seq_labels.cuda()
             if reg_labels is not None:

@@ -12,14 +12,19 @@ import math
 from data_analysis import create_chart_bars, create_statistics, create_point_plot, create_histogram, create_bar_from_df
 from collections import defaultdict
 import collections
+import copy
 
 
 base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'verbal_test_data'
-data_type = 'test_data'
+condition_directory = 'verbal'
+data_type = 'train_data'
+# what is the % of rounds the experts need to take the same strategy so we set this strategy for him
+pct_to_set_expert_status = 0.6
+# can be: group_average_score or avg_most_close_score
+column_to_define_exaggerate = 'avg_most_close_score'
 log_file_name = os.path.join(orig_data_analysis_directory, date_directory,
                              datetime.now().strftime('LogFile_data_analysis_%d_%m_%Y_%H_%M_%S.log'))
 
@@ -242,14 +247,22 @@ class DataAnalysis:
         hotels_scores_id['min_diff_score'] = hotels_scores_id[hotles_score_diff_list].min(axis=1)
         hotels_scores_id['avg_most_close_review_index'] = np.empty((len(hotels_scores_id), 0)).tolist()
         for index, row in hotels_scores_id.iterrows():
+            closest_score = None
             for i in range(0, 7):
                 if row[f'diff_{i}'] == row['min_diff_score']:
                     hotels_scores_id.at[index, 'avg_most_close_review_index'] += [i]
+                    if row[f'score_{i}'] != closest_score:
+                        if closest_score is not None:
+                            print(f'2 different most closest scores, hotel id {row.hotel_id}, '
+                                  f'scores: {closest_score} and {row[f"score_{i}"]}')
+                        closest_score = row[f'score_{i}']
 
-        participants_rounds = participants_rounds.merge(hotels_scores_id[['hotel_id', 'avg_most_close_review_index']],
-                                                        on='hotel_id')
+            hotels_scores_id.at[index, 'avg_most_close_score'] = closest_score
+
+        participants_rounds = participants_rounds.merge(hotels_scores_id[['hotel_id', 'avg_most_close_review_index',
+                                                                          'avg_most_close_score']], on='hotel_id')
         self.results_payments = self.results_payments.merge(
-            participants_rounds[['participant_code', 'subsession_round_number', 'hotel_id',
+            participants_rounds[['participant_code', 'subsession_round_number', 'hotel_id', 'avg_most_close_score',
                                  'avg_most_close_review_index']], on=['participant_code', 'subsession_round_number'],
             how='left')
 
@@ -663,10 +676,17 @@ class DataAnalysis:
             self.results_payments.loc[
                 (~self.results_payments.participant_code.isin(didnt_see_intro)) &
                 (self.results_payments.player_intro_test.isnull()) &
+                (self.results_payments.subsession_round_number == 1) &
                 (self.results_payments.status != 'wait') & (self.results_payments.subsession_round_number == 1) &
-                (~self.results_payments.participant_mturk_worker_id.isnull())].participant_code.unique()
-        self.results_payments.loc[self.results_payments.participant_code.isin(participants_drop_timeout), 'status'] =\
-            'drop_timeout'
+                (~self.results_payments.participant_mturk_worker_id.isnull())][['participant_code', 'pair_id']]
+        self.results_payments.loc[self.results_payments.participant_code.isin(
+            participants_drop_timeout.participant_code), 'status'] = 'drop_timeout'
+
+        # participant without partner
+        no_partner = self.results_payments.groupby(by='pair_id').participant_code.count()
+        no_partner_pair_id = no_partner[no_partner == 10].index.unique()
+        self.results_payments.loc[self.results_payments.pair_id.isin(no_partner_pair_id), 'status'] = 'no_partner'
+
         # answered correctly on first test
         participants_answered_correct_first_test =\
             self.results_payments.loc[(self.results_payments.player_intro_test.str.lower() == 'sdkot') &
@@ -697,19 +717,29 @@ class DataAnalysis:
                                   (self.results_payments.first_test_status == 1), 'second_test_status'] =\
             'dm_not_took_second_test'
         # status based on first test
+        participants_pass_first_test_partner_drop = \
+            self.results_payments.loc[
+                (self.results_payments.first_test_status == 1) & (self.results_payments.player_name.isnull()) &
+                (self.results_payments.subsession_round_number == 1) &
+                (self.results_payments.player_name.isnull()) &
+                (self.results_payments.pair_id.isin(participants_drop_timeout.pair_id))].participant_code.unique()
+        self.results_payments.loc[
+            (self.results_payments.participant_code.isin(participants_pass_first_test_partner_drop) &
+             (self.results_payments.status == '')), 'status'] = 'pass_first_test_partner_drop_before_test'
+        self.results_payments.loc[(self.results_payments.first_test_status == 0) &
+                                  (self.results_payments.status == ''), 'status'] = 'failed_first_test'
+        pairs_at_least_one_failed_first =\
+            self.results_payments.loc[self.results_payments.status == 'failed_first_test'].pair_id.unique()
         participants_pass_first_test_partner_not =\
             self.results_payments.loc[(self.results_payments.first_test_status == 1) &
                                       (self.results_payments.player_name.isnull()) &
-                                      (self.results_payments.subsession_round_number == 1)].participant_code.unique()
+                                      (self.results_payments.subsession_round_number == 1) &
+                                      (self.results_payments.pair_id.isin(pairs_at_least_one_failed_first))].\
+                participant_code.unique()
         self.results_payments.loc[
-            (self.results_payments.participant_code.isin(participants_pass_first_test_partner_not)) &
-            (self.results_payments.participant__current_page_name != 'AfterIntroTest'), 'status'] =\
+            (self.results_payments.status == '') &
+            (self.results_payments.participant_code.isin(participants_pass_first_test_partner_not)), 'status'] =\
             'pass_first_test_partner_not'
-        self.results_payments.loc[
-            (self.results_payments.participant_code.isin(participants_pass_first_test_partner_not)) &
-            (self.results_payments.participant__current_page_name == 'AfterIntroTest'), 'status'] =\
-            'pass_first_test_partner_drop'
-        self.results_payments.loc[(self.results_payments.first_test_status == 0), 'status'] = 'failed_first_test'
         # self.results_payments.loc[
         #     (self.results_payments.first_test_status == 1) &
         #     (~self.results_payments.participant_code.isin(participants_pass_first_test_partner_not)) &
@@ -721,19 +751,22 @@ class DataAnalysis:
                                       (~self.results_payments.player_name.isnull()) &
                                       (self.results_payments.status.isin(['', 'expert_pass_first_test'])) &
                                       (self.results_payments.subsession_round_number == 1) &
-                                      (self.results_payments.group_lottery_result.isnull())][
-                ['participant_code', 'pair_id']]
+                                      (self.results_payments.group_lottery_result.isnull()) &
+                                      (self.results_payments.status == '')][['participant_code', 'pair_id']]
         left_before_start_after_test = \
             self.results_payments.loc[(self.results_payments.first_test_status == 1) &
                                       (self.results_payments.player_name.isnull()) &
                                       (self.results_payments.subsession_round_number == 1) &
                                       (self.results_payments.pair_id.isin(
                                           partner_left_before_start_after_test.pair_id)) &
+                                      (self.results_payments.status == '') &
                                       (self.results_payments.group_lottery_result.isnull())].participant_code.unique()
         partner_left_before_start_after_test = partner_left_before_start_after_test.participant_code.unique()
-        self.results_payments.loc[self.results_payments.participant_code.isin(partner_left_before_start_after_test),
+        self.results_payments.loc[self.results_payments.participant_code.isin(partner_left_before_start_after_test) &
+                                  (self.results_payments.status == ''),
                                   'status'] = 'partner_left_before_start_after_test'
-        self.results_payments.loc[self.results_payments.participant_code.isin(left_before_start_after_test),
+        self.results_payments.loc[self.results_payments.participant_code.isin(left_before_start_after_test) &
+                                  (self.results_payments.status == ''),
                                   'status'] = 'left_before_start_after_test'
         # left_before_start: didn't start to play, didn't insert personal info and have not got paid
         self.results_payments.loc[(~self.results_payments['participant_code'].isin(self.participants_started)) &
@@ -744,19 +777,22 @@ class DataAnalysis:
                                   (~self.results_payments.first_test_status.isin([0, 1])) &
                                   (~self.results_payments.participant_code.isin(partner_left_before_start_after_test)) &
                                   (~self.results_payments.participant_code.isin(left_before_start_after_test)) &
-                                  (~self.results_payments.player_intro_test.isnull()), 'status'] = 'left_before_start'
+                                  (~self.results_payments.player_intro_test.isnull()) &
+                                  (self.results_payments.status == ''), 'status'] = 'left_before_start'
         # unknown: didn't start to play, didn't insert personal info and have not got paid, but payoff higher than 0
         self.results_payments.loc[(~self.results_payments['participant_code'].isin(self.participants_started)) &
                                   (self.results_payments['participant__current_page_name'] != 'AfterInstructions') &
                                   (self.results_payments.total_pay.isnull()) &
-                                  (self.results_payments.participant_payoff > 0), 'status'] = 'unknown'
+                                  (self.results_payments.participant_payoff > 0) &
+                                  (self.results_payments.status == ''), 'status'] = 'unknown'
         # wait_but_not_got_paid: didn't start to play, didn't insert personal info and have not got paid,
         # but payoff is negative
         self.results_payments.loc[(~self.results_payments['participant_code'].isin(self.participants_started)) &
                                   (self.results_payments['participant__current_page_name'] != 'AfterInstructions') &
                                   (self.results_payments.total_pay.isnull()) &
                                   (self.results_payments.participant_payoff < -2.5) &
-                                  (self.results_payments.first_test_status != 0), 'status'] = 'wait_but_not_got_paid'
+                                  (self.results_payments.first_test_status != 0) &
+                                  (self.results_payments.status == ''), 'status'] = 'wait_but_not_got_paid'
         # left: played and left in the middle. They started, but not got money
         left_pairs =\
             self.results_payments.loc[(self.results_payments['participant_code'].isin(self.participants_started)) &
@@ -773,8 +809,10 @@ class DataAnalysis:
         partner_left = self.results_payments.loc[
             (self.results_payments.pair_id.isin(left_pairs.pair_id)) &
             (~self.results_payments.participant_code.isin(left_pairs.participant_code))].participant_code.unique()
-        self.results_payments.loc[self.results_payments.participant_code.isin(left_participants), 'status'] = 'left'
-        self.results_payments.loc[self.results_payments.participant_code.isin(partner_left), 'status'] = 'partner_left'
+        self.results_payments.loc[self.results_payments.participant_code.isin(left_participants) &
+                                  (self.results_payments.status == ''), 'status'] = 'left'
+        self.results_payments.loc[self.results_payments.participant_code.isin(partner_left) &
+                                  (self.results_payments.status == ''), 'status'] = 'partner_left'
 
         all_left_participants = np.concatenate((left_participants, partner_left_before_start_after_test,
                                                 left_before_start_after_test, partner_left))
@@ -968,6 +1006,312 @@ class DataAnalysis:
 
         return
 
+    def define_expert_strategy(self):
+        self.results_payments['exaggerate'] =\
+            self.results_payments.apply(lambda x: (x['group_sender_answer_scores'] - x[column_to_define_exaggerate]) /
+                                                  (x['group_score_6'] - x[column_to_define_exaggerate]), axis=1)
+        data_to_analyze = self.results_payments.loc[(self.results_payments.status.isin(['play'])) &
+                                                    (self.results_payments.player_id_in_group == 1) &
+                                                    (self.results_payments.player_timeout == 0)]
+        # define honest experts: in pct_to_set_expert_status of the rounds choose either the median score of
+        # the score that is most close # to the average score
+        # use median
+        data_to_analyze['use_median'] =\
+            np.where(data_to_analyze.group_sender_answer_scores == data_to_analyze.group_median_score, 1,
+                     np.where(data_to_analyze.chose_most_average_close == 1, 1, 0))
+
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_median': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_honest'] = experts_sum.use_median / experts_sum.subsession_round_number
+        experts_sum['honest_prob_status'] = np.where(experts_sum.pct_honest >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_honest']], left_on='participant_code',
+                                                right_index=True, how='left')
+
+        # define exaggerate experts: in pct_to_set_expert_status of the rounds choose score which is higher
+        # than the average
+        data_to_analyze['use_higher_than_avg'] =\
+            np.where(((data_to_analyze.group_sender_answer_scores > data_to_analyze[column_to_define_exaggerate]) &
+                      (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score)), 1, 0)
+
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_higher_than_avg': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_always_exaggerate'] = experts_sum.use_higher_than_avg / experts_sum.subsession_round_number
+        experts_sum['always_exaggerate_prob_status'] =\
+            np.where(experts_sum.pct_always_exaggerate >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_always_exaggerate']], left_on='participant_code',
+                                                right_index=True)
+
+        # define high exaggerate: in pct_to_set_expert_status of the rounds choose the exaggerate >= 0.5
+        # data_to_analyze['high_exaggerate'] =\
+        #     np.where((data_to_analyze.exaggerate >= 0.5) & (data_to_analyze.chose_most_average_close == 0) &
+        #              (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score), 1, 0)
+        #
+        # experts_sum = data_to_analyze.groupby(by='participant_code').agg({'high_exaggerate': 'sum',
+        #                                                                   'subsession_round_number': 'count'})
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum['pct_high_exaggerate'] = experts_sum.high_exaggerate / experts_sum.subsession_round_number
+        # experts_sum['high_exaggerate_prob_status'] = \
+        #     np.where(experts_sum.pct_high_exaggerate >= pct_to_set_expert_status, 1, 0)
+        # data_to_analyze = data_to_analyze.merge(experts_sum[['pct_high_exaggerate']], left_on='participant_code',
+        #                                         right_index=True,  how='left')
+
+        # define low exaggerate: in pct_to_set_expert_status of the rounds choose the 0 < exaggerate < 0.5.
+        # (including the average or median)
+        # data_to_analyze['low_exaggerate_or_avg'] = np.where(data_to_analyze.exaggerate.between(0, 0.5), 1, 0)
+        #
+        # experts_sum = data_to_analyze.groupby(by='participant_code').agg({'low_exaggerate_or_avg': 'sum',
+        #                                                                   'subsession_round_number': 'count'})
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum['pct_low_exaggerate_or_avg'] = experts_sum.low_exaggerate_or_avg /\
+        #                                            experts_sum.subsession_round_number
+        # experts_sum['low_exaggerate_or_avg_prob_status'] = \
+        #     np.where(experts_sum.pct_low_exaggerate_or_avg >= pct_to_set_expert_status, 1, 0)
+        # data_to_analyze = data_to_analyze.merge(experts_sum[['pct_low_exaggerate_or_avg']], left_on='participant_code',
+        #                                         right_index=True, how='left')
+
+        # define median exaggerate: in pct_to_set_expert_status of the rounds choose the 0.33 < exaggerate < 0.67
+        # (including the average or median)
+        # data_to_analyze['med_exaggerate'] =\
+        #     np.where(data_to_analyze.exaggerate.between(0.34, 0.67) & (data_to_analyze.chose_most_average_close == 0) &
+        #              (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score), 1, 0)
+        #
+        # experts_sum = data_to_analyze.groupby(by='participant_code').agg({'med_exaggerate': 'sum',
+        #                                                                   'subsession_round_number': 'count'})
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum['pct_med_exaggerate'] = experts_sum.med_exaggerate / experts_sum.subsession_round_number
+        # experts_sum['med_exaggerate_prob_status'] = \
+        #     np.where(experts_sum.pct_med_exaggerate >= pct_to_set_expert_status, 1, 0)
+        # data_to_analyze = data_to_analyze.merge(experts_sum[['pct_med_exaggerate']], left_on='participant_code',
+        #                                         right_index=True,  how='left')
+
+        # use_higher_than_avg_prob_status_participants =\
+        #     experts_sum.loc[experts_sum.use_higher_than_avg_prob_status == 1].index.tolist()
+        # self.results_payments['expert_strategy'] = \
+        #     np.where(self.results_payments.participant_code.isin(use_higher_than_avg_prob_status_participants),
+        #              'always_exaggerate', self.results_payments.expert_strategy)
+
+        # define always higher than 8: in pct_to_se't_expert_status of the rounds choose score higher than 8
+        # data_to_analyze['use_higher_than_8_or_avg'] = \
+        #     np.where((data_to_analyze.group_sender_answer_scores > 8) & (data_to_analyze.group_average_score > 8), 1,
+        #              np.where((data_to_analyze.group_average_score < 8) &
+        #                       (data_to_analyze.group_sender_answer_scores > data_to_analyze.group_average_score), 1, 0))
+        #
+        # experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_higher_than_8_or_avg': 'sum',
+        #                                                                   'subsession_round_number': 'count'})
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum['pct_always_higher_than_8_or_avg'] = experts_sum.use_higher_than_8_or_avg / \
+        #                                                  experts_sum.subsession_round_number
+        # experts_sum['always_higher_than_8_prob_status_or_avg'] = \
+        #     np.where(experts_sum.pct_always_higher_than_8_or_avg >= pct_to_set_expert_status, 1, 0)
+        # data_to_analyze = data_to_analyze.merge(experts_sum[['pct_always_higher_than_8_or_avg']],
+        #                                         left_on='participant_code', right_index=True)
+
+        # strategy suggestion: give average when average > 7.5, otherwise exaggerate
+        data_to_analyze['exaggerate_when_low'] = np.where(((data_to_analyze.group_sender_answer_scores >
+                                                            data_to_analyze.group_average_score) &
+                                                           (data_to_analyze.group_sender_answer_scores !=
+                                                            data_to_analyze.group_median_score) &
+                                                           (data_to_analyze.group_average_score < 7.5)), 1, 0)
+        data_to_analyze['avg_when_high'] =\
+            np.where((data_to_analyze.group_sender_answer_scores == data_to_analyze.group_median_score) &
+                     (data_to_analyze.group_average_score > 7.5), 1,
+                     np.where((data_to_analyze.chose_most_average_close == 1) &
+                              (data_to_analyze.group_average_score > 7.5), 1, 0))
+        data_to_analyze['avg_when_high_exaggerate_when_low'] = np.where((data_to_analyze.exaggerate_when_low == 1) &
+                                                                        (data_to_analyze.avg_when_high == 1), 1, 0)
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'avg_when_high_exaggerate_when_low': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_avg_when_high_exaggerate_when_low'] = \
+            experts_sum.avg_when_high_exaggerate_when_low / experts_sum.subsession_round_number
+        experts_sum['avg_when_high_exaggerate_when_low_prob_status'] =\
+            np.where(experts_sum.pct_avg_when_high_exaggerate_when_low >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_avg_when_high_exaggerate_when_low']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        # strategy suggestion: give lower when average > 7.5, otherwise exaggerate
+        data_to_analyze['lower_when_high'] = \
+            np.where((data_to_analyze.group_sender_answer_scores < data_to_analyze.group_average_score) &
+                     (data_to_analyze.group_average_score > 7.5), 1, 0)
+        data_to_analyze['lower_when_high_exaggerate_when_low'] = np.where((data_to_analyze.exaggerate_when_low == 1) &
+                                                                          (data_to_analyze.lower_when_high == 1), 1, 0)
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'lower_when_high_exaggerate_when_low': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_lower_when_high_exaggerate_when_low'] =\
+            experts_sum.lower_when_high_exaggerate_when_low / experts_sum.subsession_round_number
+        experts_sum['lower_when_high_exaggerate_when_low_prob_status'] =\
+            np.where(experts_sum.pct_lower_when_high_exaggerate_when_low >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_lower_when_high_exaggerate_when_low']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        # define exaggerate down experts: in pct_to_set_expert_status of the rounds choose score which is lower
+        # than the average
+        data_to_analyze['use_lower_than_avg'] = \
+            np.where(((data_to_analyze.group_sender_answer_scores < data_to_analyze[column_to_define_exaggerate]) &
+                      (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score)), 1, 0)
+
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_lower_than_avg': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_always_lower_exaggerate'] = experts_sum.use_lower_than_avg / \
+                                                     experts_sum.subsession_round_number
+        experts_sum['always_lower_exaggerate_prob_status'] = \
+            np.where(experts_sum.pct_always_lower_exaggerate >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_always_lower_exaggerate']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        # define Strategic exaggeration experts: in pct_to_set_expert_status of the rounds:
+        # in bad hotels (avg score < 7.5) --> choose score lower than the avg,
+        # in all other rounds choose score higher than the avg
+        data_to_analyze['strategic_exaggeration'] =\
+            np.where(((data_to_analyze.group_sender_answer_scores < data_to_analyze[column_to_define_exaggerate]) &
+                      (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
+                      (data_to_analyze.group_average_score < 7)), 1,
+                     (np.where((data_to_analyze.group_sender_answer_scores > data_to_analyze[column_to_define_exaggerate]) &
+                               (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
+                               (data_to_analyze.group_average_score.between(7, 8)), 1,
+                               (np.where(
+                                   (data_to_analyze.chose_most_average_close == 1) &
+                                   (data_to_analyze.group_sender_answer_scores == data_to_analyze.group_median_score) &
+                                   (data_to_analyze.group_average_score > 8), 1, 0)))))
+
+        # experts_sum = copy.deepcopy(data_to_analyze)
+        # experts_sum = experts_sum.loc[data_to_analyze.group_average_score < 8]
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'strategic_exaggeration': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_strategic_exaggeration'] = experts_sum.strategic_exaggeration /\
+                                                    experts_sum.subsession_round_number
+        experts_sum['strategic_exaggeration_prob_status'] = \
+            np.where(experts_sum.pct_strategic_exaggeration >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_strategic_exaggeration']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        # define highest score experts: always choose the highest score
+        data_to_analyze['highest_score'] =\
+            np.where(data_to_analyze.group_sender_answer_scores == data_to_analyze.group_score_6, 1, 0)
+
+        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'highest_score': 'sum',
+                                                                          'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        experts_sum['pct_highest_score'] = experts_sum.highest_score / experts_sum.subsession_round_number
+        experts_sum['highest_score_prob_status'] = \
+            np.where(experts_sum.pct_highest_score >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_highest_score']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        # define switch exaggerate strategy:  each round switch the exaggerate side
+        data_to_analyze = data_to_analyze.sort_values(by=['participant_code', 'subsession_round_number'])
+        data_to_analyze['previous_exaggerate'] = data_to_analyze.exaggerate.shift(1)
+        # add previous_exaggerate != exaggerate -> so they will not be honest in 2 rounds
+        data_to_analyze['switch_exaggerate'] =\
+            np.where((data_to_analyze.previous_exaggerate * data_to_analyze.exaggerate <= 0) &
+                     (data_to_analyze.previous_exaggerate != data_to_analyze.exaggerate), 1, 0)
+        experts_sum = copy.deepcopy(data_to_analyze)
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number > 1]  # remove the first round
+        experts_sum = experts_sum.groupby(by='participant_code').agg({'switch_exaggerate': 'sum',
+                                                                      'subsession_round_number': 'count'})
+        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 8]
+        experts_sum['pct_switch_exaggerate'] = experts_sum.switch_exaggerate / experts_sum.subsession_round_number
+        experts_sum['switch_exaggerate_prob_status'] = \
+            np.where(experts_sum.pct_switch_exaggerate >= pct_to_set_expert_status, 1, 0)
+        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_switch_exaggerate']],
+                                                left_on='participant_code', right_index=True, how='left')
+
+        pct_columns =\
+            [col for col in data_to_analyze.columns if 'pct' in col and col != 'pct_timeout'] + ['participant_code']
+        data_to_argmax = data_to_analyze[pct_columns]
+        data_to_argmax = data_to_argmax.drop_duplicates()
+        data_to_argmax.index = data_to_argmax.participant_code
+        data_to_argmax = data_to_argmax.drop('participant_code', axis=1)
+        pct_columns.remove('participant_code')
+        data_to_argmax['expert_max_pct_strategy'] = data_to_argmax.max(axis="columns")
+        data_to_argmax['expert_strategy'] = data_to_argmax.idxmax(axis="columns")
+        data_to_argmax['expert_strategy'] =\
+            np.where(data_to_argmax['expert_max_pct_strategy'] >= pct_to_set_expert_status,
+                     data_to_argmax['expert_strategy'], 'none')
+
+        # print numbers:
+        print(f'Experts strategies: {data_to_argmax.groupby(by="expert_strategy").count()}')
+        self.results_payments = self.results_payments.merge(data_to_argmax[['expert_strategy']], how='left',
+                                                            left_on='participant_code', right_index=True)
+        # num_honests = \
+        #     self.results_payments.loc[self.results_payments.expert_strategy == 'honest'].participant_code.unique().shape
+        # print(f"Number of Honest: {num_honests}")
+        # num_exaggerate = self.results_payments.loc[self.results_payments.expert_strategy ==
+        #                                            'always_exaggerate'].participant_code.unique().shape
+        # print(f"Number of always exaggerate experts: {num_exaggerate}")
+        # num_exaggerate_lower = self.results_payments.loc[self.results_payments.expert_strategy ==
+        #                                                  'always_lower_exaggerate'].participant_code.unique().shape
+        # print(f"Number of always lower exaggerate experts: {num_exaggerate_lower}")
+        # num_strategic = self.results_payments.loc[self.results_payments.expert_strategy ==
+        #                                           'strategic_exaggeration'].participant_code.unique().shape
+        # print(f"Number of strategic exaggeration experts: {num_strategic}")
+        # num_strategic = self.results_payments.loc[self.results_payments.expert_strategy ==
+        #                                           'lower_when_high_exaggerate_when_low'].participant_code.unique().shape
+        # print(f"Number of lower_when_high_exaggerate_when_low experts: {num_strategic}")
+        # num_strategic = self.results_payments.loc[self.results_payments.expert_strategy ==
+        #                                           'avg_when_high_exaggerate_when_low'].participant_code.unique().shape
+        # print(f"Number of avg_when_high_exaggerate_when_low experts: {num_strategic}")
+
+        # create_graph
+        x_points_expert_payoff = list()
+        y_points_expert_payoff = list()
+        x_points_diff_from_avg = list()
+        y_points_diff_from_avg = list()
+        x_points_none_strategy = list()
+        y_points_none_strategy = list()
+        pct_columns.append('none')
+        legend = copy.deepcopy(pct_columns)
+        for strategy in pct_columns:
+            x = self.results_payments.loc[(self.results_payments.expert_strategy == strategy)]
+            if x.empty:
+                legend.remove(strategy)
+                continue
+            expert_payoff = x.groupby(by='subsession_round_number').group_sender_payoff.mean()
+            x_points_expert_payoff.append(expert_payoff.index)
+            y_points_expert_payoff.append(expert_payoff.values)
+
+            x['diff_from_avg'] = x.group_sender_answer_scores - x.group_average_score
+            diff_from_avg = x.groupby(by='subsession_round_number').diff_from_avg.mean()
+            x_points_diff_from_avg.append(diff_from_avg.index)
+            y_points_diff_from_avg.append(diff_from_avg.values)
+
+            if strategy == 'none':
+                none_experts = x.participant_code.unique().tolist()
+                for expert in none_experts:
+                    expert_data = x.loc[x.participant_code == expert]
+                    x_points_none_strategy.append(expert_data.subsession_round_number.values.tolist())
+                    y_points_none_strategy.append(expert_data.diff_from_avg.values.tolist())
+                create_point_plot(points_x=x_points_none_strategy, points_y=y_points_none_strategy,
+                                  legend=none_experts,
+                                  title=f'Difference from average as a function of the round number None strategy '
+                                        f'expert for {self.condition} condition and {self.gender}',
+                                  xlabel='Round Number', ylabel='Implied Score - Average Score',
+                                  add_truth_telling=False, add_line_between_points=False, add_line_points=True,
+                                  curr_date_directory=data_analysis_directory)
+
+        create_point_plot(points_x=x_points_expert_payoff, points_y=y_points_expert_payoff,
+                          legend=legend,
+                          title=f'Expert average payoff as a function of the round number per expert strategy for '
+                                f'{self.condition} condition and {self.gender}',
+                          xlabel='Round Number', ylabel='Expert Average Payoff', add_truth_telling=False,
+                          add_line_between_points=False, add_line_points=True,
+                          curr_date_directory=data_analysis_directory)
+
+        create_point_plot(points_x=x_points_diff_from_avg, points_y=y_points_diff_from_avg,
+                          legend=legend,
+                          title=f'Difference from average as a function of the round number per expert strategy for '
+                                f'{self.condition} condition and {self.gender}',
+                          xlabel='Round Number', ylabel='Implied Score - Average Score', add_truth_telling=False,
+                          add_line_between_points=False, add_line_points=True,
+                          curr_date_directory=data_analysis_directory)
+
+        return
+
     def sender_answer_analysis(self):
         """
         This function analyze some measures: probability difference, always answer 0/1 or 3 values
@@ -1048,7 +1392,7 @@ class DataAnalysis:
                                                                           'subsession_round_number': 'count'})
         experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_use_average'] = experts_sum.use_average / experts_sum.subsession_round_number
-        experts_sum['use_average_prob_status'] = np.where(experts_sum.pct_use_average >= 0.6, 1, 0)
+        experts_sum['use_average_prob_status'] = np.where(experts_sum.pct_use_average >= pct_to_set_expert_status, 1, 0)
         use_average_participants = experts_sum.loc[experts_sum.use_average_prob_status == 1].index.tolist()
         self.results_payments.loc[self.results_payments.participant_code.isin(use_average_participants), 'prob_status']\
             += 'use_average'
@@ -1933,9 +2277,9 @@ class DataAnalysis:
         print(f'start of dm_entered_per_review_features: '
               f'{self.results_payments.loc[self.results_payments.status == "play"].shape}')
         os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
-        manual_features = pd.read_excel(os.path.join(
-            os.path.abspath(os.chdir('..')), 'language_prediction', 'data', 'verbal',
-            f'manual_binary_features_{data_type}.xlsx'))
+        manual_features = pd.read_excel(f'/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
+                                        f'decision_prediction/language_prediction/data/verbal/'
+                                        f'manual_binary_features_{data_type}.xlsx')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][
@@ -2044,31 +2388,32 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.set_previous_round_measures()
     data_analysis_obj.define_player_status()
     data_analysis_obj.round_analysis()
+    data_analysis_obj.average_most_close_hotel_id()
+    data_analysis_obj.sender_answer_analysis()
+    data_analysis_obj.define_expert_strategy()
     data_analysis_obj.print_pairs()
     data_analysis_obj.enterance_per_number_of_enterences()
     data_analysis_obj.calculate_linear_score()
     # data_analysis_obj.eval_real_score_analysis()
-    data_analysis_obj.average_most_close_hotel_id()
     data_analysis_obj.dm_entered_per_review_features()
-    data_analysis_obj.expert_answer_vs_average_score()
-    data_analysis_obj.analyze_dm_payoff()
-    data_analysis_obj.expert_answer_vs_ep()
-    data_analysis_obj.analyze_expert_answer()
+    # data_analysis_obj.expert_answer_vs_average_score()
+    # data_analysis_obj.analyze_dm_payoff()
+    # data_analysis_obj.expert_answer_vs_ep()
+    # data_analysis_obj.analyze_expert_answer()
     data_analysis_obj.set_all_history_measures()
     data_analysis_obj.time_spent_analysis()
     data_analysis_obj.pct_entered_graph()
     data_analysis_obj.set_expert_answer_scores_reviews_len_verbal_cond()
-    data_analysis_obj.compare_experts_choices_per_condition()
-    data_analysis_obj.compare_experts_choices()
-    data_analysis_obj.pct_entered_two_parameters()
-    data_analysis_obj.how_much_pay()
-    data_analysis_obj.sender_answer_analysis()
-    data_analysis_obj.bonus_analysis()
+    # data_analysis_obj.compare_experts_choices_per_condition()
+    # data_analysis_obj.compare_experts_choices()
+    # data_analysis_obj.pct_entered_two_parameters()
+    # data_analysis_obj.how_much_pay()
+    # data_analysis_obj.bonus_analysis()
     data_analysis_obj.define_total_payoff_no_partner_timeout()
     data_analysis_obj.effectiveness_measure()
-    data_analysis_obj.expert_payoff_analysis()
+    # data_analysis_obj.expert_payoff_analysis()
     data_analysis_obj.define_prob_status_for_dm()
-    data_analysis_obj.pct_entered_file()
+    # data_analysis_obj.pct_entered_file()
     # data_analysis_obj.plot_expected_analysis()
     # data_analysis_obj.anaylze_zero_one_accurate()
     # data_analysis_obj.not_zero_one_changed_to_zero_one()

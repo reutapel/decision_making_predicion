@@ -253,9 +253,9 @@ class CreateSaveData:
         :param raisha_data_in_sequence: if the raisha data is not in the saifa features but in the seq
         :param no_decision_features: if we want to check models without decision features
         """
-        print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}.csv")}')
+        print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}_{data_type}.csv")}')
         logging.info('Start create and save data for file: {}'.
-                     format(os.path.join(data_directory, f'{load_file_name}.csv')))
+                     format(os.path.join(data_directory, f'{load_file_name}_{data_type}.csv')))
 
         # load the data and keep only play pairs and only one row for each round for each pair
         # columns_to_use = ['pair_id', 'status', 'subsession_round_number', 'group_sender_answer_reviews',
@@ -264,7 +264,7 @@ class CreateSaveData:
         # 'lottery_result_low', 'lottery_result_med1', 'lottery_result_high', 'previous_round_lottery_result_low',
         #                   'previous_round_lottery_result_med1', 'previous_round_lottery_result_high',
         # 'previous_group_average_score_low', 'previous_group_average_score_high', 'player_id_in_group']
-        self.data = pd.read_csv(os.path.join(data_directory, f'{load_file_name}.csv'))  # , usecols=columns_to_use)
+        self.data = pd.read_csv(os.path.join(data_directory, f'{load_file_name}_{data_type}.csv'))  # , usecols=columns_to_use)
         print(f'Number of rows in data: {self.data.shape[0]}')
         self.data = self.data.loc[(self.data.status == 'play') & (self.data.player_id_in_group == 2)]
         print(f'Number of rows in data: {self.data.shape[0]} after keep only play and decision makers')
@@ -281,8 +281,14 @@ class CreateSaveData:
                     reviews_features_files_list.append(joblib.load(os.path.join(
                         data_directory, f'{features_file}_{data_type}.{features_file_type}')))
                 elif features_file_type == 'xlsx':
-                    reviews_features_files_list.append(pd.read_excel(os.path.join(
-                        data_directory, f'{features_file}_{data_type}.{features_file_type}')))
+                    features = pd.read_excel(os.path.join(
+                        data_directory, f'{features_file}_{data_type}.{features_file_type}'))
+                    if data_type == 'test_data':  # change order to be the same as in the train data
+                        train_features = pd.read_excel(
+                            os.path.join(data_directory, f'{features_file}_train_data.{features_file_type}'))
+                        features = features[train_features.columns]
+                    reviews_features_files_list.append(features)
+
                 else:
                     print('Features file type is has to be pkl or xlsx')
                     return
@@ -393,7 +399,7 @@ class CreateSaveData:
                                'no_text_' if self.no_text else '',
                                f'{self.features_file_list}_' if self.use_manual_features and not self.no_text else '',
                                'predict_first_round_' if self.predict_first_round else '',
-                               'no_decision_features_' if no_decision_features else 'use_decision_features_',
+                               'no_decision_features_' if no_decision_features else '',  # 'use_decision_features_',
                                f'{condition}_{data_type}']
         self.base_file_name = ''.join(file_name_component)
         print(f'Create data for: {self.base_file_name}')
@@ -555,7 +561,7 @@ class CreateSaveData:
                         total_payoff_label=self.total_payoff_label, no_saifa_text=self.no_saifa_text,
                         only_saifa_text=self.saifa_only_prev_rounds_text)
                     data = data.merge(history_reviews, on='review_id', how='left')
-                if self.saifa_only_prev_rounds_text or self.no_saifa_text:
+                if (self.saifa_only_prev_rounds_text or self.no_saifa_text) and not self.saifa_average_text:
                     # remove curr_round_features because we have all saifa features
                     curr_round_features_columns = [column for column in data.columns if 'curr_round_feature' in column]
                     data = data.drop(curr_round_features_columns, axis=1)
@@ -1345,8 +1351,11 @@ class CreateSaveData:
                     else:
                         round_columns = text_columns
 
-                    if self.no_text:  # put only the decisions to all rounds --> the model will use only the raisha data
-                        round_columns = decisions_payoffs_columns
+                    if self.no_text:  # put only the decisions for raisha
+                        if round_num <= raisha:
+                            round_columns = decisions_payoffs_columns
+                        else:
+                            round_columns = list()
                     round_data = data_pair_label.loc[data_for_pairs.subsession_round_number == round_num].copy(deep=True)
                     round_data = round_data[round_columns]
                     round_data = round_data.values.tolist()[0]
@@ -1591,29 +1600,29 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = ['bert_embedding', 'manual_binary_features']
+    features_to_use = ['bert_embedding']
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': False,
-                   'use_prev_round_label': False,
+                   'use_prev_round_label': True,
                    'use_manual_features': True,
-                   'use_all_history_average': False,
+                   'use_all_history_average': True,
                    'use_all_history': False,
                    'use_all_history_text_average': True,
-                   'use_all_history_text': True,
+                   'use_all_history_text': False,
                    'raisha_data_first_round': False,  # use the raisha data only for the first round in the saifa
-                   'saifa_average_text': False,
-                   'no_saifa_text': False,
+                   'saifa_average_text': True,
+                   'no_saifa_text': True,
                    'no_decision_features': False,  # if we want to check models without decision features
-                   'saifa_only_prev_rounds_text': True,  # if we want to use only the previos text in the saifa, or in svm models if we want only the saifa text --> remove curr_round_feature
+                   'saifa_only_prev_rounds_text': False,  # if we want to use only the previos text in the saifa, or in svm models if we want only the saifa text --> remove curr_round_feature
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
-                   'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
+                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
                    'transformer_model': False,   # for transformer models-we need to create features also for the raisha
                    'raisha_data_in_sequence': False,  # if the raisha data is not in the saifa features but in the seq
-                   'label': 'future_total_payoff',
+                   'label': 'single_round',
                    },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
@@ -1639,7 +1648,7 @@ def main():
     }
     use_seq = False
     use_crf = False  # relevant to old version of crf
-    use_crf_raisha = False  # relevant to all sequential models in the raisha-saifa setting
+    use_crf_raisha = True  # relevant to all sequential models in the raisha-saifa setting
     string_labels = False  # labels are string --> for LSTM and transformer model
     data_type = 'train_data'  # it can be train_data or test_data
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True

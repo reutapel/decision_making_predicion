@@ -19,6 +19,8 @@ orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
 data_analysis_directory = os.path.join(orig_data_analysis_directory, date_directory)
 conditions = ['numeric', 'both', 'num_only', 'verbal']
+# can be: group_average_score or avg_most_close_score
+column_to_define_exaggerate = 'avg_most_close_score'
 
 
 all_conditions = ['num_only', 'both', 'numeric', 'verbal']
@@ -30,6 +32,11 @@ analysis_directory = os.path.join(base_directory, 'analysis', 'text_exp_2_tests'
 colors = {'verbal': 'purple', 'numeric': 'darkgreen', 'num_only': 'crimson', 'both': 'darkblue'}
 markers = {'verbal': 's', 'numeric': '.', 'num_only': 'v', 'both': 'd'}
 graph_directory = os.path.join(base_directory, 'per_study_graphs')
+
+strategies_dict = {'none': 'None of the strategies', 'pct_always_exaggerate': 'Always exaggerate',
+                   'pct_always_lower_exaggerate': 'Always Lower Than Average', 'pct_honest': 'Honest',
+                   'pct_strategic_exaggeration': 'Strategic Exaggeration',
+                   'pct_switch_exaggerate': 'Switch exaggeration sign between rounds'}
 
 
 # verbal condition only: for the computation paper
@@ -229,15 +236,15 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data['dm_expected_payoff'] = np.where(data.group_sender_payoff == 1, data.group_average_score - 8, 0)
     data = data[['group_sender_payoff',	'group_receiver_payoff', 'pair_id', 'group_lottery_result',
                  'group_average_score', 'group_sender_answer_scores', 'dm_expected_payoff', 'subsession_round_number',
-                 'group_score_6']]
+                 'group_score_6', 'expert_strategy', 'avg_most_close_score']]
     data['honesty'] = data['group_sender_answer_scores'] - data['group_average_score']
     data['expert_answer_above_8'] = np.where(data.group_sender_answer_scores > 8, 1, 0)
     data['best_reply'] = np.where((data['expert_answer_above_8'] == 1) & (data.group_sender_payoff == 1), 1,
                                   (np.where((data['expert_answer_above_8'] == 0) &
                                             (data.group_sender_payoff == 0), 1, 0)))
     data['first_half'] = np.where(data.subsession_round_number < 6, 1, 0)
-    data['laying'] = data.apply(lambda x: (x['group_sender_answer_scores'] - x['group_average_score']) /
-                                          (x['group_score_6'] - x['group_average_score']), axis=1)
+    data['laying'] = data.apply(lambda x: (x['group_sender_answer_scores'] - x[column_to_define_exaggerate]) /
+                                          (x['group_score_6'] - x[column_to_define_exaggerate]), axis=1)
     data['expert_want_to_persuade'] = np.where(data.group_sender_answer_scores > data.group_average_score, 1,
                                                np.where(data['expert_answer_above_8'] == 1, 1, 0))
 
@@ -367,14 +374,14 @@ def computation_paper_graphs(corr_data_path):
     # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
     # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
     fig.text(0.5, 0.04, 'Attribute Number', ha='center')
-    fig.text(0.08, 0.5, '% Decision-Makers', va='center', rotation='vertical')
+    fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
     fig.legend(axes,  # The line objects
                labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
                loc="upper center",  # Position of legend
                shadow=True, prop={"size": 8})
     plt.savefig("enterance_rate_per_manual_features.png", bbox_inches='tight')
 
-    # compare besrt-domain features
+    # compare bert-domain features
     fig, ax = plt.subplots()
     results_data = pd.DataFrame(bert_domain_compare, index=models_index)
     results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson'], ax=ax, alpha=0.75)
@@ -654,7 +661,8 @@ def payoff_graph(study: int, role_dict: dict, ylabel: str, title: str):
     fig1.savefig(os.path.join(graph_directory, f'{title}.png'), bbox_inches='tight')
 
 
-def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff: bool, laying_dict: dict=None):
+def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff: bool, laying_dict: dict=None,
+                        implied_score_5_8: bool=False):
     fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
     index = list(range(1, 11))
 
@@ -676,7 +684,10 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
 
         if expert_payoff:
             axes[study - 1].legend(loc='upper right', shadow=True, fontsize=8)
-            axes[study - 1].set_yticks(np.arange(0.6, 1.05, 0.05))
+            if implied_score_5_8:
+                axes[study - 1].set_yticks(np.arange(-0.05, 0.96, 0.1))
+            else:
+                axes[study - 1].set_yticks(np.arange(0.6, 1.05, 0.05))
         else:
             axes[study - 1].set_yticks(np.arange(-0.1, 0.7, 0.05))
             if study == 1:
@@ -705,7 +716,7 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
             axes[study - 1].set_title(f'Experiment {study}', fontsize=15, )
             axes[study - 1].set_xticks(range(4, 11))
             axes[study - 1].set_yticks(np.arange(-0.2, 0.9, 0.1))
-            axes[study - 1].set_xlabel('Expected Payoff', fontsize=12, )
+            axes[study - 1].set_xlabel("Hotel's Expected Value", fontsize=12, )
 
             if study == 1:
                 axes[study - 1].set_ylabel(ylabel='Exaggeration', fontsize=12, )
@@ -745,6 +756,7 @@ class SignificanceTests:
         self.linear_scores = defaultdict(pd.DataFrame)
         self.all_data = defaultdict(pd.DataFrame)
         self.expert_payoff_dict = dict()
+        self.expert_payoff_dict_5_8 = dict()
         self.dm_expected_payoff_dict = dict()
         self.laying_dict = dict()
         self.expert_payoff_dict_persuasion = dict()
@@ -762,6 +774,11 @@ class SignificanceTests:
                 dm_expected_payoff.mean().values.tolist()
             df_persuasion = df.loc[df.expert_want_to_persuade == 1]
             self.expert_payoff_dict_persuasion[condition] = df_persuasion.groupby(by='subsession_round_number').\
+                group_sender_payoff.mean().values.tolist()
+
+            # expert payiff for average score between 5 and 8
+            df = df.loc[df.group_sender_answer_scores.between(5, 8)]
+            self.expert_payoff_dict_5_8[condition] = df.groupby(by='subsession_round_number').\
                 group_sender_payoff.mean().values.tolist()
 
         return
@@ -822,7 +839,7 @@ class SignificanceTests:
             # x is a pd.DataFrame with one column, x.T.values[0] are its values
             cell_text = [x.T.values[0], values_study_1.values, values_study_2.values]
             columns = values_study_1.index.values
-            xlabel = 'Review Score'
+            xlabel = 'Implied Score'
             table_condition_names_per_study = {1: ['Numerical', 'Verbal'],
                                                2: ['Only\nNumerical', 'Verbal+\nNumerical']}
             # Add a table at the bottom of the axes
@@ -889,6 +906,19 @@ class SignificanceTests:
 
         significant_tests(study_1_cond, study_2_cond,
                           f'Understanding Level Study {func_study} '
+                          f'{conditions_per_study[func_study][0]}, {conditions_per_study[func_study][1]}')
+
+        # significant tests for lower than 5:
+        study_1_cond = self.all_data[conditions_per_study[func_study][0]]
+        study_2_cond = self.all_data[conditions_per_study[func_study][1]]
+        study_1_cond_low = study_1_cond.loc[study_1_cond.group_sender_answer_scores < 5]
+        study_2_cond_low = study_2_cond.loc[study_2_cond.group_sender_answer_scores < 5]
+        study_1_cond_low = pd.DataFrame(study_1_cond_low.groupby(by='pair_id').group_sender_payoff.mean())
+        study_1_cond_low.columns = ['low']
+        study_2_cond_low = pd.DataFrame(study_2_cond_low.groupby(by='pair_id').group_sender_payoff.mean())
+        study_2_cond_low.columns = ['low']
+        significant_tests(study_1_cond_low.low, study_2_cond_low.low,
+                          f'Understanding Level lower than 5 Study {func_study} '
                           f'{conditions_per_study[func_study][0]}, {conditions_per_study[func_study][1]}')
 
         return
@@ -1108,6 +1138,154 @@ class SignificanceTests:
             plt.show()
             fig1.savefig(os.path.join(graph_directory, f'Laying_graph_{study}_by_{by}.png'), bbox_inches='tight')
 
+    def score_5_4_analysis(self):
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
+        for study in [1, 2]:
+            study_1_cond = self.all_data[conditions_per_study[study][0]].loc[
+                self.all_data[conditions_per_study[study][0]].group_sender_answer_scores == 5.4]
+            study_2_cond = self.all_data[conditions_per_study[study][1]].loc[
+                self.all_data[conditions_per_study[study][1]].group_sender_answer_scores == 5.4]
+
+            study_1_cond = study_1_cond.groupby(by='subsession_round_number').group_sender_payoff.mean()
+            study_2_cond = study_2_cond.groupby(by='subsession_round_number').group_sender_payoff.mean()
+
+            axes[study - 1].plot(study_1_cond.index, study_1_cond.values,
+                                 color=colors[conditions_per_study[study][0]],
+                                 label=condition_names_per_study[study][0],
+                                 marker=markers[conditions_per_study[study][0]])
+            axes[study - 1].plot(study_2_cond.index, study_2_cond.values,
+                                 color=colors[conditions_per_study[study][1]],
+                                 label=condition_names_per_study[study][1],
+                                 marker=markers[conditions_per_study[study][1]])
+            axes[study - 1].set_title(f'Experiment {study}', fontsize=15)
+            axes[study - 1].set_xlabel('Trial Number', fontsize=15)
+            if study == 1:
+                axes[study - 1].set_ylabel('Fraction of Hotel choices', fontsize=15)
+            axes[study - 1].legend(loc='upper right', shadow=True, fontsize=8)
+            axes[study - 1].set_xticks(list(range(1, 11)))
+            axes[study - 1].set_yticks(np.arange(0.0, 1.01, 0.1))
+
+        fig.savefig(os.path.join(graph_directory, f'Entry_rate_score_5_4_2_axes.png'), bbox_inches='tight')
+
+    def exaggerate_strategy_analysis(self):
+        fig, axes = plt.subplots(2, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
+        for study in [1, 2]:
+            study_1_cond = self.all_data[conditions_per_study[study][0]].loc[
+                self.all_data[conditions_per_study[study][0]].expert_strategy == 'pct_always_exaggerate']
+            study_2_cond = self.all_data[conditions_per_study[study][1]].loc[
+                self.all_data[conditions_per_study[study][1]].expert_strategy == 'pct_always_exaggerate']
+
+            study_1_cond = study_1_cond.loc[study_1_cond.group_average_score.between(5, 8)]
+            study_2_cond = study_2_cond.loc[study_2_cond.group_average_score.between(5, 8)]
+
+            study_1_cond_groupby = pd.DataFrame(study_1_cond.groupby(by='pair_id').expert_answer_above_8.mean())
+            study_1_cond_groupby['always_above_8'] = np.where(study_1_cond_groupby.expert_answer_above_8 == 1, 1, 0)
+            study_2_cond_groupby = pd.DataFrame(study_2_cond.groupby(by='pair_id').expert_answer_above_8.mean())
+            study_2_cond_groupby['always_above_8'] = np.where(study_2_cond_groupby.expert_answer_above_8 == 1, 1, 0)
+
+            study_1_cond = study_1_cond.merge(study_1_cond_groupby[['always_above_8']], left_on='pair_id',
+                                              right_index=True)
+            study_2_cond = study_2_cond.merge(study_2_cond_groupby[['always_above_8']], left_on='pair_id',
+                                              right_index=True)
+
+            study_1_cond = study_1_cond.groupby(by=['subsession_round_number', 'group_average_score'])\
+                .always_above_8.mean()
+            study_2_cond = study_2_cond.groupby(by=['subsession_round_number', 'group_average_score'])\
+                .always_above_8.mean()
+
+            study_1_cond.unstack().plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'],
+                                        ax=axes[study - 1][0], legend=None)
+            study_2_cond.unstack().plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'],
+                                        ax=axes[study - 1][1], legend=None)
+
+            for i in [0, 1]:
+                axes[study - 1][i].set_title(f'Experiment {study} Condition {condition_names_per_study[study][i]}',
+                                             fontsize=10)
+                axes[study - 1][i].xaxis.set_label_text("")
+
+            if study == 1:
+                for i in [0,1]:
+                    axes[study - 1][i].tick_params(
+                        axis='x',  # changes apply to the x-axis
+                        which='both',  # both major and minor ticks are affected
+                        bottom=False,  # ticks along the bottom edge are off
+                        labelbottom=False)  # labels along the bottom edge are off
+
+            # axes[study - 1].set_xticks(x)
+            # axes[study - 1].set_yticks(np.arange(0.85, 0.05, 1.26))
+        fig.text(0.5, 0.04, 'Trail Number', ha='center', fontsize=10)
+        fig.text(0.08, 0.5, '% of Experts Always Above 8', va='center', rotation='vertical', fontsize=10)
+        handles, labels = axes[study - 1][0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper center', shadow=True, fontsize=8, title='Average Score')
+        fig.savefig(os.path.join(graph_directory, f'experts_always_above_8_bad_hotels.png'), bbox_inches='tight')
+
+    def expert_payoff_per_expert_strategy(self):
+        # expert payoff per expert strategy
+        axes_dict = {0: (0, 0), 1: (0, 1), 2: (0, 2), 3: (1, 0), 4: (1, 1), 5: (1, 2)}
+        for study in [1, 2]:
+            fig, axes = plt.subplots(2, 3, figsize=(12, 5))
+            study_1_cond = self.all_data[conditions_per_study[study][0]].loc[
+                ~self.all_data[conditions_per_study[study][0]].expert_strategy.isna()]
+            study_2_cond = self.all_data[conditions_per_study[study][1]].loc[
+                ~self.all_data[conditions_per_study[study][1]].expert_strategy.isna()]
+            strategies = list(set(study_1_cond.expert_strategy.unique().tolist() +
+                                  study_2_cond.expert_strategy.unique().tolist()))
+            for i, strategy in enumerate(strategies):
+                study_1_cond_strategy = study_1_cond.loc[study_1_cond.expert_strategy == strategy]
+                study_2_cond_strategy = study_2_cond.loc[study_2_cond.expert_strategy == strategy]
+
+                study_1_cond_strategy_per_round = study_1_cond_strategy.groupby(by='subsession_round_number').\
+                    group_sender_payoff.mean()
+                study_2_cond_strategy_per_round = study_2_cond_strategy.groupby(by='subsession_round_number').\
+                    group_sender_payoff.mean()
+
+                if not study_1_cond_strategy.empty:
+                    axes[axes_dict[i]].plot(study_1_cond_strategy_per_round.index,
+                                            study_1_cond_strategy_per_round.values,
+                                            color=colors[conditions_per_study[study][0]],
+                                            label=condition_names_per_study[study][0],
+                                            marker=markers[conditions_per_study[study][0]], linestyle='-')
+                    study_2_cond_strategy_per_round.plot(
+                        stacked=False, rot=0, color=colors[conditions_per_study[study][1]], ax=axes[axes_dict[i]],
+                        marker=markers[conditions_per_study[study][1]], linestyle='-',
+                        label=condition_names_per_study[study][1])
+                else:
+                    axes[axes_dict[i]].plot(study_2_cond_strategy_per_round.index,
+                                            study_2_cond_strategy_per_round.values,
+                                            color=colors[conditions_per_study[study][1]],
+                                            label=condition_names_per_study[study][1],
+                                            marker=markers[conditions_per_study[study][1]], linestyle='-')
+
+                axes[axes_dict[i]].set_title(f'{strategies_dict[strategy]}', fontsize=8)
+                # axes[i].get_legend().remove()
+                axes[axes_dict[i]].set_xlabel('')
+                if i in range(3):
+                    axes[axes_dict[i]].tick_params(
+                        axis='x',  # changes apply to the x-axis
+                        which='both',  # both major and minor ticks are affected
+                        bottom=False,  # ticks along the bottom edge are off
+                        labelbottom=False)  # labels along the bottom edge are off
+
+                # significant test
+                study_1_cond_strategy_per_expert = study_1_cond_strategy.groupby(by='pair_id').\
+                    group_sender_payoff.mean()
+                study_2_cond_strategy_per_expert = study_2_cond_strategy.groupby(by='pair_id').\
+                    group_sender_payoff.mean()
+                significant_tests(study_1_cond_strategy_per_expert, study_2_cond_strategy_per_expert,
+                                  f'Expert Payoff Study {study} and Strategy {strategies_dict[strategy]} '
+                                  f'{conditions_per_study[study][0]}, {conditions_per_study[study][1]}')
+
+            # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
+            # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
+            fig.text(0.5, 0.04, 'Round Number', ha='center')
+            fig.text(0.08, 0.5, 'Expert Average Payoff', va='center', rotation='vertical')
+            fig.legend(axes,  # The line objects
+                       labels=condition_names_per_study[study],  # The labels for each line
+                       loc="upper left",  # Position of legend
+                       shadow=True, prop={"size": 8})
+            plt.savefig(os.path.join(graph_directory, f"Expert average payoff per strategy for study {study}.png"),
+                        bbox_inches='tight')
+
 
 class CalculationsForPaper:
     def __init__(self):
@@ -1116,8 +1294,8 @@ class CalculationsForPaper:
             df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
             df = df.loc[df.status == 'play']
             df = df.drop_duplicates()
-            df['laying'] = df.apply(lambda x: (x['group_sender_answer_scores'] - x['group_average_score']) /
-                                              (x['group_score_6'] - x['group_average_score']), axis=1)
+            df['laying'] = df.apply(lambda x: (x['group_sender_answer_scores'] - x[column_to_define_exaggerate]) /
+                                              (x['group_score_6'] - x[column_to_define_exaggerate]), axis=1)
             # print(f"condition: {condition}, average laying per hotel: "
             #       f"{df.groupby(by='group_average_score').laying.mean().values}")
             time_spent = pd.read_csv(os.path.join(data_directory, date_directory, condition, 'TimeSpent.csv'))
@@ -1167,13 +1345,13 @@ class CalculationsForPaper:
 
 
 def main():
-    # computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
-    #                                         'decision_prediction/language_prediction/data/verbal/cv_framework/'
-    #                                         'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
-    #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
-    #                                         'round_verbal_data.csv')
-    calculation_obj = CalculationsForPaper()
-    calculation_obj.number_participants()
+    computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
+                                            'decision_prediction/language_prediction/data/verbal/cv_framework/'
+                                            'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
+                                            'all_history_features_all_history_text_manual_binary_features_predict_first_'
+                                            'round_verbal_data.csv')
+    # calculation_obj = CalculationsForPaper()
+    # calculation_obj.number_participants()
     tests_obj = SignificanceTests()
     # expert_payoff_dict = {'verbal': [0.77, 0.66, 0.77, 0.71, 0.74, 0.70, 0.75, 0.67, 0.68, 0.68],
     #                       'numeric': [0.88, 0.79, 0.76, 0.78, 0.75, 0.72, 0.78, 0.73, 0.78, 0.71],
@@ -1184,11 +1362,17 @@ def main():
     #                             'numeric': [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04],
     #                             'num_only': [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2],
     #                             'both': [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]}
+    tests_obj.score_5_4_analysis()
+    tests_obj.exaggerate_strategy_analysis()
+    tests_obj.expert_payoff_per_expert_strategy()
     both_exp_laying_graph(role_dict=tests_obj.expert_payoff_dict, ylabel='Fraction of Hotel choices',
                           title=f'Average acceptance rate as a function of trial', laying_dict=tests_obj.laying_dict)
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict, ylabel="Fraction of Hotel choices",
                         title=f'Average acceptance rate  as a function of trial', expert_payoff=True,
                         laying_dict=tests_obj.laying_dict)
+    both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_5_8, ylabel="Fraction of Hotel choices",
+                        title=f'Average acceptance rate average score 5-8 as a function of trial', expert_payoff=True,
+                        implied_score_5_8=True)
     both_studies_graphs(role_dict=tests_obj.dm_expected_payoff_dict, ylabel='Average DM expected payoff',
                         title=f'Average DM expected payoff as a function of trial', expert_payoff=False)
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_persuasion,

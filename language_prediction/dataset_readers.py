@@ -290,11 +290,15 @@ class LSTMDatasetReader(DatasetReader):
                             self.num_features = len(row[f'features_round_{round_num}'])
                             # for transformer the input dim should be // self.num_attention_heads
                             if self.use_transformer:
-                                check = self.num_features // self.num_attention_heads
-                                if check * self.num_attention_heads != self.num_features:
+                                if self.use_raisha_LSTM:  # the max size of features is raisha_num_features
+                                    num_features_to_use = self.raisha_num_features
+                                else:
+                                    num_features_to_use = self.num_features
+                                check = num_features_to_use // self.num_attention_heads
+                                if check * self.num_attention_heads != num_features_to_use:
                                     self.input_dim = (check + 1) * self.num_attention_heads
                                 else:
-                                    self.input_dim = self.num_features
+                                    self.input_dim = num_features_to_use
                         if self.use_transformer:
                             extra_columns = [-1] * (self.input_dim - len(row[f'features_round_{round_num}']))
                             raisha_data = row[f'features_round_{round_num}'] + extra_columns
