@@ -162,6 +162,7 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
                                       sheet_name='table_to_load', skiprows=[0])
     if 'folder' not in all_results.columns:
         all_results['folder'] = all_results.index
+
     all_rounds_all_raisha = all_results.loc[(all_results.Raisha == raishas) & (all_results.Round == rounds)]
     # all_rounds_all_raisha.model_num = all_rounds_all_raisha.model_num.astype(str)
     # new_column = all_rounds_all_raisha.model_num.str.split('_', expand=True)
@@ -172,6 +173,7 @@ def select_best_model_per_type(file_name: str, rounds: str, raishas: str, measur
     # all_rounds_all_raisha =\
     #     all_rounds_all_raisha.merge(models_to_compare[['model_type', 'model_name', 'text_features']],
     #                                 on=['model_type', 'model_name'])
+
     all_rounds_all_raisha['modelID'] = all_rounds_all_raisha.model_type + '_' + all_rounds_all_raisha.model_name
     if 'fold_0' in all_rounds_all_raisha.fold.unique():
         prefix_fold = 'fold_'
@@ -388,22 +390,22 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     # for dir in ['compare_prediction_models_07_09_2020_11_12']:
     #     find_all_best_models_of_directory(dir, best_model_file_name)
     # return
-    total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    for i, folder in enumerate([['compare_prediction_models_09_09_2020_22_58',
-                                 'compare_prediction_models_07_09_2020_12_15',
-                                 'compare_prediction_models_10_09_2020_11_35',]]):
-        results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
-                                                   baseline=False)
-        if i == 0:  # first folder
-            old_results_name = old_results_name
-        else:
-            old_results_name = new_results_file_name
-        concat_new_results(new_results_name=results_file_name,
-                           old_results_name=old_results_name,
-                           new_results_file_name_to_save=new_results_file_name)
+    # total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
+    # for i, folder in enumerate([['compare_prediction_models_08_09_2020_22_59']]):
+    #     results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
+    #                                                baseline=False)
+    #     if i == 0:  # first folder
+    #         old_results_name = old_results_name
+    #     else:
+    #         old_results_name = new_results_file_name
+    #     concat_new_results(new_results_name=results_file_name,
+    #                        old_results_name=old_results_name,
+    #                        new_results_file_name_to_save=new_results_file_name)
     # results_file_name = combine_models_all_results(['predict_best_models_10_09_2020_11_36',
     #                                                 'predict_best_models_10_09_2020_15_20',
-    #                                                 'predict_best_models_07_09_2020_19_36'],
+    #                                                 'predict_best_models_07_09_2020_19_36',
+    #                                                 'predict_best_models_22_09_2020_10_42',
+    #                                                 'predict_best_models_22_09_2020_11_09'],
     #                                                hyper_parameters=hyper_parameters)
     # new_results_file_name = results_file_name
     # results_file_name = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
@@ -423,8 +425,27 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     #                    old_results_name=new_results_file_name,
     #                    new_results_file_name_to_save=new_results_file_name)
     #
-    # concat_new_results("all_server_results_['compare_prediction_models_18_06_2020_12_06_hyper', "
-    #                    "'compare_prediction_models_18_06_2020_12_09_hyper'].csv", old_results_name=old_results_name,
+    # old_file = pd.read_csv(os.path.join(base_directory, 'logs', old_results_name))
+    # old_file = old_file.loc[~old_file.model_name.isin([
+    #     'LSTM_avg_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_avg_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'LSTM_avg_last_hidden_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_avg_last_hidden_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'LSTM_avg_turn_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_avg_turn_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'LSTM_avg_turn_linear_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_avg_turn_linear_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'LSTM_avg_turn_last_hidden_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_avg_turn_last_hidden_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'LSTM_turn_linear_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_bert_text_features',
+    #     'LSTM_turn_linear_avg_raisha_global_0.8_text_0.9_current_round_text_average_saifa_text_manual_text_features',
+    #     'SVM_total_bert_text_features_average_raisha_text_0.9_global_0.8_all_saifa_average_text_first_round_saifa_text',
+    #     'SVM_total_manual_text_features_average_raisha_text_0.9_global_0.8_all_saifa_average_text_first_round_saifa_text',])]
+    # old_file.index = old_file.folder
+    # old_file.to_csv(os.path.join(base_directory, 'logs',
+    #                              'all_results_20_09_new_models_before_concat_to_new_lstm_old_version.csv'))
+    # concat_new_results("all_server_results_['compare_prediction_models_08_09_2020_22_59'].csv",
+    #                    old_results_name='all_results_20_09_new_models_before_concat_to_new_lstm_old_version.csv',
     #                    new_results_file_name_to_save=new_results_file_name)
     #
     # return
@@ -512,16 +533,14 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     best_results_to_plot = pd.concat(best_results_to_plot, sort=False, axis=1)
     best_results_to_plot.to_csv(os.path.join(base_directory, 'logs', 'analyze_results', best_model_to_plot_file_name))
 
-    for dir in ['compare_prediction_models_09_09_2020_22_58',
-                'compare_prediction_models_10_09_2020_11_35',
-                'compare_prediction_models_07_09_2020_12_15']:
+    for dir in ['compare_prediction_models_08_09_2020_22_59']:
         find_all_best_models_of_directory(dir, best_model_file_name)
     return
 
 
 if __name__ == '__main__':
-    main(new_results_file_name='all_results_16_09_new_models.csv',
-         old_results_name='all_results_09_09_new_models.csv', hyper_parameters=True,
-         best_model_file_name='Best models analysis hyper parameters tunning new test data.xlsx',
-         best_model_to_plot_file_name='Best models analysis hyper parameters tunning new test data for plot.csv'
+    main(new_results_file_name='all_server_results_predict_best_models_22_9.csv',
+         old_results_name='all_results_21_09_new_models.csv', hyper_parameters=False,
+         best_model_file_name='Best models analysis best models tunning new test data.xlsx',
+         best_model_to_plot_file_name='Best models analysis best models tunning new test data for plot.csv'
     )

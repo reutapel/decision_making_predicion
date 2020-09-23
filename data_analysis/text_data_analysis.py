@@ -19,7 +19,7 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'verbal'
+condition_directory = 'both'
 data_type = 'train_data'
 # what is the % of rounds the experts need to take the same strategy so we set this strategy for him
 pct_to_set_expert_status = 0.6
@@ -1013,6 +1013,8 @@ class DataAnalysis:
         data_to_analyze = self.results_payments.loc[(self.results_payments.status.isin(['play'])) &
                                                     (self.results_payments.player_id_in_group == 1) &
                                                     (self.results_payments.player_timeout == 0)]
+
+        # 'idcq9kh4', 'aae5cllv', 'ty8b7wij', '7p7xinh8', '882f8tqv', '1cx91m27'
         # define honest experts: in pct_to_set_expert_status of the rounds choose either the median score of
         # the score that is most close # to the average score
         # use median
@@ -1022,7 +1024,7 @@ class DataAnalysis:
 
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_median': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_honest'] = experts_sum.use_median / experts_sum.subsession_round_number
         experts_sum['honest_prob_status'] = np.where(experts_sum.pct_honest >= pct_to_set_expert_status, 1, 0)
         data_to_analyze = data_to_analyze.merge(experts_sum[['pct_honest']], left_on='participant_code',
@@ -1036,12 +1038,12 @@ class DataAnalysis:
 
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_higher_than_avg': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_always_exaggerate'] = experts_sum.use_higher_than_avg / experts_sum.subsession_round_number
         experts_sum['always_exaggerate_prob_status'] =\
             np.where(experts_sum.pct_always_exaggerate >= pct_to_set_expert_status, 1, 0)
         data_to_analyze = data_to_analyze.merge(experts_sum[['pct_always_exaggerate']], left_on='participant_code',
-                                                right_index=True)
+                                                right_index=True, how='left')
 
         # define high exaggerate: in pct_to_set_expert_status of the rounds choose the exaggerate >= 0.5
         # data_to_analyze['high_exaggerate'] =\
@@ -1123,7 +1125,7 @@ class DataAnalysis:
                                                                         (data_to_analyze.avg_when_high == 1), 1, 0)
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'avg_when_high_exaggerate_when_low': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_avg_when_high_exaggerate_when_low'] = \
             experts_sum.avg_when_high_exaggerate_when_low / experts_sum.subsession_round_number
         experts_sum['avg_when_high_exaggerate_when_low_prob_status'] =\
@@ -1139,7 +1141,7 @@ class DataAnalysis:
                                                                           (data_to_analyze.lower_when_high == 1), 1, 0)
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'lower_when_high_exaggerate_when_low': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_lower_when_high_exaggerate_when_low'] =\
             experts_sum.lower_when_high_exaggerate_when_low / experts_sum.subsession_round_number
         experts_sum['lower_when_high_exaggerate_when_low_prob_status'] =\
@@ -1155,7 +1157,7 @@ class DataAnalysis:
 
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'use_lower_than_avg': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_always_lower_exaggerate'] = experts_sum.use_lower_than_avg / \
                                                      experts_sum.subsession_round_number
         experts_sum['always_lower_exaggerate_prob_status'] = \
@@ -1166,29 +1168,29 @@ class DataAnalysis:
         # define Strategic exaggeration experts: in pct_to_set_expert_status of the rounds:
         # in bad hotels (avg score < 7.5) --> choose score lower than the avg,
         # in all other rounds choose score higher than the avg
-        data_to_analyze['strategic_exaggeration'] =\
-            np.where(((data_to_analyze.group_sender_answer_scores < data_to_analyze[column_to_define_exaggerate]) &
-                      (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
-                      (data_to_analyze.group_average_score < 7)), 1,
-                     (np.where((data_to_analyze.group_sender_answer_scores > data_to_analyze[column_to_define_exaggerate]) &
-                               (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
-                               (data_to_analyze.group_average_score.between(7, 8)), 1,
-                               (np.where(
-                                   (data_to_analyze.chose_most_average_close == 1) &
-                                   (data_to_analyze.group_sender_answer_scores == data_to_analyze.group_median_score) &
-                                   (data_to_analyze.group_average_score > 8), 1, 0)))))
-
-        # experts_sum = copy.deepcopy(data_to_analyze)
-        # experts_sum = experts_sum.loc[data_to_analyze.group_average_score < 8]
-        experts_sum = data_to_analyze.groupby(by='participant_code').agg({'strategic_exaggeration': 'sum',
-                                                                          'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
-        experts_sum['pct_strategic_exaggeration'] = experts_sum.strategic_exaggeration /\
-                                                    experts_sum.subsession_round_number
-        experts_sum['strategic_exaggeration_prob_status'] = \
-            np.where(experts_sum.pct_strategic_exaggeration >= pct_to_set_expert_status, 1, 0)
-        data_to_analyze = data_to_analyze.merge(experts_sum[['pct_strategic_exaggeration']],
-                                                left_on='participant_code', right_index=True, how='left')
+        # data_to_analyze['strategic_exaggeration'] =\
+        #     np.where(((data_to_analyze.group_sender_answer_scores < data_to_analyze[column_to_define_exaggerate]) &
+        #               (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
+        #               (data_to_analyze.group_average_score < 7)), 1,
+        #              (np.where((data_to_analyze.group_sender_answer_scores > data_to_analyze[column_to_define_exaggerate]) &
+        #                        (data_to_analyze.group_sender_answer_scores != data_to_analyze.group_median_score) &
+        #                        (data_to_analyze.group_average_score.between(7, 8)), 1,
+        #                        (np.where(
+        #                            (data_to_analyze.chose_most_average_close == 1) &
+        #                            (data_to_analyze.group_sender_answer_scores == data_to_analyze.group_median_score) &
+        #                            (data_to_analyze.group_average_score > 8), 1, 0)))))
+        #
+        # # experts_sum = copy.deepcopy(data_to_analyze)
+        # # experts_sum = experts_sum.loc[data_to_analyze.group_average_score < 8]
+        # experts_sum = data_to_analyze.groupby(by='participant_code').agg({'strategic_exaggeration': 'sum',
+        #                                                                   'subsession_round_number': 'count'})
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum['pct_strategic_exaggeration'] = experts_sum.strategic_exaggeration /\
+        #                                             experts_sum.subsession_round_number
+        # experts_sum['strategic_exaggeration_prob_status'] = \
+        #     np.where(experts_sum.pct_strategic_exaggeration >= pct_to_set_expert_status, 1, 0)
+        # data_to_analyze = data_to_analyze.merge(experts_sum[['pct_strategic_exaggeration']],
+        #                                         left_on='participant_code', right_index=True, how='left')
 
         # define highest score experts: always choose the highest score
         data_to_analyze['highest_score'] =\
@@ -1196,7 +1198,7 @@ class DataAnalysis:
 
         experts_sum = data_to_analyze.groupby(by='participant_code').agg({'highest_score': 'sum',
                                                                           'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 9]
         experts_sum['pct_highest_score'] = experts_sum.highest_score / experts_sum.subsession_round_number
         experts_sum['highest_score_prob_status'] = \
             np.where(experts_sum.pct_highest_score >= pct_to_set_expert_status, 1, 0)
@@ -1214,7 +1216,7 @@ class DataAnalysis:
         experts_sum = experts_sum.loc[experts_sum.subsession_round_number > 1]  # remove the first round
         experts_sum = experts_sum.groupby(by='participant_code').agg({'switch_exaggerate': 'sum',
                                                                       'subsession_round_number': 'count'})
-        experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 8]
+        # experts_sum = experts_sum.loc[experts_sum.subsession_round_number >= 8]
         experts_sum['pct_switch_exaggerate'] = experts_sum.switch_exaggerate / experts_sum.subsession_round_number
         experts_sum['switch_exaggerate_prob_status'] = \
             np.where(experts_sum.pct_switch_exaggerate >= pct_to_set_expert_status, 1, 0)

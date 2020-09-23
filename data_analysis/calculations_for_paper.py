@@ -6,6 +6,8 @@ import os
 import matplotlib.pyplot as plt
 from data_analysis import autolabel
 import seaborn as sns
+import matplotlib.lines as mlines
+
 
 # Say, "the default sans-serif font is Times New Roman Bold"
 # fonts = {'fontname': 'Times New Roman Bold'}
@@ -30,7 +32,7 @@ condition_names_per_study = {1: ['Numerical', 'Verbal'],
 base_directory = os.path.abspath(os.curdir)
 analysis_directory = os.path.join(base_directory, 'analysis', 'text_exp_2_tests')
 colors = {'verbal': 'purple', 'numeric': 'darkgreen', 'num_only': 'crimson', 'both': 'darkblue'}
-markers = {'verbal': 's', 'numeric': '.', 'num_only': 'v', 'both': 'd'}
+markers = {'verbal': 's', 'numeric': 'o', 'num_only': 'v', 'both': 'd'}
 graph_directory = os.path.join(base_directory, 'per_study_graphs')
 
 strategies_dict = {'none': 'None of the strategies', 'pct_always_exaggerate': 'Always exaggerate',
@@ -53,8 +55,17 @@ enterenc_per_score_dict = {
     'Male': [0, 18, 22, 3, 16, 16, 20, 21, 58, 64, 50, 67, 69, 78, 75, 83],
 }
 
+enterence_per_round_dict_test_data = {
+    'All': [76, 74, 72, 78, 73, 69, 74, 67, 68, 68],
+
+}
+
 pct_dm_per_number_of_rounds_enter_dict = {
     'All': [0.73, 1.22, 2.69, 9.8, 15.68, 25.24, 25.73, 14.21, 4.65]
+}
+
+pct_dm_per_number_of_rounds_enter_dict_test_data = {
+    'All': [0, 0, 1.98, 6.93, 17.82, 26.73, 22.77, 19.8, 3.96]
 }
 
 
@@ -236,7 +247,7 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data['dm_expected_payoff'] = np.where(data.group_sender_payoff == 1, data.group_average_score - 8, 0)
     data = data[['group_sender_payoff',	'group_receiver_payoff', 'pair_id', 'group_lottery_result',
                  'group_average_score', 'group_sender_answer_scores', 'dm_expected_payoff', 'subsession_round_number',
-                 'group_score_6', 'expert_strategy', 'avg_most_close_score']]
+                 'group_score_6', 'avg_most_close_score']]  # expert_strategy
     data['honesty'] = data['group_sender_answer_scores'] - data['group_average_score']
     data['expert_answer_above_8'] = np.where(data.group_sender_answer_scores > 8, 1, 0)
     data['best_reply'] = np.where((data['expert_answer_above_8'] == 1) & (data.group_sender_payoff == 1), 1,
@@ -247,6 +258,7 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
                                           (x['group_score_6'] - x[column_to_define_exaggerate]), axis=1)
     data['expert_want_to_persuade'] = np.where(data.group_sender_answer_scores > data.group_average_score, 1,
                                                np.where(data['expert_answer_above_8'] == 1, 1, 0))
+    data['expected_outcome_taking_hotel'] = data.group_average_score - 8
 
     return data
 
@@ -338,7 +350,7 @@ def computation_paper_graphs(corr_data_path):
 
     # forth graph- % decision makers enters each number
     fig, ax = plt.subplots()
-    decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict, index=list(range(2, 11)))
+    decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict_test_data, index=list(range(2, 11)))
     decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=ax)
     # ax.set_title("% Decision-Makers Per Total Hotel Choices")
     ax.set(xlabel='Number of Hotel Choices in Ten Trials',
@@ -347,13 +359,13 @@ def computation_paper_graphs(corr_data_path):
     # rects = ax3.patches
     # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
 
-    plt.savefig("computation_paper_graphs_enterance_rate_2.png", bbox_inches='tight')
+    plt.savefig("computation_paper_graphs_enterance_rate_2_test_data.png", bbox_inches='tight')
 
     # enterance rate per manual features
     enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
                                                      'experiment/decision_prediction/data_analysis/analysis/'
-                                                     'text_exp_2_tests/verbal/% DM entered based on review features '
-                                                     'for condition verbal and gender all genders for graph.csv',
+                                                     'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
+                                                     'for condition verbal_test_data and gender all genders for graph.csv',
                                                      index_col=1)
     axes = list()
     fig = plt.figure(figsize=(12, 5))
@@ -379,7 +391,7 @@ def computation_paper_graphs(corr_data_path):
                labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
                loc="upper center",  # Position of legend
                shadow=True, prop={"size": 8})
-    plt.savefig("enterance_rate_per_manual_features.png", bbox_inches='tight')
+    plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
 
     # compare bert-domain features
     fig, ax = plt.subplots()
@@ -726,28 +738,28 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
         fig1.savefig(os.path.join(graph_directory, f'Laying_graph_2_exps.png'), bbox_inches='tight')
 
     # difference between experts payoff per trial
-    fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
-
-    if expert_payoff:
-        for study in [1, 2]:
-            study_diff = list()
-            for round_num in range(1, 11):
-                study_diff.append(role_dict[conditions_per_study[study][0]][round_num-1]/
-                                  role_dict[conditions_per_study[study][1]][round_num-1])
-            x = list(range(1, 11))
-            axes[study - 1].plot(x, study_diff, color='black', marker='.',
-                                 label=f'Fraction in {condition_names_per_study[study][0]}-'
-                                       f'Fraction in {condition_names_per_study[study][1]}')
-            axes[study - 1].set_title(f'Experiment {study}', fontsize=15)
-            axes[study - 1].set_xlabel('Trial Number', fontsize=15)
-            if study == 1:
-                axes[study - 1].set_ylabel('Difference in Fraction of Hotel Choices', fontsize=15)
-            axes[study - 1].legend(loc='upper right', shadow=True, fontsize=8)
-            axes[study - 1].set_xticks(x)
-            axes[study - 1].set_yticks(np.arange(0.85, 0.05, 1.26))
-
-        plt.show()
-        fig1.savefig(os.path.join(graph_directory, f'Difference_persuasion_2_axes.png'), bbox_inches='tight')
+    # fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
+    #
+    # if expert_payoff:
+    #     for study in [1, 2]:
+    #         study_diff = list()
+    #         for round_num in range(1, 11):
+    #             study_diff.append(role_dict[conditions_per_study[study][0]][round_num-1]/
+    #                               role_dict[conditions_per_study[study][1]][round_num-1])
+    #         x = list(range(1, 11))
+    #         axes[study - 1].plot(x, study_diff, color='black', marker='.',
+    #                              label=f'Fraction in {condition_names_per_study[study][0]}-'
+    #                                    f'Fraction in {condition_names_per_study[study][1]}')
+    #         axes[study - 1].set_title(f'Experiment {study}', fontsize=15)
+    #         axes[study - 1].set_xlabel('Trial Number', fontsize=15)
+    #         if study == 1:
+    #             axes[study - 1].set_ylabel('Difference in Fraction of Hotel Choices', fontsize=15)
+    #         axes[study - 1].legend(loc='upper right', shadow=True, fontsize=8)
+    #         axes[study - 1].set_xticks(x)
+    #         axes[study - 1].set_yticks(np.arange(0.85, 0.05, 1.26))
+    #
+    #     plt.show()
+    #     fig1.savefig(os.path.join(graph_directory, f'Difference_persuasion_2_axes.png'), bbox_inches='tight')
 
 
 class SignificanceTests:
@@ -756,7 +768,7 @@ class SignificanceTests:
         self.linear_scores = defaultdict(pd.DataFrame)
         self.all_data = defaultdict(pd.DataFrame)
         self.expert_payoff_dict = dict()
-        self.expert_payoff_dict_5_8 = dict()
+        self.expert_payoff_dict_below_8 = dict()
         self.dm_expected_payoff_dict = dict()
         self.laying_dict = dict()
         self.expert_payoff_dict_persuasion = dict()
@@ -765,6 +777,10 @@ class SignificanceTests:
             self.linear_scores[condition] = pd.read_csv(os.path.join(analysis_directory, condition, 'linear_scores.csv'))
             df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
             df = clean_data(df)
+
+            implied_lower_8 = df.loc[df.group_sender_answer_scores < 8]
+            mean_ev_below_8 = implied_lower_8.expected_outcome_taking_hotel.mean()
+            print(f'mean EV below 8 for condition {condition} is: {mean_ev_below_8}')
 
             self.all_data[condition] = df
             self.laying_dict[condition] = df.groupby(by='group_average_score').laying.mean().values.tolist()
@@ -777,8 +793,8 @@ class SignificanceTests:
                 group_sender_payoff.mean().values.tolist()
 
             # expert payiff for average score between 5 and 8
-            df = df.loc[df.group_sender_answer_scores.between(5, 8)]
-            self.expert_payoff_dict_5_8[condition] = df.groupby(by='subsession_round_number').\
+            df = df.loc[df.group_sender_answer_scores < 8]
+            self.expert_payoff_dict_below_8[condition] = df.groupby(by='subsession_round_number').\
                 group_sender_payoff.mean().values.tolist()
 
         return
@@ -812,19 +828,8 @@ class SignificanceTests:
             study_2_cond_understand_x = x.merge(study_2_cond_understand, left_on='group_sender_answer_scores',
                                                 right_index=True, how='left')
 
-            axes[study - 1].plot(x, study_1_cond_understand_x.group_sender_payoff,
-                                 color=colors[conditions_per_study[study][0]],
-                                 label=condition_names_per_study[study][0],
-                                 marker=markers[conditions_per_study[study][0]],
-                                 linestyle='-')
-            axes[study - 1].plot(x, study_2_cond_understand_x.group_sender_payoff,
-                                 color=colors[conditions_per_study[study][1]],
-                                 label=condition_names_per_study[study][1],
-                                 marker=markers[conditions_per_study[study][1]],
-                                 linestyle='-')
-
-            values_study_1 = study_1_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()
-            values_study_2 = study_2_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()
+            values_study_1 = study_1_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()/3
+            values_study_2 = study_2_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()/3
             if values_study_1.shape[0] > values_study_2.shape[0]:  # add missing index to values_study_2
                 for i in values_study_1.index:
                     if i not in values_study_2.index:
@@ -836,24 +841,41 @@ class SignificanceTests:
                         values_study_1.loc[i] = 0
                 values_study_1 = values_study_1.sort_index()
 
+            axes[study - 1].scatter(x, study_1_cond_understand_x.group_sender_payoff, s=values_study_1.values,
+                                    color=colors[conditions_per_study[study][0]],
+                                    # label=condition_names_per_study[study][0],
+                                    marker=markers[conditions_per_study[study][0]], linestyle='-')
+            axes[study - 1].plot(x, study_1_cond_understand_x.group_sender_payoff,
+                                 marker=markers[conditions_per_study[study][0]],
+                                 label=condition_names_per_study[study][0], markersize=0,
+                                 color=colors[conditions_per_study[study][0]], linestyle='-')
+            axes[study - 1].scatter(x, study_2_cond_understand_x.group_sender_payoff, s=values_study_2.values,
+                                    color=colors[conditions_per_study[study][1]],
+                                    # label=condition_names_per_study[study][1],
+                                    marker=markers[conditions_per_study[study][1]], linestyle='-')
+            axes[study - 1].plot(x, study_2_cond_understand_x.group_sender_payoff,
+                                 marker=markers[conditions_per_study[study][1]],
+                                 label=condition_names_per_study[study][1], markersize=0,
+                                 color=colors[conditions_per_study[study][1]], linestyle='-')
+
             # x is a pd.DataFrame with one column, x.T.values[0] are its values
-            cell_text = [x.T.values[0], values_study_1.values, values_study_2.values]
-            columns = values_study_1.index.values
+            # cell_text = [x.T.values[0], values_study_1.values, values_study_2.values]
+            # columns = values_study_1.index.values
             xlabel = 'Implied Score'
-            table_condition_names_per_study = {1: ['Numerical', 'Verbal'],
-                                               2: ['Only\nNumerical', 'Verbal+\nNumerical']}
-            # Add a table at the bottom of the axes
-            the_table = axes[study - 1].table(cellText=cell_text,
-                                              rowLabels=['Review\nScore',
-                                                         f'{table_condition_names_per_study[study][0]}',
-                                                         f'{table_condition_names_per_study[study][1]}'],
-                                              # colLabels=columns,
-                                              cellLoc='center',
-                                              rowLoc='center',
-                                              bbox=(0, -0.41, 1, 0.27),
-                                              )
-            the_table.auto_set_font_size(False)
-            the_table.set_fontsize(8)
+            # table_condition_names_per_study = {1: ['Numerical', 'Verbal'],
+            #                                    2: ['Only\nNumerical', 'Verbal+\nNumerical']}
+            # # Add a table at the bottom of the axes
+            # the_table = axes[study - 1].table(cellText=cell_text,
+            #                                   rowLabels=['Review\nScore',
+            #                                              f'{table_condition_names_per_study[study][0]}',
+            #                                              f'{table_condition_names_per_study[study][1]}'],
+            #                                   # colLabels=columns,
+            #                                   cellLoc='center',
+            #                                   rowLoc='center',
+            #                                   bbox=(0, -0.41, 1, 0.27),
+            #                                   )
+            # the_table.auto_set_font_size(False)
+            # the_table.set_fontsize(8)
 
             # if study == 1:
             #     xlabel = 'Score (or score related to the review) Selected by The Expert'
@@ -862,7 +884,15 @@ class SignificanceTests:
             axes[study - 1].set_title(f'Experiment {study}', fontsize=15)
             if study == 1:
                 axes[study - 1].set_ylabel('Fraction of Hotel Choices', fontsize=15)
-            axes[study - 1].legend(loc='upper left', shadow=True, fontsize=8)
+            # Plot legend.
+            exp1 = mlines.Line2D([], [], marker=markers[conditions_per_study[study][0]],
+                                 label=condition_names_per_study[study][0], linestyle='-',
+                                 color=colors[conditions_per_study[study][0]])
+            exp2 = mlines.Line2D([], [], marker=markers[conditions_per_study[study][1]],
+                                 label=condition_names_per_study[study][1], linestyle='-',
+                                 color=colors[conditions_per_study[study][1]])
+
+            axes[study - 1].legend(loc='upper left', shadow=True, fontsize=8, handles=[exp1, exp2])
             axes[study - 1].set_xticks(range(2, 11))
             # plt.tick_params(
             #     axis='x',  # changes apply to the x-axis
@@ -1203,6 +1233,7 @@ class SignificanceTests:
                                              fontsize=10)
                 axes[study - 1][i].xaxis.set_label_text("")
 
+
             if study == 1:
                 for i in [0,1]:
                     axes[study - 1][i].tick_params(
@@ -1345,11 +1376,11 @@ class CalculationsForPaper:
 
 
 def main():
-    computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
-                                            'decision_prediction/language_prediction/data/verbal/cv_framework/'
-                                            'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
-                                            'all_history_features_all_history_text_manual_binary_features_predict_first_'
-                                            'round_verbal_data.csv')
+    # computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
+    #                                         'decision_prediction/language_prediction/data/verbal/cv_framework/'
+    #                                         'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
+    #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
+    #                                         'round_verbal_data.csv')
     # calculation_obj = CalculationsForPaper()
     # calculation_obj.number_participants()
     tests_obj = SignificanceTests()
@@ -1363,15 +1394,15 @@ def main():
     #                             'num_only': [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2],
     #                             'both': [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]}
     tests_obj.score_5_4_analysis()
-    tests_obj.exaggerate_strategy_analysis()
-    tests_obj.expert_payoff_per_expert_strategy()
+    # tests_obj.exaggerate_strategy_analysis()
+    # tests_obj.expert_payoff_per_expert_strategy()
     both_exp_laying_graph(role_dict=tests_obj.expert_payoff_dict, ylabel='Fraction of Hotel choices',
                           title=f'Average acceptance rate as a function of trial', laying_dict=tests_obj.laying_dict)
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict, ylabel="Fraction of Hotel choices",
                         title=f'Average acceptance rate  as a function of trial', expert_payoff=True,
                         laying_dict=tests_obj.laying_dict)
-    both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_5_8, ylabel="Fraction of Hotel choices",
-                        title=f'Average acceptance rate average score 5-8 as a function of trial', expert_payoff=True,
+    both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_below_8, ylabel="Fraction of Hotel choices",
+                        title=f'Average acceptance rate average score below 8 as a function of trial', expert_payoff=True,
                         implied_score_5_8=True)
     both_studies_graphs(role_dict=tests_obj.dm_expected_payoff_dict, ylabel='Average DM expected payoff',
                         title=f'Average DM expected payoff as a function of trial', expert_payoff=False)
