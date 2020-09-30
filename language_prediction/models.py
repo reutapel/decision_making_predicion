@@ -747,8 +747,9 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  metrics_dict_reg: dict,
                  vocab: Vocabulary,
                  attention: Attention = DotProductAttention(),
-                 seq_weight_loss: float=0.5,
-                 reg_weight_loss: float=0.5,
+                 seq_weight_loss: float=1.0,
+                 reg_weight_loss: float=1.0,
+                 reg_seq_weight_loss: float=1.0,
                  predict_seq: bool=True,
                  predict_avg_total_payoff: bool=True,
                  batch_size: int=10,
@@ -802,6 +803,9 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                 self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
 
+        if predict_avg_total_payoff and predict_seq:  # for avg_turn models
+            self.seq_reg_mse_loss = nn.MSELoss()
+
         if use_last_hidden_vec:
             if linear_dim is not None:  # add linear layer before last_hidden_reg
                 self.linear_layer = LinearLayer(input_size=encoder_output_dim, output_size=linear_dim, dropout=dropout)
@@ -818,6 +822,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
         self._first_pair = None
         self.seq_weight_loss = seq_weight_loss
         self.reg_weight_loss = reg_weight_loss
+        self.reg_seq_weight_loss = reg_seq_weight_loss
         self.predict_seq = predict_seq
         self.predict_avg_total_payoff = predict_avg_total_payoff
         self.use_last_hidden_vec = use_last_hidden_vec
@@ -933,7 +938,15 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                     metric(regression_output, reg_labels.unsqueeze(1))
                 output['reg_loss'] = self.mse_loss(regression_output, reg_labels.view(reg_labels.shape[0], -1))
                 temp_loss += self.reg_weight_loss * output['reg_loss']
-
+            # loss for avg_turn models
+            if self.predict_seq and seq_labels is not None and self.predict_avg_total_payoff and reg_labels is not None:
+                proportion_from_decisions = decision_logits.detach().clone()
+                proportion_from_decisions = masked_softmax(proportion_from_decisions, mask.unsqueeze(2))
+                proportion_from_decisions = proportion_from_decisions.max(2)[1] * mask
+                proportion_from_decisions = proportion_from_decisions.sum(1).float() / mask.sum(1)
+                output['reg_seq_loss'] = \
+                    self.seq_reg_mse_loss(regression_output, proportion_from_decisions.view(reg_labels.shape[0], -1))
+                temp_loss += self.reg_seq_weight_loss * output['reg_seq_loss']
             output['loss'] = temp_loss
 
         return output

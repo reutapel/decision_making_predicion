@@ -684,6 +684,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
         self.linear_hidden_dim = None
         self.avg_loss = 1.0  # if we don't use 2 losses - the weight of each of them should be 1
         self.turn_loss = 1.0
+        self.avg_turn_loss = 1.0
         self.hotel_label_0 = None
         self.vocab = None
         self.cuda_device = None
@@ -730,6 +731,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.avg_loss = float(hyper_parameters_dict['avg_loss'])
             if 'turn_loss' in hyper_parameters_dict.keys():
                 self.turn_loss = float(hyper_parameters_dict['turn_loss'])
+            if 'avg_turn_loss' in hyper_parameters_dict.keys():
+                self.avg_turn_loss = float(hyper_parameters_dict['avg_turn_loss'])
             if 'linear_hidden_dim' in hyper_parameters_dict.keys():
                 self.linear_hidden_dim = int(hyper_parameters_dict['linear_hidden_dim'])
             if 'lstm_dropout' in hyper_parameters_dict.keys():
@@ -823,7 +826,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 encoder=lstm, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg, vocab=self.vocab,
                 predict_seq=self.predict_seq, predict_avg_total_payoff=self.predict_avg_total_payoff,
                 linear_dim=self.linear_hidden_dim, seq_weight_loss=self.turn_loss,
-                reg_weight_loss=self.avg_loss, dropout=self.linear_dropout,
+                reg_weight_loss=self.avg_loss, dropout=self.linear_dropout, reg_seq_weight_loss=self.avg_turn_loss,
                 use_last_hidden_vec=self.use_last_hidden_vec, use_transformer_encode=self.use_transformer_encoder,
                 input_dim=train_reader.input_dim, use_raisha_attention=self.use_raisha_attention,
                 raisha_num_features=train_reader.raisha_num_features, use_raisha_LSTM=self.use_raisha_LSTM)
@@ -833,7 +836,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.model = models.TransformerFixTextFeaturesDecisionResultModel(
                 vocab=self.vocab, metrics_dict_seq=metrics_dict_seq, metrics_dict_reg=metrics_dict_reg,
                 predict_avg_total_payoff=self.predict_avg_total_payoff, linear_dim=self.linear_hidden_dim,
-                batch_size=self.batch_size, input_dim=train_reader.input_dim,
+                batch_size=self.batch_size, input_dim=train_reader.input_dim,  # reg_seq_weight_loss=self.avg_turn_loss,
                 feedforward_hidden_dim=int(self.feedforward_hidden_dim_prod * train_reader.input_dim),
                 num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
                 seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss, transformer_dropout=self.lstm_dropout,
