@@ -392,7 +392,8 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     # return
     total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
     for i, folder in enumerate([['compare_prediction_models_24_09_2020_19_21'],
-                                ['compare_prediction_models_21_09_2020_11_52']]):
+                                ['compare_prediction_models_21_09_2020_11_52',
+                                 'compare_prediction_models_29_09_2020_10_10']]):
         results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
                                                    baseline=False)
         if i == 0:  # first folder
@@ -535,13 +536,14 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     best_results_to_plot.to_csv(os.path.join(base_directory, 'logs', 'analyze_results', best_model_to_plot_file_name))
 
     for dir in ['compare_prediction_models_24_09_2020_19_21',
-                'compare_prediction_models_21_09_2020_11_52']:
+                'compare_prediction_models_21_09_2020_11_52',
+                'compare_prediction_models_29_09_2020_10_10']:
         find_all_best_models_of_directory(dir, best_model_file_name)
     return
 
 
 if __name__ == '__main__':
-    main(new_results_file_name='all_results_24_09_new_models.csv',
+    main(new_results_file_name='all_results_30_09_new_models.csv',
          old_results_name='all_results_24_09_new_models.csv', hyper_parameters=True,
          best_model_file_name='Best models analysis best models tunning new test data.xlsx',
          best_model_to_plot_file_name='Best models analysis best models tunning new test data for plot.csv'
