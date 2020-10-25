@@ -78,7 +78,7 @@ def execute_create_fit_predict_eval_model(
     return all_models_results
 
 
-@ray.remote
+# @ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: str,
                           hyper_parameters_tune_mode: bool=False):
     """
@@ -122,9 +122,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     # already_trained_models = list(range(15, 21)) + list(range(11))
     # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
     # all_model_nums = [121, 122, 123]
-    # all_model_nums = list(range(5, 13)) + [23, 24, 30, 31] + list(range(54, 63)) + list(range(69, 78)) +\
-    #                  list(range(81, 84)) + list(range(163, 166)) + list(range(178, 181))
-    all_model_nums = list(range(176, 183))
+    # all_model_nums = [23, 24, 30, 31] + list(range(54, 63)) + list(range(69, 78)) + list(range(81, 84)) +\
+    #                  list(range(163, 166)) + list(range(178, 181))
+    all_model_nums = list(range(71, 78)) + list(range(81, 84)) + list(range(163, 166)) + list(range(178, 181))
 
     all_models_results = pd.DataFrame()
     for model_num in all_model_nums:  # compare all versions of each model type
@@ -141,14 +141,14 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
         for index, row in model_type_versions.iterrows():  # iterate over all the models to compare
             # get all model parameters
             model_type = row['model_type']
+            model_name = row['model_name']
 
             # for 3 losses:
-            # model_num += 700
-            # if '_avg_turn' not in model_type:
-            #     continue
-            # model_name = row['model_name'] + '_3_losses'
+            model_num += 700
+            if '_avg_turn' not in model_type:
+                continue
+            model_name = row['model_name'] + '_3_losses'
 
-            model_name = row['model_name']
             function_to_run = row['function_to_run']
             data_file_name = row['data_file_name']
             hyper_parameters_str = row['hyper_parameters']
@@ -176,12 +176,12 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                     for i, parameters_dict in enumerate(greadsearch):  # compare_prediction_models_28_08_2020_13_09
                         # if i > 0:
                         #     continue
-                        if (fold == 0 and ((model_num < 179) or (model_num == 179 and i <= 45))) or \
-                                (fold == 1 and ((model_num < 181) or (model_num == 181 and i <= 9))) or \
-                                (fold == 2 and ((model_num < 181) or (model_num == 181 and i <= 9))) or \
-                                (fold == 3 and ((model_num < 181) or (model_num == 181 and i <= 22))) or \
-                                (fold == 4 and ((model_num < 180) or (model_num == 180 and i <= 46))) or \
-                                (fold == 5 and ((model_num < 181) or (model_num == 181 and i <= -1))):
+                        if (fold == 0 and ((model_num < 771) or (model_num == 771 and i <= 15))) or \
+                                (fold == 1 and ((model_num < 773) or (model_num == 773 and i <= 9))) or \
+                                (fold == 2 and ((model_num < 773) or (model_num == 773 and i <= 9))) or \
+                                (fold == 3 and ((model_num < 773) or (model_num == 773 and i <= 6))) or \
+                                (fold == 4 and ((model_num < 772) or (model_num == 772 and i <= 9))) or \
+                                (fold == 5 and ((model_num < 772) or (model_num == 772 and i <= 30))):
                             continue
 
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
@@ -234,6 +234,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                 else:
                     print('Model type must be LSTM-kind, Transformer-kind, CRF-kind or SVM-kind')
 
+                # TODO: select best hyper parameters for the model and predict
+
             else:
                 all_models_results = execute_create_fit_predict_eval_model(
                     function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
@@ -266,26 +268,26 @@ def parallel_main():
     #                 2: 0, 3: 0,
     #                 4: 0, 5: 0}
     #
-    # cuda_devices = {0: 1, 1: 1,
-    #                 2: 1, 3: 1,
-    #                 4: 1, 5: 1}
+    cuda_devices = {0: 1, 1: 1,
+                    2: 1, 3: 1,
+                    4: 1, 5: 1}
 
     """For debug"""
-    # participants_fold_split = participants_fold_split.iloc[:50]
-    # for fold in range(6):
-    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
-    #                           hyper_parameters_tune_mode=True)
+    participants_fold_split = participants_fold_split.iloc[:50]
+    for fold in range(1):
+        execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
+                              hyper_parameters_tune_mode=True)
 
     ray.init()
-    all_ready_lng =\
-        ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
-                                              hyper_parameters_tune_mode=True)
-                 for i in range(3)])
 
-    print(f'Done! {all_ready_lng}')
-    logging.info(f'Done! {all_ready_lng}')
+    # all_ready_lng =\
+    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
+    #                                           hyper_parameters_tune_mode=True)
+    #              for i in range(3)])
+    #
+    # print(f'Done! {all_ready_lng}')
+    # logging.info(f'Done! {all_ready_lng}')
 
-    ray.init()
     all_ready_lng_1 = \
         ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
                                               hyper_parameters_tune_mode=True)
@@ -294,7 +296,6 @@ def parallel_main():
     print(f'Done! {all_ready_lng_1}')
     logging.info(f'Done! {all_ready_lng_1}')
 
-    # ray.init()
     # all_ready_lng_2 = \
     #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
     #                                           hyper_parameters_tune_mode=True)

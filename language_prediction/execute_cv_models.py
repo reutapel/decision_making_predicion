@@ -775,6 +775,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                                                   use_raisha_LSTM=self.use_raisha_LSTM,
                                                   raisha_num_features=self.raisha_num_features)
 
+
         elif 'Transformer' in self.model_type:
             train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids, only_raisha=self.only_raisha,
                                                     features_max_size=self.features_max_size)

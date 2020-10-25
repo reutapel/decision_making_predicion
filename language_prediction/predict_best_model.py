@@ -19,7 +19,7 @@ run_dir = utils.set_folder(datetime.now().strftime(f'predict_best_models_%d_%m_%
 def predict_best_models(best_model_file_name: str):
     all_models_results = pd.DataFrame()
     best_models = pd.read_excel(os.path.join(base_directory, 'logs', best_model_file_name), sheet_name='table_to_load')
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     participants_fold = pd.read_csv(os.path.join(data_directory, 'pairs_folds_new_test_data.csv'))
     participants_fold.index = participants_fold.pair_id
     excel_models_results = utils.set_folder(folder_name='excel_best_models_results', father_folder_path=run_dir)

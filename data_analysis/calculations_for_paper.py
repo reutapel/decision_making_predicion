@@ -68,7 +68,6 @@ pct_dm_per_number_of_rounds_enter_dict_test_data = {
     'All': [0, 0, 1.98, 6.93, 17.82, 26.73, 22.77, 19.8, 3.96]
 }
 
-
 pre_round_dict = {
     'Previous Trial Chose And Lose': [59, 82, 74, 76, 69, 75, 64, 69, 72],
     "Previous Trial Didn't Choose And Could Lose": [86, 80, 64, 73, 64, 75, 65, 66, 73],
@@ -247,7 +246,7 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data['dm_expected_payoff'] = np.where(data.group_sender_payoff == 1, data.group_average_score - 8, 0)
     data = data[['group_sender_payoff',	'group_receiver_payoff', 'pair_id', 'group_lottery_result',
                  'group_average_score', 'group_sender_answer_scores', 'dm_expected_payoff', 'subsession_round_number',
-                 'group_score_6', 'avg_most_close_score']]  # expert_strategy
+                 'group_score_6', 'avg_most_close_score', 'previous_round_lottery_result', 'previous_round_decision']]  # expert_strategy
     data['honesty'] = data['group_sender_answer_scores'] - data['group_average_score']
     data['expert_answer_above_8'] = np.where(data.group_sender_answer_scores > 8, 1, 0)
     data['best_reply'] = np.where((data['expert_answer_above_8'] == 1) & (data.group_sender_payoff == 1), 1,
@@ -259,6 +258,7 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     data['expert_want_to_persuade'] = np.where(data.group_sender_answer_scores > data.group_average_score, 1,
                                                np.where(data['expert_answer_above_8'] == 1, 1, 0))
     data['expected_outcome_taking_hotel'] = data.group_average_score - 8
+    data['previous_round_dm_payoff'] = data.previous_round_decision * data.previous_round_lottery_result
 
     return data
 
@@ -272,166 +272,6 @@ def significant_tests(data_1: pd.DataFrame, data_2: pd.DataFrame, criterion: str
     kruskal = scipy.stats.kruskal(data_1, data_2)
     ttest = scipy.stats.ttest_ind(data_1, data_2)
     print(f'ANOVA test: {statistic},\nKruskal test: {kruskal}\nT_test: {ttest}\n')
-
-    return
-
-
-def computation_paper_graphs(corr_data_path):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={'width_ratios': [2, 3]})
-    # first graph - enterance per round per gender
-    decision_data = pd.DataFrame(enterence_per_round_dict, index=list(range(1, 11)))
-    decision_data.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'], ax=ax1)
-    ax1.set_title("(a) Hotel Choices Rate Per Trial Number")
-    ax1.set(xlabel='Trial Number', ylabel='% Decision-Makers Chose the ’Hotel’ Option')
-    # rects = axes[0, 0].patches
-    # autolabel(rects, axes[0, 0], rotation='horizontal', max_height=80, convert_to_int=True)
-    bars = ax1.patches
-    hatches = ''.join(h * len(decision_data) for h in ' xO')
-
-    for bar, hatch in zip(bars, hatches):
-        bar.set_hatch(hatch)
-
-    ax1.legend(loc='lower center', shadow=True)
-
-    # second graph - enterance per score
-    decision_data = pd.DataFrame(enterenc_per_score_dict, index=x)
-    decision_data.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'], ax=ax2)
-    ax2.set_title("(b) Hotel Choices Rate Per Reviews' Score")
-    ax2.set(xlabel="Reviews' Score")
-    # rects = ax2.patches
-    # autolabel(rects, ax2, rotation='horizontal', max_height=80, convert_to_int=True)
-    bars = ax2.patches
-    hatches = ''.join(h * len(decision_data) for h in ' xO')
-
-    for bar, hatch in zip(bars, hatches):
-        bar.set_hatch(hatch)
-    ax2.legend(loc='upper left', shadow=True)
-
-    plt.savefig("computation_paper_graphs_enterance_rate_1.png", bbox_inches='tight')
-
-    # third graph - chose-lose
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-    inner_colors = ['orange', 'green', 'red', 'blue']
-    decision_data = pd.DataFrame(pre_round_dict, index=list(range(2, 11)))
-    for i, column in enumerate(decision_data.columns):
-        ax1.plot(list(range(2, 11)), decision_data[column], linestyle='-', color=inner_colors[i], label=column)
-    # decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=axes[1, 0])
-    ax1.set_title("(a) Hotel Choices Rate Per Previous Trial Result")
-    ax1.set(xlabel='Trial Number', ylabel='% Decision-Makers Chose the ’Hotel’ Option')
-    # rects = ax3.patches
-    # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
-    ax1.legend(loc='upper right', shadow=True, prop={"size": 8})
-
-    """Analyze the correlation between rounds"""
-    data = pd.read_csv(corr_data_path)
-    data = data.loc[data.raisha == 0]
-    data.labels = np.where(data.labels == 1, 1, 0)
-    avg_enter_rate = data.groupby(by='pair_id').labels.sum()
-    print(f'avg_enter_rate is: {avg_enter_rate.mean()}, median_enter_rate is {avg_enter_rate.median()}, '
-          f'std_enter_rate is {avg_enter_rate.std()}')
-    rounds_list = list(range(1, 11))
-    df_list = list()
-    for my_round in rounds_list:
-        df = data.loc[data.round_number == my_round].labels
-        df.reset_index(drop=True, inplace=True)
-        df_list.append(df)
-
-    labels = pd.concat(df_list, axis=1, ignore_index=True)
-    labels.columns = list(range(1, 11))
-    corr = labels.corr()
-    mask = np.zeros_like(corr, dtype=np.bool)
-    mask[np.triu_indices_from(mask)] = True
-    # plt.figure(figsize=(5, 5))
-    sns.heatmap(corr, cmap='coolwarm', annot=True, mask=mask, fmt='.2f', annot_kws={"size": 8}, ax=ax2)
-    ax2.set(xlabel='Trial Number', ylabel='Trial Number')
-    ax2.set_title('(b) Correlation Between Decisions in Different Trials')
-    corr.to_csv(os.path.join('rounds_correlation_analysis.csv'))
-    plt.savefig('correlation_heat_map.png')
-
-    # forth graph- % decision makers enters each number
-    fig, ax = plt.subplots()
-    decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict_test_data, index=list(range(2, 11)))
-    decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=ax)
-    # ax.set_title("% Decision-Makers Per Total Hotel Choices")
-    ax.set(xlabel='Number of Hotel Choices in Ten Trials',
-           ylabel='% Decision-Makers Chose the ’Hotel’ Option\nthis Number of Trials')
-    ax.get_legend().remove()
-    # rects = ax3.patches
-    # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
-
-    plt.savefig("computation_paper_graphs_enterance_rate_2_test_data.png", bbox_inches='tight')
-
-    # enterance rate per manual features
-    enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
-                                                     'experiment/decision_prediction/data_analysis/analysis/'
-                                                     'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
-                                                     'for condition verbal_test_data and gender all genders for graph.csv',
-                                                     index_col=1)
-    axes = list()
-    fig = plt.figure(figsize=(12, 5))
-    axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
-    axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
-    axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
-    axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
-    axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
-
-    for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
-        high_level_data =\
-            enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
-        high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i], fontsize=8)
-        axes[i].set_title(high_level, fontsize=8)
-        axes[i].get_legend().remove()
-        axes[i].set_xlabel('')
-
-    # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
-    # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
-    fig.text(0.5, 0.04, 'Attribute Number', ha='center')
-    fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
-    fig.legend(axes,  # The line objects
-               labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
-               loc="upper center",  # Position of legend
-               shadow=True, prop={"size": 8})
-    plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
-
-    # compare bert-domain features
-    fig, ax = plt.subplots()
-    results_data = pd.DataFrame(bert_domain_compare, index=models_index)
-    results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson'], ax=ax, alpha=0.75)
-    plt.xticks(rotation=45)
-    ax.set(ylabel='RMSE')
-    ax.legend(loc='upper right', shadow=True)
-    plt.savefig("bert_domain_features_compare.png", bbox_inches='tight')
-
-    # per raisha comapre only RMSE
-    fig, ax = plt.subplots()
-    data = pd.DataFrame(raisha_results_rmse, index=list(range(10)))
-    for i, column in enumerate(data.columns):
-        ax.plot(list(range(10)), data[column], linestyle='-', label=column)
-    # ax.set_title(f"{measure} As a Function of the Raisha Size")
-    ax.set(xlabel='Raisha Size', ylabel='RMSE')
-    plt.xticks(list(range(10)))
-    ax.legend(loc='upper left', shadow=True)
-
-    plt.savefig("raisha_compare_RMSE.png", bbox_inches='tight')
-
-    # per raisha comapre
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
-    for results_dict, measure, ax in [[raisha_results_rmse, 'RMSE', ax1],
-                                      [raisha_results_micro, 'Bin F-score Micro', ax2],
-                                      [raisha_results_macro, 'Bin F-score Macro', ax3]]:
-        data = pd.DataFrame(results_dict, index=list(range(10)))
-        for i, column in enumerate(data.columns):
-            ax.plot(list(range(10)), data[column], linestyle='-', label=column)
-        # ax.set_title(f"{measure} As a Function of the Raisha Size")
-        ax.set(xlabel='Raisha Size', ylabel=measure)
-
-    lines, labels = fig.axes[-1].get_legend_handles_labels()
-
-    fig.legend(lines, labels, loc='upper center', shadow=True, prop={"size": 10})
-    plt.xticks(list(range(10)))
-    plt.savefig("raisha_compare.png", bbox_inches='tight')
-
-    plt.show()
 
     return
 
@@ -674,7 +514,8 @@ def payoff_graph(study: int, role_dict: dict, ylabel: str, title: str):
 
 
 def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff: bool, laying_dict: dict=None,
-                        implied_score_5_8: bool=False):
+                        implied_score_5_8: bool=False, laying_per_trial: bool=False,
+                        equilibrium_data_dict: defaultdict(dict)=None):
     fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
     index = list(range(1, 11))
 
@@ -713,7 +554,16 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
     # lying graph
     if laying_dict is not None:
         fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
-        x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
+        if laying_per_trial:
+            x = list(range(1, 11))
+            x_lable = 'Trial Number'
+            y_ticks = np.arange(0.2, 0.9, 0.1)
+            x_ticks = range(1, 11)
+        else:
+            x = [4.17, 6.66, 7.44, 7.97, 8.11, 8.33, 8.94, 9.19, 9.54, 9.77]
+            x_lable = "Hotel's Expected Value"
+            y_ticks = np.arange(-0.2, 0.9, 0.1)
+            x_ticks = range(4, 11)
 
         for study in [1, 2]:
             axes[study - 1].plot(x, laying_dict[conditions_per_study[study][0]],
@@ -726,16 +576,44 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
                                  marker=markers[conditions_per_study[study][1]])
             axes[study - 1].legend(loc='upper left', shadow=True, fontsize=8)
             axes[study - 1].set_title(f'Experiment {study}', fontsize=15, )
-            axes[study - 1].set_xticks(range(4, 11))
-            axes[study - 1].set_yticks(np.arange(-0.2, 0.9, 0.1))
-            axes[study - 1].set_xlabel("Hotel's Expected Value", fontsize=12, )
+            axes[study - 1].set_xticks(x_ticks)
+            axes[study - 1].set_yticks(y_ticks)
+            axes[study - 1].set_xlabel(x_lable, fontsize=12, )
 
             if study == 1:
                 axes[study - 1].set_ylabel(ylabel='Exaggeration', fontsize=12, )
 
         # plt.title(f"The Selected Score as a Function of the Hotels' Average Score\nby Condition for study {study}")
         plt.show()
-        fig1.savefig(os.path.join(graph_directory, f'Laying_graph_2_exps.png'), bbox_inches='tight')
+        fig1.savefig(os.path.join(graph_directory, f'Laying_graph_2_exps_laying_per_{x_lable}.png'), bbox_inches='tight')
+
+        # equilibrium graphs
+        if equilibrium_data_dict is not None:
+            x = list(range(1, 11))
+            x_lable = 'Trial Number'
+            x_ticks = range(1, 11)
+            for y_lable, data_dict in equilibrium_data_dict.items():
+                fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
+                for study in [1, 2]:
+                    axes[study - 1].plot(x, data_dict[conditions_per_study[study][0]],
+                                         color=colors[conditions_per_study[study][0]],
+                                         label=condition_names_per_study[study][0],
+                                         marker=markers[conditions_per_study[study][0]])
+                    axes[study - 1].plot(x, data_dict[conditions_per_study[study][1]],
+                                         color=colors[conditions_per_study[study][1]],
+                                         label=condition_names_per_study[study][1],
+                                         marker=markers[conditions_per_study[study][1]])
+                    axes[study - 1].legend(loc='lower left', shadow=True, fontsize=8)
+                    axes[study - 1].set_title(f'Experiment {study}', fontsize=15, )
+                    axes[study - 1].set_xticks(x_ticks)
+                    y_ticks = np.arange(data_dict['min']-0.1, data_dict['max']+0.15, 0.1)
+                    axes[study - 1].set_yticks(y_ticks)
+                    axes[study - 1].set_xlabel(x_lable, fontsize=12, )
+
+                    if study == 1:
+                        axes[study - 1].set_ylabel(ylabel=y_lable, fontsize=12, )
+                fig1.savefig(os.path.join(graph_directory, f'equilibrium_graph_2_exp_per_{y_lable}.png'),
+                             bbox_inches='tight')
 
     # difference between experts payoff per trial
     # fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
@@ -762,6 +640,30 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
     #     fig1.savefig(os.path.join(graph_directory, f'Difference_persuasion_2_axes.png'), bbox_inches='tight')
 
 
+def equilibrium_data_table(df: pd.DataFrame, condition: str):
+    # new table data
+    mean_implied_score = pd.DataFrame(df.groupby(by='group_average_score').group_sender_answer_scores.mean())
+    all = df.groupby(by='group_average_score').pair_id.count()
+    hotel_rate = df.groupby(by='group_average_score').group_sender_payoff.mean()
+    exaggerate = df.loc[df.laying > 0]
+    exaggerate = exaggerate.groupby(by='group_average_score').pair_id.count()
+    exaggerate.name = 'exaggerate_above_0'
+    above_8 = df.loc[df.group_sender_answer_scores > 8]
+    above_8 = above_8.groupby(by='group_average_score').pair_id.count()
+    above_8.name = 'above_8'
+    final_for_table = mean_implied_score.merge(all, how='left', right_index=True, left_index=True). \
+        merge(hotel_rate, how='left', right_index=True, left_index=True). \
+        merge(exaggerate, how='left', right_index=True, left_index=True). \
+        merge(above_8, how='left', right_index=True, left_index=True)
+    final_for_table['prop_above_8'] = final_for_table.above_8 / final_for_table.pair_id
+    final_for_table['exaggerate_above_0'] = final_for_table.exaggerate_above_0 / final_for_table.pair_id
+    final_for_table = final_for_table[['prop_above_8', 'exaggerate_above_0', 'group_sender_answer_scores',
+                                       'group_sender_payoff']]
+    final_for_table.columns = ['prop_above_8', 'exaggerate_above_0', 'mean_implied_score', 'hotel_rate']
+    final_for_table = final_for_table.round(2)
+    final_for_table.to_csv(os.path.join(graph_directory, f'{condition}_table.csv'))
+
+
 class SignificanceTests:
     def __init__(self):
         """Load data"""
@@ -771,12 +673,22 @@ class SignificanceTests:
         self.expert_payoff_dict_below_8 = dict()
         self.dm_expected_payoff_dict = dict()
         self.laying_dict = dict()
+        self.laying_dict_trial = dict()
         self.expert_payoff_dict_persuasion = dict()
+        self.equilibrium_data_dict = defaultdict(dict)
+        self.equilibrium_data_dict['Mean Implied Score']['max'] = 0
+        self.equilibrium_data_dict['Mean Implied Score']['min'] = 10
+        self.equilibrium_data_dict['Proportion Implied Score above 8']['max'] = 0
+        self.equilibrium_data_dict['Proportion Implied Score above 8']['min'] = 1
+        self.equilibrium_data_dict['Hotel Acceptance Rate']['max'] = 0
+        self.equilibrium_data_dict['Hotel Acceptance Rate']['min'] = 1
 
         for condition in conditions:
             self.linear_scores[condition] = pd.read_csv(os.path.join(analysis_directory, condition, 'linear_scores.csv'))
             df = pd.read_csv(os.path.join(data_analysis_directory, condition, 'results_payments_status.csv'))
             df = clean_data(df)
+
+            # equilibrium_data_table(df, condition)
 
             implied_lower_8 = df.loc[df.group_sender_answer_scores < 8]
             mean_ev_below_8 = implied_lower_8.expected_outcome_taking_hotel.mean()
@@ -784,6 +696,7 @@ class SignificanceTests:
 
             self.all_data[condition] = df
             self.laying_dict[condition] = df.groupby(by='group_average_score').laying.mean().values.tolist()
+            self.laying_dict_trial[condition] = df.groupby(by='subsession_round_number').laying.mean().values.tolist()
             self.expert_payoff_dict[condition] = df.groupby(by='subsession_round_number').\
                 group_sender_payoff.mean().values.tolist()
             self.dm_expected_payoff_dict[condition] = df.groupby(by='subsession_round_number').\
@@ -792,14 +705,273 @@ class SignificanceTests:
             self.expert_payoff_dict_persuasion[condition] = df_persuasion.groupby(by='subsession_round_number').\
                 group_sender_payoff.mean().values.tolist()
 
-            # expert payiff for average score between 5 and 8
-            df = df.loc[df.group_sender_answer_scores < 8]
-            self.expert_payoff_dict_below_8[condition] = df.groupby(by='subsession_round_number').\
+            # expert payoff for implied score below 8
+            temp_df = df.loc[df.group_sender_answer_scores < 8]
+            self.expert_payoff_dict_below_8[condition] = temp_df.groupby(by='subsession_round_number').\
                 group_sender_payoff.mean().values.tolist()
+            df_below_8_take_hotel = temp_df.loc[temp_df.group_sender_payoff == 1]
+            number_of_below_8_take_hotel = df_below_8_take_hotel.shape[0]
+            df_below_8_take_hotel_gain = df_below_8_take_hotel.loc[df_below_8_take_hotel.group_lottery_result > 8]
+            # print(f'% of trials with score lower than 8 that led to a gain for condition {condition} is: '
+            #       f'{(df_below_8_take_hotel_gain.shape[0] / number_of_below_8_take_hotel)*100}')
+
+            # hotels 2,3:
+            hotels_2_3 = df.loc[df.group_average_score.between(6, 7.9)]
+            # mean implied score:
+            key = 'Mean Implied Score'
+            self.equilibrium_data_dict[key][condition] = \
+                hotels_2_3.groupby(by='subsession_round_number').group_sender_answer_scores.mean().values.tolist()
+            self.equilibrium_data_dict[key]['max'] = max(round(max(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['max'])
+            self.equilibrium_data_dict[key]['min'] = min(round(min(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['min'])
+            # prop above 8
+            key = 'Proportion Implied Score above 8'
+            self.equilibrium_data_dict[key][condition] = \
+                hotels_2_3.groupby(by='subsession_round_number').expert_answer_above_8.mean().values.tolist()
+            self.equilibrium_data_dict[key]['max'] = max(round(max(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['max'])
+            self.equilibrium_data_dict[key]['min'] = min(round(min(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['min'])
+
+            # hotel rate
+            key = 'Hotel Acceptance Rate'
+            self.equilibrium_data_dict[key][condition] = \
+                hotels_2_3.groupby(by='subsession_round_number').group_sender_payoff.mean().values.tolist()
+            self.equilibrium_data_dict[key]['max'] = max(round(max(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['max'])
+            self.equilibrium_data_dict[key]['min'] = min(round(min(self.equilibrium_data_dict[key][condition]), 1),
+                                                         self.equilibrium_data_dict[key]['min'])
 
         return
 
-    def understanding_graph(self, func_study: int, two_axes: bool=False):
+    def dm_individual_differences(self, study):
+        study_1_cond = self.all_data[conditions_per_study[study][0]]
+        study_2_cond = self.all_data[conditions_per_study[study][1]]
+        study_1_dm_data = study_1_cond.groupby(by='pair_id').agg({'group_sender_payoff': 'mean',
+                                                                  'dm_expected_payoff': 'mean'})
+        study_1_dm_data['pair_id'] = study_1_dm_data.index
+        study_2_dm_data = study_2_cond.groupby(by='pair_id').agg({'group_sender_payoff': 'mean',
+                                                                  'dm_expected_payoff': 'mean'})
+        study_2_dm_data['pair_id'] = study_2_dm_data.index
+
+        # map sender payoff
+        bins = [-0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+        names = ['<0.2', '0.2-0.4', '0.4-0.6', '0.6-0.8', '>0.8']
+        study_1_dm_data['proportion of hotel'] = pd.cut(study_1_dm_data['group_sender_payoff'], bins, labels=names)
+        study_2_dm_data['proportion of hotel'] = pd.cut(study_2_dm_data['group_sender_payoff'], bins, labels=names)
+
+        # map dm expected payoff
+        bins = [-np.inf, -0.2, 0.0, 0.2, 0.4, np.inf]
+        names = ['<-0.2', '-0.2-0', '0-0.2', '0.2-0.4', '>0.4']
+        study_1_dm_data['average expected earning over trials'] = pd.cut(study_1_dm_data['dm_expected_payoff'], bins,
+                                                                         labels=names)
+        study_2_dm_data['average expected earning over trials'] = pd.cut(study_2_dm_data['dm_expected_payoff'], bins,
+                                                                         labels=names)
+
+        # pivot table
+        study_1_dm_data_pivot = pd.pivot_table(study_1_dm_data, values='pair_id', index=['proportion of hotel'],
+                                               columns='average expected earning over trials',
+                                               aggfunc=lambda x: len(x.unique()), fill_value=0)
+        study_1_dm_data_pivot.to_csv(os.path.join(graph_directory,
+                                                  f'dm_pivot_table_{conditions_per_study[study][0]}.csv'))
+        study_2_dm_data_pivot = pd.pivot_table(study_2_dm_data, values='pair_id', index=['proportion of hotel'],
+                                               columns='average expected earning over trials',
+                                               aggfunc=lambda x: len(x.unique()), fill_value=0)
+        study_2_dm_data_pivot.to_csv(os.path.join(graph_directory,
+                                                  f'dm_pivot_table_{conditions_per_study[study][1]}.csv'))
+
+    def computation_paper_graphs(self, corr_data_path=None):
+
+        # previous round results
+        fig, ax = plt.subplots()
+        decision_data = pd.DataFrame(self.all_data['verbal'][['previous_round_lottery_result', 'group_sender_payoff',
+                                                              'previous_round_decision']])
+        previous_round_choose = decision_data.loc[decision_data.previous_round_decision == 1]
+        previous_round_choose = pd.DataFrame(previous_round_choose.
+                                             groupby(by='previous_round_lottery_result').group_sender_payoff.mean()*100)
+        previous_round_choose.columns = [f"Previous choice: 'Hotel'"]
+        previous_round_not_choose = decision_data.loc[decision_data.previous_round_decision == 0]
+        previous_round_not_choose = pd.DataFrame(previous_round_not_choose.
+                                                 groupby(by='previous_round_lottery_result').group_sender_payoff.mean()*100)
+        previous_round_not_choose.columns = [f"Previous choice: 'Stay Home'"]
+
+        previous_round_analysis = previous_round_not_choose.merge(previous_round_choose, left_index=True,
+                                                                  right_index=True, how='outer')
+        previous_round_analysis.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue'], ax=ax)
+        ax.set(xlabel='Previous Trial "true score"', ylabel='Hotel Choices Rate')
+        plt.title('Hotel Choices Rate Per Previous Trial "true score"')
+        bars = ax.patches
+        hatches = ''.join(h * len(previous_round_analysis) for h in ' x')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+
+        ax.legend(loc='lower center', shadow=True)
+        plt.savefig("computation_paper_graphs_previous_trial.png", bbox_inches='tight')
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={'width_ratios': [2, 3]})
+        # first graph - enterance per round per gender
+        decision_data = pd.DataFrame(enterence_per_round_dict, index=list(range(1, 11)))
+        decision_data.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'], ax=ax1)
+        ax1.set_title("(a) Hotel Choice Rate Per Trial Number")
+        ax1.set(xlabel='Trial Number', ylabel='Hotel Choice Rate')
+        # rects = axes[0, 0].patches
+        # autolabel(rects, axes[0, 0], rotation='horizontal', max_height=80, convert_to_int=True)
+        bars = ax1.patches
+        hatches = ''.join(h * len(decision_data) for h in ' xO')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+
+        ax1.legend(loc='lower center', shadow=True)
+
+        # second graph - enterance per score
+        decision_data = pd.DataFrame(enterenc_per_score_dict, index=x)
+        decision_data.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue', 'violet'], ax=ax2)
+        ax2.set_title("(b) Hotel Choices Rate Per Reviews' Score")
+        ax2.set(xlabel="Reviews' Score")
+        # rects = ax2.patches
+        # autolabel(rects, ax2, rotation='horizontal', max_height=80, convert_to_int=True)
+        bars = ax2.patches
+        hatches = ''.join(h * len(decision_data) for h in ' xO')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+        ax2.legend(loc='upper left', shadow=True)
+
+        plt.savefig("computation_paper_graphs_enterance_rate_1.png", bbox_inches='tight')
+
+        # third graph - chose-lose
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        inner_colors = ['orange', 'green', 'red', 'blue']
+        decision_data = pd.DataFrame(pre_round_dict, index=list(range(2, 11)))
+        for i, column in enumerate(decision_data.columns):
+            ax1.plot(list(range(2, 11)), decision_data[column], linestyle='-', color=inner_colors[i], label=column)
+        # decision_data.plot(kind="bar", stacked=False, rot=0, color=['orange', 'green', 'red', 'blue'], ax=axes[1, 0])
+        ax1.set_title("(a) Hotel Choices Rate Per Previous Trial Result")
+        ax1.set(xlabel='Trial Number', ylabel='% Decision-Makers Chose the ’Hotel’ Option')
+        # rects = ax3.patches
+        # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
+        ax1.legend(loc='upper right', shadow=True, prop={"size": 8})
+
+        """Analyze the correlation between rounds"""
+        if corr_data_path is not None:
+            data = pd.read_csv(corr_data_path)
+            data = data.loc[data.raisha == 0]
+            data.labels = np.where(data.labels == 1, 1, 0)
+            avg_enter_rate = data.groupby(by='pair_id').labels.sum()
+            print(f'avg_enter_rate is: {avg_enter_rate.mean()}, median_enter_rate is {avg_enter_rate.median()}, '
+                  f'std_enter_rate is {avg_enter_rate.std()}')
+            rounds_list = list(range(1, 11))
+            df_list = list()
+            for my_round in rounds_list:
+                df = data.loc[data.round_number == my_round].labels
+                df.reset_index(drop=True, inplace=True)
+                df_list.append(df)
+
+            labels = pd.concat(df_list, axis=1, ignore_index=True)
+            labels.columns = list(range(1, 11))
+            corr = labels.corr()
+            mask = np.zeros_like(corr, dtype=np.bool)
+            mask[np.triu_indices_from(mask)] = True
+            # plt.figure(figsize=(5, 5))
+            sns.heatmap(corr, cmap='coolwarm', annot=True, mask=mask, fmt='.2f', annot_kws={"size": 8}, ax=ax2)
+            ax2.set(xlabel='Trial Number', ylabel='Trial Number')
+            ax2.set_title('(b) Correlation Between Decisions in Different Trials')
+            corr.to_csv(os.path.join('rounds_correlation_analysis.csv'))
+            plt.savefig('correlation_heat_map.png')
+
+        # forth graph- % decision makers enters each number
+        fig, ax = plt.subplots()
+        decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict_test_data, index=list(range(2, 11)))
+        decision_data.plot(kind="bar", stacked=False, rot=0, color=['red'], ax=ax)
+        # ax.set_title("% Decision-Makers Per Total Hotel Choices")
+        ax.set(xlabel='Number of Hotel Choices in Ten Trials',
+               ylabel='% Decision-Makers Chose the ’Hotel’ Option\nthis Number of Trials')
+        ax.get_legend().remove()
+        # rects = ax3.patches
+        # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
+
+        plt.savefig("computation_paper_graphs_enterance_rate_2_test_data.png", bbox_inches='tight')
+
+        # enterance rate per manual features
+        enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+                                                         'experiment/decision_prediction/data_analysis/analysis/'
+                                                         'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
+                                                         'for condition verbal_test_data and gender all genders for graph.csv',
+                                                         index_col=1)
+        axes = list()
+        fig = plt.figure(figsize=(12, 5))
+        axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
+
+        for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
+            high_level_data = \
+                enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
+            high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i],
+                                 fontsize=8)
+            axes[i].set_title(high_level, fontsize=8)
+            axes[i].get_legend().remove()
+            axes[i].set_xlabel('')
+
+        # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
+        # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
+        fig.text(0.5, 0.04, 'Attribute Number', ha='center')
+        fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
+        fig.legend(axes,  # The line objects
+                   labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
+                   loc="upper center",  # Position of legend
+                   shadow=True, prop={"size": 8})
+        plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
+
+        # compare bert-domain features
+        fig, ax = plt.subplots()
+        results_data = pd.DataFrame(bert_domain_compare, index=models_index)
+        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson'], ax=ax, alpha=0.75)
+        plt.xticks(rotation=45)
+        ax.set(ylabel='RMSE')
+        ax.legend(loc='upper right', shadow=True)
+        plt.savefig("bert_domain_features_compare.png", bbox_inches='tight')
+
+        # per raisha comapre only RMSE
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(raisha_results_rmse, index=list(range(10)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+        ax.set(xlabel='Raisha Size', ylabel='RMSE')
+        plt.xticks(list(range(10)))
+        ax.legend(loc='upper left', shadow=True)
+
+        plt.savefig("raisha_compare_RMSE.png", bbox_inches='tight')
+
+        # per raisha comapre
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+        for results_dict, measure, ax in [[raisha_results_rmse, 'RMSE', ax1],
+                                          [raisha_results_micro, 'Bin F-score Micro', ax2],
+                                          [raisha_results_macro, 'Bin F-score Macro', ax3]]:
+            data = pd.DataFrame(results_dict, index=list(range(10)))
+            for i, column in enumerate(data.columns):
+                ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+            # ax.set_title(f"{measure} As a Function of the Raisha Size")
+            ax.set(xlabel='Raisha Size', ylabel=measure)
+
+        lines, labels = fig.axes[-1].get_legend_handles_labels()
+
+        fig.legend(lines, labels, loc='upper center', shadow=True, prop={"size": 10})
+        plt.xticks(list(range(10)))
+        plt.savefig("raisha_compare.png", bbox_inches='tight')
+
+        # plt.show()
+
+        return
+
+    def understanding_graph(self, func_study: int, two_axes: bool=False,
+                            column_to_group: str='group_sender_answer_scores', x_lable: str='Implied Score'):
         if two_axes:
             fig1, axes = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1]})
             fig1.tight_layout(pad=10)
@@ -810,38 +982,49 @@ class SignificanceTests:
             studies = [func_study]
 
         for study in studies:
-            axes[study - 1].axis([2, 10, 0, 1])
-            study_1_x_list = self.all_data[conditions_per_study[study][0]].group_sender_answer_scores.unique().tolist()
-            study_2_x_list = self.all_data[conditions_per_study[study][1]].group_sender_answer_scores.unique().tolist()
+            if column_to_group == 'group_sender_answer_scores':
+                axes[study - 1].axis([2, 10, 0, 1])
+            else:
+                axes[study - 1].axis([4, 10, 0, 1])
+            study_1_x_list = self.all_data[conditions_per_study[study][0]][column_to_group].unique().tolist()
+            study_2_x_list = self.all_data[conditions_per_study[study][1]][column_to_group].unique().tolist()
 
             study_1_x_list.extend(study_2_x_list)
-            x = pd.DataFrame(sorted(list(set(study_1_x_list))), columns=['group_sender_answer_scores'])
+            x = pd.DataFrame(sorted(list(set(study_1_x_list))), columns=[column_to_group])
 
             study_1_cond = self.all_data[conditions_per_study[study][0]]
             study_2_cond = self.all_data[conditions_per_study[study][1]]
 
-            study_1_cond_understand = study_1_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.mean()
-            study_2_cond_understand = study_2_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.mean()
+            study_1_cond_understand = study_1_cond.groupby(by=column_to_group).group_sender_payoff.mean()
+            study_2_cond_understand = study_2_cond.groupby(by=column_to_group).group_sender_payoff.mean()
 
-            study_1_cond_understand_x = x.merge(study_1_cond_understand, left_on='group_sender_answer_scores',
+            study_1_cond_understand_x = x.merge(study_1_cond_understand, left_on=column_to_group,
                                                 right_index=True, how='left')
-            study_2_cond_understand_x = x.merge(study_2_cond_understand, left_on='group_sender_answer_scores',
+            study_2_cond_understand_x = x.merge(study_2_cond_understand, left_on=column_to_group,
                                                 right_index=True, how='left')
 
-            values_study_1 = study_1_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()/3
-            values_study_2 = study_2_cond.groupby(by='group_sender_answer_scores').group_sender_payoff.count()/3
-            if values_study_1.shape[0] > values_study_2.shape[0]:  # add missing index to values_study_2
-                for i in values_study_1.index:
-                    if i not in values_study_2.index:
-                        values_study_2.loc[i] = 0
-                values_study_2 = values_study_2.sort_index()
-            elif values_study_1.shape[0] < values_study_2.shape[0]:  # add missing index to values_study_1
-                for i in values_study_2.index:
-                    if i not in values_study_1.index:
-                        values_study_1.loc[i] = 0
-                values_study_1 = values_study_1.sort_index()
+            if column_to_group == 'group_sender_answer_scores':
+                values_study_1 = study_1_cond.groupby(by=column_to_group).group_sender_payoff.count()/3
+                values_study_2 = study_2_cond.groupby(by=column_to_group).group_sender_payoff.count()/3
+                if values_study_1.shape[0] > values_study_2.shape[0]:  # add missing index to values_study_2
+                    for i in values_study_1.index:
+                        if i not in values_study_2.index:
+                            values_study_2.loc[i] = 0
+                    values_study_2 = values_study_2.sort_index()
+                elif values_study_1.shape[0] < values_study_2.shape[0]:  # add missing index to values_study_1
+                    for i in values_study_2.index:
+                        if i not in values_study_1.index:
+                            values_study_1.loc[i] = 0
+                    values_study_1 = values_study_1.sort_index()
 
-            axes[study - 1].scatter(x, study_1_cond_understand_x.group_sender_payoff, s=values_study_1.values,
+                values_study_1 = values_study_1.values
+                values_study_2 = values_study_2.values
+
+            else:
+                values_study_1 = None
+                values_study_2 = None
+
+            axes[study - 1].scatter(x, study_1_cond_understand_x.group_sender_payoff, s=values_study_1,
                                     color=colors[conditions_per_study[study][0]],
                                     # label=condition_names_per_study[study][0],
                                     marker=markers[conditions_per_study[study][0]], linestyle='-')
@@ -849,7 +1032,7 @@ class SignificanceTests:
                                  marker=markers[conditions_per_study[study][0]],
                                  label=condition_names_per_study[study][0], markersize=0,
                                  color=colors[conditions_per_study[study][0]], linestyle='-')
-            axes[study - 1].scatter(x, study_2_cond_understand_x.group_sender_payoff, s=values_study_2.values,
+            axes[study - 1].scatter(x, study_2_cond_understand_x.group_sender_payoff, s=values_study_2,
                                     color=colors[conditions_per_study[study][1]],
                                     # label=condition_names_per_study[study][1],
                                     marker=markers[conditions_per_study[study][1]], linestyle='-')
@@ -861,7 +1044,7 @@ class SignificanceTests:
             # x is a pd.DataFrame with one column, x.T.values[0] are its values
             # cell_text = [x.T.values[0], values_study_1.values, values_study_2.values]
             # columns = values_study_1.index.values
-            xlabel = 'Implied Score'
+            xlabel = x_lable
             # table_condition_names_per_study = {1: ['Numerical', 'Verbal'],
             #                                    2: ['Only\nNumerical', 'Verbal+\nNumerical']}
             # # Add a table at the bottom of the axes
@@ -893,7 +1076,10 @@ class SignificanceTests:
                                  color=colors[conditions_per_study[study][1]])
 
             axes[study - 1].legend(loc='upper left', shadow=True, fontsize=8, handles=[exp1, exp2])
-            axes[study - 1].set_xticks(range(2, 11))
+            if column_to_group == 'group_sender_answer_scores':
+                axes[study - 1].set_xticks(range(2, 11))
+            else:
+                axes[study - 1].set_xticks(range(4, 11))
             # plt.tick_params(
             #     axis='x',  # changes apply to the x-axis
             #     which='both',  # both major and minor ticks are affected
@@ -903,9 +1089,9 @@ class SignificanceTests:
             axes[study - 1].set_yticks(np.arange(0.0, 1.05, 0.1))
         plt.show()
         if two_axes:
-            title = f'understanding_level_2_axes.png'
+            title = f'understanding_level_2_axes_per_{x_lable}.png'
         else:
-            title = f'understanding_level_study_{func_study}.png'
+            title = f'understanding_level_study_{func_study}_per_{x_lable}.png'
         fig1.subplots_adjust(wspace=0.15)
         fig1.savefig(os.path.join(graph_directory, title), bbox_inches='tight')
 
@@ -1079,6 +1265,22 @@ class SignificanceTests:
 
         return
 
+    def two_hotels_test(self, study: int):
+        study_1_cond = self.all_data[conditions_per_study[study][0]]
+        study_2_cond = self.all_data[conditions_per_study[study][1]]
+
+        study_1_cond = study_1_cond.loc[study_1_cond.group_average_score.between(6, 7.9)]
+        study_2_cond = study_2_cond.loc[study_2_cond.group_average_score.between(6, 7.9)]
+
+        study_1_cond_mean_ex_payoff = study_1_cond.groupby(by='pair_id').expert_answer_above_8.mean()
+        study_2_cond_mean_ex_payoff = study_2_cond.groupby(by='pair_id').expert_answer_above_8.mean()
+
+        significant_tests(study_1_cond_mean_ex_payoff, study_2_cond_mean_ex_payoff,
+                          f'Two hotels above 8 implied score Study {study}: '
+                          f'{conditions_per_study[study][0]}, {conditions_per_study[study][1]}')
+
+        return
+
     def dm_payoff_test(self, study: int):
         study_1_cond = self.all_data[conditions_per_study[study][0]]
         study_2_cond = self.all_data[conditions_per_study[study][1]]
@@ -1233,9 +1435,8 @@ class SignificanceTests:
                                              fontsize=10)
                 axes[study - 1][i].xaxis.set_label_text("")
 
-
             if study == 1:
-                for i in [0,1]:
+                for i in [0, 1]:
                     axes[study - 1][i].tick_params(
                         axis='x',  # changes apply to the x-axis
                         which='both',  # both major and minor ticks are affected
@@ -1376,14 +1577,15 @@ class CalculationsForPaper:
 
 
 def main():
+    # calculation_obj = CalculationsForPaper()
+    # calculation_obj.number_participants()
+    tests_obj = SignificanceTests()
     # computation_paper_graphs(corr_data_path='/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
     #                                         'decision_prediction/language_prediction/data/verbal/cv_framework/'
     #                                         'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
     #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
     #                                         'round_verbal_data.csv')
-    # calculation_obj = CalculationsForPaper()
-    # calculation_obj.number_participants()
-    tests_obj = SignificanceTests()
+    # tests_obj.computation_paper_graphs()
     # expert_payoff_dict = {'verbal': [0.77, 0.66, 0.77, 0.71, 0.74, 0.70, 0.75, 0.67, 0.68, 0.68],
     #                       'numeric': [0.88, 0.79, 0.76, 0.78, 0.75, 0.72, 0.78, 0.73, 0.78, 0.71],
     #                       'num_only': [0.97, 0.90, 0.70, 0.71, 0.75, 0.70, 0.87, 0.78, 0.57, 0.85],
@@ -1393,14 +1595,17 @@ def main():
     #                             'numeric': [0.22, 0.26, 0.53, 0.21, 0.2, 0.18, 0.32, 0.35, 0.36, -0.04],
     #                             'num_only': [0.28, 0.37, 0.15, 0.11, 0.23, 0.42, 0.29, 0.59, 0.15, 0.2],
     #                             'both': [0.26, 0.36, 0.03, 0.07, 0.36, 0.48, 0.5, 0.01, 0.42, 0.47]}
-    tests_obj.score_5_4_analysis()
+    # tests_obj.score_5_4_analysis()
     # tests_obj.exaggerate_strategy_analysis()
     # tests_obj.expert_payoff_per_expert_strategy()
-    both_exp_laying_graph(role_dict=tests_obj.expert_payoff_dict, ylabel='Fraction of Hotel choices',
-                          title=f'Average acceptance rate as a function of trial', laying_dict=tests_obj.laying_dict)
+    # both_exp_laying_graph(role_dict=tests_obj.expert_payoff_dict, ylabel='Fraction of Hotel choices',
+    #                       title=f'Average acceptance rate as a function of trial', laying_dict=tests_obj.laying_dict)
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict, ylabel="Fraction of Hotel choices",
                         title=f'Average acceptance rate  as a function of trial', expert_payoff=True,
-                        laying_dict=tests_obj.laying_dict)
+                        laying_dict=tests_obj.laying_dict, equilibrium_data_dict=tests_obj.equilibrium_data_dict)
+    both_studies_graphs(role_dict=tests_obj.expert_payoff_dict, ylabel="Fraction of Hotel choices",
+                        title=f'Average acceptance rate  as a function of trial', expert_payoff=True,
+                        laying_dict=tests_obj.laying_dict_trial, laying_per_trial=True)
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_below_8, ylabel="Fraction of Hotel choices",
                         title=f'Average acceptance rate average score below 8 as a function of trial', expert_payoff=True,
                         implied_score_5_8=True)
@@ -1412,10 +1617,12 @@ def main():
 
     for study in [1, 2]:
         print(f'Significant tests for study {study}')
+        tests_obj.two_hotels_test(study=study)
+        tests_obj.understanding_graph(func_study=study, two_axes=True, column_to_group='group_average_score',
+                                      x_lable="Hotel's Expected Value")
+        tests_obj.dm_individual_differences(study=study)
         tests_obj.laying_test(study=study)
         tests_obj.laying_graph(study=study)
-
-        tests_obj.understanding_graph(func_study=study, two_axes=True)
         tests_obj.understanding_graph(func_study=study)
         tests_obj.trust_graph(study=study, split_half=False)
         tests_obj.trust_graph(study=study, split_half=True)
