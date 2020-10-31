@@ -165,7 +165,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
 
             function_to_run = row['function_to_run']
             data_file_name = row['data_file_name']
-            # test_data_file_name = row['test_data_file_name']
+            test_data_file_name = row['test_data_file_name']
             hyper_parameters_str = row['hyper_parameters']
             # get hyper parameters as dict
             if type(hyper_parameters_str) == str:
