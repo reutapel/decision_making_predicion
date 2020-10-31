@@ -390,28 +390,26 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     # for dir in ['compare_prediction_models_07_09_2020_11_12']:
     #     find_all_best_models_of_directory(dir, best_model_file_name)
     # return
-    # total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
-    # for i, folder in enumerate([['compare_prediction_models_05_10_2020_18_05'],
-    #                             ['compare_prediction_models_08_10_2020_11_14'],
-    #                             ['compare_prediction_models_11_10_2020_10_34'],
-    #                             ['compare_prediction_models_14_10_2020_13_40'],
-    #                             ['compare_prediction_models_29_09_2020_10_38'],
-    #                             ['compare_prediction_models_05_10_2020_18_10']]):
-    #     results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
-    #                                                baseline=False)
-    #     if i == 0:  # first folder
-    #         old_results_name = old_results_name
-    #     else:
-    #         old_results_name = new_results_file_name
-    #     concat_new_results(new_results_name=results_file_name,
-    #                        old_results_name=old_results_name,
-    #                        new_results_file_name_to_save=new_results_file_name)
-    results_file_name = combine_models_all_results(['predict_best_models_20_10_2020_14_13_nlp_12',
-                                                    'predict_best_models_20_10_2020_14_13'],
-                                                   hyper_parameters=hyper_parameters)
-    concat_new_results(new_results_name=results_file_name,
-                       old_results_name=old_results_name,
-                       new_results_file_name_to_save=new_results_file_name)
+    total_payoff_true_label_per_fold = pd.read_excel(os.path.join(base_directory, 'logs', 'total_label_per_fold.xlsx'))
+    for i, folder in enumerate([['compare_prediction_models_30_10_2020_21_32'],
+                                ['compare_prediction_models_31_10_2020_10_37'],
+                                ['compare_prediction_models_31_10_2020_10_35'],
+                                ['compare_prediction_models_18_10_2020_21_58_2']]):
+        results_file_name = combine_models_results(folder, total_payoff_true_label=total_payoff_true_label_per_fold,
+                                                   baseline=False)
+        if i == 0:  # first folder
+            old_results_name = old_results_name
+        else:
+            old_results_name = new_results_file_name
+        concat_new_results(new_results_name=results_file_name,
+                           old_results_name=old_results_name,
+                           new_results_file_name_to_save=new_results_file_name)
+    # results_file_name = combine_models_all_results(['predict_best_models_20_10_2020_14_13_nlp_12',
+    #                                                 'predict_best_models_20_10_2020_14_13'],
+    #                                                hyper_parameters=hyper_parameters)
+    # concat_new_results(new_results_name=results_file_name,
+    #                    old_results_name=old_results_name,
+    #                    new_results_file_name_to_save=new_results_file_name)
     # results_file_name = "all_server_results_['compare_prediction_models_13_08_2020_11_48', " \
     #                "'compare_prediction_models_13_08_2020_15_33'].csv"
 
@@ -424,8 +422,7 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     #     concat_new_results(results_file_name, old_results_name=old_results_name,
     #                        new_results_file_name_to_save=new_results_file_name)
 
-    # concat_new_results("all_server_results_['compare_prediction_models_23_06_2020_10_41_hyper', "
-    #                    "'compare_prediction_models_23_06_2020_16_44_hyper'].csv",
+    # concat_new_results("all_server_results_['compare_prediction_models_18_10_2020_21_59'].csv",
     #                    old_results_name=new_results_file_name,
     #                    new_results_file_name_to_save=new_results_file_name)
     #
@@ -537,18 +534,19 @@ def main(new_results_file_name, old_results_name, best_model_file_name: str, bes
     best_results_to_plot = pd.concat(best_results_to_plot, sort=False, axis=1)
     best_results_to_plot.to_csv(os.path.join(base_directory, 'logs', 'analyze_results', best_model_to_plot_file_name))
 
-    # for dir in ['compare_prediction_models_05_10_2020_18_05', 'compare_prediction_models_08_10_2020_11_14',
-    #             'compare_prediction_models_11_10_2020_10_34', 'compare_prediction_models_14_10_2020_13_40',
-    #             'compare_prediction_models_29_09_2020_10_38', 'compare_prediction_models_05_10_2020_18_10']:
-    #     find_all_best_models_of_directory(dir, best_model_file_name)
+    for dir in ['compare_prediction_models_18_10_2020_21_58', 'compare_prediction_models_30_10_2020_21_42',
+                'compare_prediction_models_30_10_2020_21_38', 'compare_prediction_models_30_10_2020_21_32',
+                'compare_prediction_models_31_10_2020_10_37', 'compare_prediction_models_31_10_2020_10_35'
+                'compare_prediction_models_18_10_2020_21_58_2']:
+        find_all_best_models_of_directory(dir, best_model_file_name)
     return
 
 
 if __name__ == '__main__':
-    main(new_results_file_name='all_server_results_predict_best_models_20_10.csv',
-         old_results_name='all_server_results_predict_best_models_22_9.csv', hyper_parameters=False,
-         # best_model_file_name='Best models analysis best models tuning new test data.xlsx',
-         # best_model_to_plot_file_name='Best models analysis best models tuning new test data for plot.csv'
-         best_model_file_name='Best models prediction new test data.xlsx',
-         best_model_to_plot_file_name='Best models prediction new test data for plot.csv'
+    main(new_results_file_name='all_results_31_10_new_models.csv',
+         old_results_name='all_results_31_10_new_models.csv', hyper_parameters=True,
+         best_model_file_name='Best models analysis best models tuning new test data.xlsx',
+         best_model_to_plot_file_name='Best models analysis best models tuning new test data for plot.csv'
+         # best_model_file_name='Best models prediction new test data.xlsx',
+         # best_model_to_plot_file_name='Best models prediction new test data for plot.csv'
     )

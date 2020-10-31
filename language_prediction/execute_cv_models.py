@@ -86,7 +86,7 @@ class ExecuteEvalModel:
             os.path.join(excel_models_results, f'Results_fold_{fold}_model_{model_num}.xlsx'), engine='xlsxwriter')
         print(f'Create Model: model num: {model_num},\nmodel_type: {model_type},\nmodel_name: {model_name}. '
               f'\nData file name: {data_file_name}'
-              f'\nMode hyper parameters: {hyper_parameters_dict}')
+              f'\nModel hyper parameters: {hyper_parameters_dict}')
         logging.info(f'Create Model: model num: {model_num}, model_type: {model_type}, model_name: {model_name}. '
                      f'Data file name: {data_file_name}')
 
@@ -774,7 +774,6 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                                                   use_raisha_attention=self.use_raisha_attention,
                                                   use_raisha_LSTM=self.use_raisha_LSTM,
                                                   raisha_num_features=self.raisha_num_features)
-
 
         elif 'Transformer' in self.model_type:
             train_reader = TransformerDatasetReader(pair_ids=self.train_pair_ids, only_raisha=self.only_raisha,
