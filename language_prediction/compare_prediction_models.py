@@ -12,6 +12,7 @@ import torch
 import copy
 import random
 import joblib
+import sys
 
 random.seed(123)
 
@@ -19,14 +20,7 @@ random.seed(123)
 base_directory = os.path.abspath(os.curdir)
 condition = 'verbal'
 data_directory = os.path.join(base_directory, 'data', condition, 'cv_framework')
-run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M'), 'logs')
-# for test
-test_dir = utils.set_folder(datetime.now().strftime(f'predict_best_models_%d_%m_%Y_%H_%M'), 'logs')
-excel_test_models_results = utils.set_folder(folder_name='excel_best_models_results', father_folder_path=test_dir)
-test_participants_fold = pd.read_csv(os.path.join(data_directory, 'pairs_folds_new_test_data.csv'))
-test_participants_fold.index = test_participants_fold.pair_id
-test_table_writer = pd.ExcelWriter(os.path.join(excel_test_models_results, f'Results_test_data_best_models.xlsx'),
-                                   engine='xlsxwriter')
+pair_folds_file_name = 'pairs_folds_new_test_data.csv'
 
 os.environ['http_proxy'] = 'some proxy'
 os.environ['https_proxy'] = 'some proxy'
@@ -35,15 +29,13 @@ lstm_gridsearch_params = [
     {'lstm_dropout': lstm_dropout, 'linear_dropout': lstm_dropout,
      'lstm_hidden_dim': hidden_size, 'num_layers': num_layers}
     for lstm_dropout in [0.0, 0.1, 0.2, 0.3]
-    for hidden_size in [50, 80, 100, 200]
+    for hidden_size in [50, 80, 100]
     for num_layers in [1, 2, 3]
 ]
 
-# avg_turn_gridsearch_params = [{'avg_loss': 0.5, 'turn_loss': 0.5}, {'avg_loss': 0.3, 'turn_loss': 0.7},
-#                               {'avg_loss': 0.3, 'turn_loss': 0.7}]
-avg_turn_gridsearch_params = [{'avg_loss': 1.0, 'turn_loss': 1.0, 'avg_turn_loss': 1.0},
-                              {'avg_loss': 2.0, 'turn_loss': 2.0, 'avg_turn_loss': 1.0},
-                              {'avg_loss': 1.0, 'turn_loss': 1.0, 'avg_turn_loss': 2.0}]
+avg_turn_gridsearch_params = [{'avg_loss': 0.5, 'turn_loss': 0.5}, {'avg_loss': 0.3, 'turn_loss': 0.7},
+                              {'avg_loss': 0.3, 'turn_loss': 0.7}]
+
 
 transformer_gridsearch_params = [
     {'num_encoder_layers': num_layers, 'feedforward_hidden_dim_prod': feedforward_hidden_dim_prod,
@@ -51,6 +43,7 @@ transformer_gridsearch_params = [
     for num_layers in [3, 4, 5, 6]
     for transformer_dropout in [0.0, 0.1, 0.2, 0.3]
     for feedforward_hidden_dim_prod in [0.5, 1, 2]
+    # for lr in [1e-4]
 ]
 
 svm_gridsearch_params = [{'kernel': 'poly', 'degree': 3}, {'kernel': 'poly', 'degree': 5},
@@ -89,7 +82,7 @@ def execute_create_fit_predict_eval_model(
 
 @ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: str,
-                          hyper_parameters_tune_mode: bool=False):
+                          hyper_parameters_tune_mode: bool=False, three_losses: bool=False, leaky_relu: bool=False):
     """
     This function get a dict that split the participant to train-val-test (for this fold) and run all the models
     we want to compare --> it train them using the train data and evaluate them using the val data
@@ -97,6 +90,8 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     :param fold: the fold number
     :param cuda_device: the number of cuda device if using it
     :param hyper_parameters_tune_mode: after find good data - hyper parameter tuning
+    :param three_losses: if we want 3 losses for avg_turn models
+    :param leaky_relu: if we wan to use leaky_relu in linear layers
     :return:
     """
     # get the train, test, validation participant code for this fold
@@ -112,6 +107,14 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                                       sheet_name='table_to_load', skiprows=[0])
     fold_dir = utils.set_folder(f'fold_{fold}', run_dir)
     excel_models_results = utils.set_folder(folder_name='excel_models_results', father_folder_path=fold_dir)
+    # for test
+    test_fold_dir = utils.set_folder(f'fold_{fold}', test_dir)
+    excel_test_models_results = utils.set_folder(folder_name='excel_best_models_results',
+                                                 father_folder_path=test_fold_dir)
+    test_participants_fold = pd.read_csv(os.path.join(data_directory, pair_folds_file_name))
+    test_participants_fold.index = test_participants_fold.pair_id
+    test_table_writer = pd.ExcelWriter(os.path.join(excel_test_models_results, f'Results_test_data_best_models.xlsx'),
+                                       engine='xlsxwriter')
     # table_writer = pd.ExcelWriter(os.path.join(excel_models_results, f'Results_fold_{fold}_all_models.xlsx'),
     #                               engine='xlsxwriter')
     table_writer = None
@@ -130,12 +133,10 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     all_model_nums = list(set(models_to_compare.model_num))
     # already_trained_models = list(range(15, 21)) + list(range(11))
     # all_model_nums = [x for x in all_model_nums if x not in already_trained_models]
-    # all_model_nums = [121, 122, 123]
+    all_model_nums = [78, 79, 80] + list(range(84, 87))
     # all_model_nums = [23, 24, 30, 31] + list(range(54, 63)) + list(range(69, 78)) + list(range(81, 84)) +\
     #                  list(range(163, 166)) + list(range(178, 181))
-    # all_model_nums = [23, 24, 30, 31] + list(range(54, 63)) + list(range(69, 78)) + list(range(81, 84)) +\
-    #                  list(range(163, 166)) + list(range(178, 181))
-    all_model_nums = list(range(178, 181))
+    all_model_nums = [156, 74]
 
     all_models_results = pd.DataFrame()
     all_models_prediction_results = pd.DataFrame()
@@ -157,11 +158,19 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
             model_type = row['model_type']
             model_name = row['model_name']
 
+            if leaky_relu:
+                model_name = model_name + '_leaky'
+                model_num += 600
+
             # for 3 losses:
-            model_num += 700
-            if '_avg_turn' not in model_type:
-                continue
-            model_name = row['model_name'] + '_3_losses'
+            if '_avg_turn' in model_type and three_losses:
+                model_num += 700
+                model_name = row['model_name'] + '_3_losses'
+                avg_turn_gridsearch_params_inner = [{'avg_loss': 1.0, 'turn_loss': 1.0, 'avg_turn_loss': 1.0},
+                                                    {'avg_loss': 2.0, 'turn_loss': 2.0, 'avg_turn_loss': 1.0},
+                                                    {'avg_loss': 1.0, 'turn_loss': 1.0, 'avg_turn_loss': 2.0}]
+            else:
+                avg_turn_gridsearch_params_inner = avg_turn_gridsearch_params
 
             function_to_run = row['function_to_run']
             data_file_name = row['data_file_name']
@@ -174,7 +183,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                 hyper_parameters_dict = None
 
             if hyper_parameters_dict is not None and 'features_max_size' in hyper_parameters_dict.keys():
-                if int(hyper_parameters_dict['features_max_size']) > 1000:
+                if int(hyper_parameters_dict['features_max_size']) > 3000:
                     continue
 
             # each function need to get: model_num, fold, fold_dir, model_type, model_name, data_file_name,
@@ -191,28 +200,38 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                     for i, parameters_dict in enumerate(greadsearch):  # compare_prediction_models_28_08_2020_13_09
                         # if i > 0:
                         #     continue
-                        if (fold == 0 and ((model_num < 865) or (model_num == 865 and i <= -1) or
-                                           (model_num == 878 and i <= 42))) or \
-                                (fold == 1 and ((model_num < 865) or (model_num == 865 and i <= 44) or
-                                                (model_num == 879 and i <= 47) or (model_num == 879 and i <= 11))) or \
-                                (fold == 2 and ((model_num < 879) or (model_num == 879 and i <= 7))) or \
-                                (fold == 3 and ((model_num < 878) or (model_num == 878 and i <= 22))) or \
-                                (fold == 4 and ((model_num < 878) or (model_num == 878 and i <= 17))) or \
-                                (fold == 5 and ((model_num < 878) or (model_num == 878 and i <= 18))):
-                            continue
+                        # if model_num == 1501 and i <= 9:
+                        #     continue
+
+                        # if (fold == 0 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 37))) or \
+                        #         (fold == 1 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 23))) or \
+                        #         (fold == 2 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 47))) or \
+                        #         (fold == 3 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 47))) or \
+                        #         (fold == 4 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 25))) or \
+                        #         (fold == 5 and ((model_num < 1501) or (model_num == 1501 and i <= 20) or
+                        #                    (model_num == 679 and i <= 31))):
+                        #     continue
 
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
                         if 'linear' in model_type and 'lstm_hidden_dim' in new_hyper_parameters_dict:
-                            new_hyper_parameters_dict['linear_hidden_dim'] =\
-                                int(0.5*int(new_hyper_parameters_dict['lstm_hidden_dim']))
+                            new_hyper_parameters_dict['linear_hidden_dim'] = \
+                                int(0.5 * int(new_hyper_parameters_dict['lstm_hidden_dim']))
                         if '_avg_turn' in model_type:
-                            for inner_i, inner_parameters_dict in enumerate(avg_turn_gridsearch_params):
+                            for inner_i, inner_parameters_dict in enumerate(avg_turn_gridsearch_params_inner):
                                 # if inner_i > 0:
                                 #     break
                                 new_hyper_parameters_dict.update(inner_parameters_dict)
                                 new_model_name = f'{model_name}'
                                 new_model_num = f'{model_num}_{i}_{inner_i}'
+                                if os.path.isfile(os.path.join(excel_models_results,
+                                                               f'Results_fold_{fold}_model_{new_model_num}.xlsx')):
+                                    continue
                                 all_models_results, model_num_results = execute_create_fit_predict_eval_model(
                                     function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
                                     data_file_name, fold_split_dict, table_writer, new_hyper_parameters_dict,
@@ -220,22 +239,32 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                         else:
                             new_model_name = f'{model_name}'
                             new_model_num = f'{model_num}_{i}'
+                            if os.path.isfile(os.path.join(excel_models_results,
+                                                           f'Results_fold_{fold}_model_{new_model_num}.xlsx')):
+                                continue
                             all_models_results, model_num_results = execute_create_fit_predict_eval_model(
                                 function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
                                 data_file_name, fold_split_dict, table_writer, new_hyper_parameters_dict,
                                 excel_models_results, all_models_results, model_num_results)
-                elif 'SVM' in model_type:
-                    for i, parameters_dict in enumerate(svm_gridsearch_params):
+                elif 'SVM' in model_type or 'Baseline' in model_type:
+                    if 'baseline' in model_name or 'Baseline' in model_type:
+                        svm_gridsearch_params_inner = [{}]
+                    else:
+                        svm_gridsearch_params_inner = svm_gridsearch_params
+                    for i, parameters_dict in enumerate(svm_gridsearch_params_inner):
                         # if i > 0:
                         #     continue
                         new_hyper_parameters_dict = copy.deepcopy(hyper_parameters_dict)
                         new_hyper_parameters_dict.update(parameters_dict)
                         new_model_name = f'{model_name}'
                         new_model_num = f'{model_num}_{i}'
+                        if os.path.isfile(os.path.join(excel_models_results,
+                                                       f'Results_fold_{fold}_model_{new_model_num}.xlsx')):
+                            continue
                         all_models_results, model_num_results = execute_create_fit_predict_eval_model(
-                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name, data_file_name,
-                            fold_split_dict, table_writer, new_hyper_parameters_dict, excel_models_results,
-                            all_models_results, model_num_results)
+                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
+                            data_file_name, fold_split_dict, table_writer, new_hyper_parameters_dict,
+                            excel_models_results, all_models_results, model_num_results)
                 elif 'CRF' in model_type:
                     for i, parameters_dict in enumerate(crf_gridsearch_params):
                         # if i > 0:
@@ -244,21 +273,26 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                         new_hyper_parameters_dict.update(parameters_dict)
                         new_model_name = f'{model_name}'
                         new_model_num = f'{model_num}_{i}'
+                        if os.path.isfile(os.path.join(excel_models_results,
+                                                       f'Results_fold_{fold}_model_{new_model_num}.xlsx')):
+                            continue
                         all_models_results, model_num_results = execute_create_fit_predict_eval_model(
-                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name, data_file_name,
-                            fold_split_dict, table_writer, new_hyper_parameters_dict, excel_models_results,
-                            all_models_results, model_num_results)
+                            function_to_run, new_model_num, fold, fold_dir, model_type, new_model_name,
+                            data_file_name, fold_split_dict, table_writer, new_hyper_parameters_dict,
+                            excel_models_results, all_models_results, model_num_results)
                 else:
                     print('Model type must be LSTM-kind, Transformer-kind, CRF-kind or SVM-kind')
 
                 # select the best hyper-parameters set for this model based on the RMSE
+                if model_num_results.empty:
+                    continue
                 argmin_index = model_num_results.loc[model_num_results.Raisha == 'All_raishas'].RMSE.idxmin()
                 best_model = model_num_results.iloc[argmin_index]
                 model_version_num = best_model.model_num
                 logging.info(f'Best model version for model {model_num}-{model_name} in fold {fold} is: '
                              f'{model_version_num}. Start predict over test data')
-                print(f'Best model version for model {model_num}-{model_name} in fold {fold} is: {model_version_num}. '
-                      f'Start predict over test data')
+                print(f'Best model version for model {model_num}-{model_name} in fold {fold} is: '
+                      f'{model_version_num}. Start predict over test data')
 
                 # predict on test data using the best version of this model
                 test_fold_split_dict = dict()
@@ -306,10 +340,10 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
 
                 metadata_df = pd.DataFrame.from_dict(metadata_dict, orient='index').T
                 model_class = getattr(execute_cv_models, function_to_run)(
-                    model_num, fold, run_dir, model_type, model_name, data_file_name, test_fold_split_dict,
+                    model_num, fold, test_fold_dir, model_type, model_name, data_file_name, test_fold_split_dict,
                     test_table_writer, data_directory, hyper_parameters_dict, excel_test_models_results,
-                    trained_model_dir=trained_model_dir, trained_model=trained_model, model_file_name=model_file_name,
-                    test_data_file_name=test_data_file_name, predict_type='test')
+                    trained_model, trained_model_dir, model_file_name, test_data_file_name, 'test')
+
                 model_class.load_data_create_model()
                 model_class.predict()
                 results_dict = model_class.eval_model()
@@ -325,10 +359,12 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
                 model_class.model_table_writer.save()
 
             else:  # no hyper parameters
-                all_models_results, all_models_prediction_results = execute_create_fit_predict_eval_model(
+                if os.path.isfile(os.path.join(excel_models_results,
+                                               f'Results_fold_{fold}_model_{new_model_num}.xlsx')):
+                    continue
+                all_models_results, model_num_results = execute_create_fit_predict_eval_model(
                     function_to_run, model_num, fold, fold_dir, model_type, model_name, data_file_name, fold_split_dict,
-                    table_writer, hyper_parameters_dict, excel_models_results, all_models_results,
-                    all_models_prediction_results)
+                    table_writer, hyper_parameters_dict, excel_models_results, all_models_results, model_num_results)
 
     utils.write_to_excel(table_writer, 'All models results', ['All models results'], all_models_results)
     if table_writer is not None:
@@ -344,55 +380,51 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     return f'fold {fold} finish compare models'
 
 
-def parallel_main():
+def parallel_main(three_losses: bool=False, leaky_relu: bool=False):
     print(f'Start run in parallel: for each fold compare all the models')
     logging.info(f'Start run in parallel: for each fold compare all the models')
 
     # participants_fold_split should have the following columns: fold_0, fold_1,...,fold_5
     # the index should be the participant code
     # the values will be train/test/validation
-    participants_fold_split = pd.read_csv(os.path.join(data_directory, 'pairs_folds_new_test_data.csv'))
+    participants_fold_split = pd.read_csv(os.path.join(data_directory, pair_folds_file_name))
     participants_fold_split.index = participants_fold_split.pair_id
 
     cuda_devices = {0: 0, 1: 1,
                     2: 0, 3: 1,
                     4: 0, 5: 1}
 
-    cuda_devices = {0: 1, 1: 0,
-                    2: 1, 3: 0,
-                    4: 1, 5: 0}
+    # cuda_devices = {0: 1, 1: 0,
+    #                 2: 1, 3: 0,
+    #                 4: 1, 5: 0}
     #
     # cuda_devices = {0: 0, 1: 0,
     #                 2: 0, 3: 0,
     #                 4: 0, 5: 0}
 
-    # cuda_devices = {0: 1, 1: 1,
-    #                 2: 1, 3: 1,
-    #                 4: 1, 5: 1}
-
-    """For debug"""
-    # participants_fold_split = participants_fold_split.iloc[:50]
-    # for fold in range(1):
-    #     execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
-    #                           hyper_parameters_tune_mode=True)
+    cuda_devices = {0: 1, 1: 1,
+                    2: 1, 3: 1,
+                    4: 1, 5: 1}
 
     ray.init()
 
-    # all_ready_lng =\
-    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
-    #                                           hyper_parameters_tune_mode=True)
-    #              for i in range(3)])
-    #
-    # print(f'Done! {all_ready_lng}')
-    # logging.info(f'Done! {all_ready_lng}')
-
-    all_ready_lng_1 = \
+    all_ready_lng =\
         ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
-                                              hyper_parameters_tune_mode=True)
-                 for i in range(3, 6)])
+                                              hyper_parameters_tune_mode=True, three_losses=three_losses,
+                                              leaky_relu=leaky_relu)
+                 for i in range(6)])
 
-    print(f'Done! {all_ready_lng_1}')
-    logging.info(f'Done! {all_ready_lng_1}')
+    print(f'Done! {all_ready_lng}')
+    logging.info(f'Done! {all_ready_lng}')
+
+    # all_ready_lng_1 = \
+    #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
+    #                                           hyper_parameters_tune_mode=True, three_losses=three_losses,
+    #                                           leaky_relu=leaky_relu)
+    #              for i in range(3, 6)])
+    #
+    # print(f'Done! {all_ready_lng_1}')
+    # logging.info(f'Done! {all_ready_lng_1}')
 
     # all_ready_lng_2 = \
     #     ray.get([execute_fold_parallel.remote(participants_fold_split[f'fold_{i}'], i, str(cuda_devices[i]),
@@ -405,5 +437,83 @@ def parallel_main():
     return
 
 
+def not_parallel_main(is_debug: bool=False, three_losses: bool=False, leaky_relu: bool=False):
+    print(f'Start run in parallel: for each fold compare all the models')
+    logging.info(f'Start run in parallel: for each fold compare all the models')
+
+    # participants_fold_split should have the following columns: fold_0, fold_1,...,fold_5
+    # the index should be the participant code
+    # the values will be train/test/validation
+    participants_fold_split = pd.read_csv(os.path.join(data_directory, pair_folds_file_name))
+    participants_fold_split.index = participants_fold_split.pair_id
+
+    """For debug"""
+    if is_debug:
+        participants_fold_split = participants_fold_split.iloc[:50]
+    for fold in range(6):
+        execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
+                              hyper_parameters_tune_mode=True, three_losses=three_losses, leaky_relu=leaky_relu)
+
+
 if __name__ == '__main__':
-    parallel_main()
+    """
+    sys.argv[1] = is_parallel
+    sys.argv[2] = outer_three_losses
+    sys.argv[3] = outer_leaky_relu
+    sys.argv[4] = folder_date
+    sys.argv[5] = is_debug
+    """
+
+    # is_parallel
+    is_parallel = sys.argv[1]
+    if is_parallel == 'False':
+        is_parallel = False
+
+    # outer_three_losses
+    if len(sys.argv) > 2:
+        outer_three_losses = sys.argv[2]
+    else:
+        outer_three_losses = False
+    if outer_three_losses == 'False':
+        outer_three_losses = False
+
+    # outer_leaky_relu
+    if len(sys.argv) > 3:
+        outer_leaky_relu = sys.argv[3]
+    else:
+        outer_leaky_relu = False
+    if outer_leaky_relu == 'False':
+        outer_leaky_relu = False
+
+    run_dir_name = datetime.now().strftime(f'compare_prediction_models_%d_%m_%Y_%H_%M')
+    test_dir_name = datetime.now().strftime(f'predict_best_models_%d_%m_%Y_%H_%M')
+    if len(sys.argv) > 4:
+        folder_date = sys.argv[4]
+        if folder_date != 'False':
+            run_dir = utils.set_folder(datetime.now().strftime(f'compare_prediction_models_{folder_date}'), 'logs')
+            # for test
+            test_dir = utils.set_folder(datetime.now().strftime(f'predict_best_models_{folder_date}'), 'logs')
+        else:
+            # folder dir
+            run_dir = utils.set_folder(run_dir_name, 'logs')
+            # for test
+            test_dir = utils.set_folder(test_dir_name, 'logs')
+    else:
+        # folder dir
+        run_dir = utils.set_folder(run_dir_name, 'logs')
+        # for test
+        test_dir = utils.set_folder(test_dir_name, 'logs')
+
+    # is_debug
+    if len(sys.argv) > 5:
+        outer_is_debug = sys.argv[5]
+    else:
+        outer_is_debug = False
+    if outer_is_debug == 'False':
+        outer_is_debug = False
+
+    # read function
+    if is_parallel:
+        parallel_main(three_losses=outer_three_losses, leaky_relu=outer_leaky_relu)
+    else:
+        not_parallel_main(outer_is_debug, three_losses=outer_three_losses, leaky_relu=outer_leaky_relu)

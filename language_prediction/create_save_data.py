@@ -30,8 +30,8 @@ random.seed(1)
 
 # define the alpha for the weighted average of the history features - global and text features
 # if alpha == 0: use average
-alpha_text = 0.9
-alpha_global = 0.8
+alpha_text = 0.0
+alpha_global = 0.0
 
 # define global raisha and saifa names to prevent typos
 global_raisha = 'raisha'
@@ -57,7 +57,7 @@ def rename_review_features_column(review_data: pd.DataFrame, prefix_column_name:
 
 
 def create_average_history_text(rounds: list, temp_reviews: pd.DataFrame, prefix_history_col_name: str='history',
-                                prefix_future_col_name: str = 'future'):
+                                prefix_future_col_name: str = 'future', prefix_saifa_col_name: str='saifa'):
     """
     This function get the temp reviews with the review_id, round_number and the features for the reviews as column for
     each feature
@@ -65,44 +65,55 @@ def create_average_history_text(rounds: list, temp_reviews: pd.DataFrame, prefix
     :param temp_reviews: pdDataFrame with review_id, round_number, features as columns
     :param prefix_history_col_name: the prefix of the history column names
     :param prefix_future_col_name: the prefix of the future column names
+    :param prefix_saifa_col_name: the prefix of the saifa column names
     :return:
     """
     history_reviews = pd.DataFrame()
     future_reviews = pd.DataFrame()
+    saifa_reviews = pd.DataFrame()
     for round_num in rounds:
         review_id_curr_round = \
             temp_reviews.loc[temp_reviews.subsession_round_number == round_num].review_id
         review_id_curr_round.index = ['review_id']
         history = temp_reviews.loc[temp_reviews.subsession_round_number < round_num]
         future = temp_reviews.loc[temp_reviews.subsession_round_number > round_num]
+        saifa = temp_reviews.loc[temp_reviews.subsession_round_number >= round_num]
         # history.shape[1]-2- no need subsession_round_number and review_id
         history_weights = list(pow(alpha_text, round_num - history.subsession_round_number))
         future_weights = list(pow(alpha_text, future.subsession_round_number - round_num))
         history = history.drop(['subsession_round_number', 'review_id'], axis=1)
         future = future.drop(['subsession_round_number', 'review_id'], axis=1)
+        saifa = saifa.drop(['subsession_round_number', 'review_id'], axis=1)
         if alpha_text == 0:  # if alpha=0 use average
             history_mean = history.mean(axis=0)  # get the average of each column
             future_mean = future.mean(axis=0)
         else:
             history_mean = history.mul(history_weights, axis=0).mean()
             future_mean = future.mul(future_weights, axis=0).mean()
+        saifa_mean = saifa.mean(axis=0)
         # concat the review_id of the current round
         if history.empty:  # round=1, no history
             history_mean = pd.Series(np.repeat(-1, history.shape[1]), index=history.columns)
         if future.empty:
             # print(f'future is empty for round number {round_num}')
             future_mean = pd.Series(np.repeat(-1, future.shape[1]), index=future.columns)
+        if saifa.empty:
+            saifa_mean = pd.Series(np.repeat(-1, saifa.shape[1]), index=saifa.columns)
         history_mean = history_mean.append(review_id_curr_round)
         history_reviews = pd.concat([history_reviews, history_mean], axis=1, ignore_index=True, sort=False)
         future_mean = future_mean.append(review_id_curr_round)
         future_reviews = pd.concat([future_reviews, future_mean], axis=1, ignore_index=True, sort=False)
+        saifa_mean = saifa_mean.append(review_id_curr_round)
+        saifa_reviews = pd.concat([saifa_reviews, saifa_mean], axis=1, ignore_index=True, sort=False)
 
     history_reviews = history_reviews.T
     history_reviews = rename_review_features_column(history_reviews, f'{prefix_history_col_name}_avg_feature')
     future_reviews = future_reviews.T
     future_reviews = rename_review_features_column(future_reviews, f'{prefix_future_col_name}_avg_feature')
+    saifa_reviews = saifa_reviews.T
+    saifa_reviews = rename_review_features_column(saifa_reviews, f'{prefix_saifa_col_name}_avg_feature')
 
-    return history_reviews, future_reviews
+    return history_reviews, future_reviews, saifa_reviews
 
 
 def flat_reviews_numbers(data: pd.DataFrame, rounds: list, columns_to_drop: list, last_round_to_use: int,
@@ -220,7 +231,8 @@ class CreateSaveData:
                  features_to_drop: list=None, saifa_only_prev_rounds_text: bool=False, use_prev_round_label: bool=False,
                  string_labels: bool=False, saifa_average_text: bool=False, no_saifa_text: bool=False,
                  non_nn_turn_model: bool=False, transformer_model: bool=False, raisha_data_first_round: bool=False,
-                 raisha_data_in_sequence: bool=False, data_type='train_data', no_decision_features: bool=False):
+                 raisha_data_in_sequence: bool=False, data_type='train_data', no_decision_features: bool=False,
+                 saifa_no_current_round_average_text: bool=False):
         """
         :param load_file_name: the raw data file name
         :param features_files_dict: dict of features files and types
@@ -252,6 +264,7 @@ class CreateSaveData:
         :param raisha_data_first_round: use the raisha data only for the first round in the saifa
         :param raisha_data_in_sequence: if the raisha data is not in the saifa features but in the seq
         :param no_decision_features: if we want to check models without decision features
+        :param saifa_no_current_round_average_text: if we want the average of all saifa text
         """
         print(f'Start create and save data for file: {os.path.join(data_directory, f"{load_file_name}_{data_type}.csv")}')
         logging.info('Start create and save data for file: {}'.
@@ -353,6 +366,7 @@ class CreateSaveData:
         self.use_prev_round_text = use_prev_round_text
         self.predict_first_round = predict_first_round
         self.saifa_average_text = saifa_average_text
+        self.saifa_no_current_round_average_text = saifa_no_current_round_average_text
         self.no_saifa_text = no_saifa_text
         self.saifa_only_prev_rounds_text = saifa_only_prev_rounds_text
         self.use_prev_round_label = use_prev_round_label
@@ -379,9 +393,9 @@ class CreateSaveData:
                                'seq_' if self.use_seq else '',
                                'crf_' if use_crf else '',
                                'crf_raisha_' if use_crf_raisha else '',
-                               'string_labels_' if string_labels else '',
+                               # 'string_labels_' if string_labels else '',
                                'non_nn_turn_model_' if self.non_nn_turn_model else '',
-                               'transformer_model_' if self.transformer_model else '',
+                               'transformer_' if self.transformer_model else '',
                                'prev_round_' if self.use_prev_round else '',
                                'prev_round_text_' if self.use_prev_round_text else '',
                                'prev_round_label_' if self.use_prev_round_label else '',
@@ -398,8 +412,9 @@ class CreateSaveData:
                                f'all_history_text_' if self.use_all_history_text else '',
                                'no_text_' if self.no_text else '',
                                f'{self.features_file_list}_' if self.use_manual_features and not self.no_text else '',
-                               'predict_first_round_' if self.predict_first_round else '',
+                               # 'predict_first_round_' if self.predict_first_round else '',
                                'no_decision_features_' if no_decision_features else '',  # 'use_decision_features_',
+                               'saifa_no_first_round_average_text_' if saifa_no_current_round_average_text else '',
                                f'{condition}_{data_type}']
         self.base_file_name = ''.join(file_name_component)
         print(f'Create data for: {self.base_file_name}')
@@ -469,15 +484,18 @@ class CreateSaveData:
         :param prefix_future_col_name: the prefix of the future column names
         :return:
         """
-        history_reviews, future_reviews = create_average_history_text(rounds, reviews_features, prefix_history_col_name,
-                                                                      prefix_future_col_name)
+        history_reviews, future_reviews, saifa_reviews =\
+            create_average_history_text(rounds, reviews_features, prefix_history_col_name, prefix_future_col_name)
         # add the current round reviews features
         reviews_features = reviews_features.drop('subsession_round_number', axis=1)
         reviews_features = rename_review_features_column(reviews_features, 'curr_round_feature')
-        data = data.merge(reviews_features, on='review_id', how='left')
+        if not self.saifa_no_current_round_average_text:
+            data = data.merge(reviews_features, on='review_id', how='left')
         data = data.merge(history_reviews, on='review_id', how='left')
         if self.saifa_average_text:
             data = data.merge(future_reviews, on='review_id', how='left')
+        elif self.saifa_no_current_round_average_text:
+            data = data.merge(saifa_reviews, on='review_id', how='left')
 
         return data
 
@@ -1600,29 +1618,30 @@ def main():
         'manual_binary_features_minus_1': 'xlsx',
         'manual_features_minus_1': 'xlsx',
     }
-    features_to_use = ['bert_embedding']
+    features_to_use = ['manual_binary_features']
     # label can be single_round or future_total_payoff
     conditions_dict = {
         'verbal': {'use_prev_round': False,
                    'use_prev_round_text': False,
-                   'use_prev_round_label': True,
+                   'use_prev_round_label': False,
                    'use_manual_features': True,
                    'use_all_history_average': True,
                    'use_all_history': False,
                    'use_all_history_text_average': True,
                    'use_all_history_text': False,
                    'raisha_data_first_round': False,  # use the raisha data only for the first round in the saifa
-                   'saifa_average_text': True,
-                   'no_saifa_text': True,
+                   'saifa_average_text': False,
+                   'no_saifa_text': False,
                    'no_decision_features': False,  # if we want to check models without decision features
                    'saifa_only_prev_rounds_text': False,  # if we want to use only the previos text in the saifa, or in svm models if we want only the saifa text --> remove curr_round_feature
                    'no_text': False,
                    'use_score': False,
                    'predict_first_round': True,
-                   'non_nn_turn_model': True,  # non neural networks models that predict a label for each round
+                   'non_nn_turn_model': False,  # non neural networks models that predict a label for each round
                    'transformer_model': False,   # for transformer models-we need to create features also for the raisha
                    'raisha_data_in_sequence': False,  # if the raisha data is not in the saifa features but in the seq
-                   'label': 'single_round',
+                   'saifa_no_current_round_average_text': True,  # if we want the average text of all saifa rounds
+                   'label': 'future_total_payoff',
                    },
         'numeric': {'use_prev_round': False,
                     'use_prev_round_text': False,
@@ -1648,7 +1667,7 @@ def main():
     }
     use_seq = False
     use_crf = False  # relevant to old version of crf
-    use_crf_raisha = True  # relevant to all sequential models in the raisha-saifa setting
+    use_crf_raisha = False  # relevant to all sequential models in the raisha-saifa setting
     string_labels = False  # labels are string --> for LSTM and transformer model
     data_type = 'train_data'  # it can be train_data or test_data
     total_payoff_label = False if conditions_dict[condition]['label'] == 'single_round' else True
@@ -1687,7 +1706,9 @@ def main():
                                           raisha_data_first_round=conditions_dict[condition]['raisha_data_first_round'],
                                           raisha_data_in_sequence=conditions_dict[condition]['raisha_data_in_sequence'],
                                           data_type=data_type,
-                                          no_decision_features=conditions_dict[condition]['no_decision_features'])
+                                          no_decision_features=conditions_dict[condition]['no_decision_features'],
+                                          saifa_no_current_round_average_text=conditions_dict[condition][
+                                              'saifa_no_current_round_average_text'])
 
     if create_save_data_obj.use_manual_features:
         if use_seq:

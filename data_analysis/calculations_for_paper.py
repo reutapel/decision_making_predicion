@@ -14,7 +14,6 @@ import matplotlib.lines as mlines
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.serif"] = "Times New Roman Bold"
 
-
 base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
@@ -75,43 +74,104 @@ pre_round_dict = {
     "Previous Trial Didn't Choose And Could Earn": [64, 74, 65, 65, 67, 69, 62, 70, 56],
 }
 
-models_index = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-T', 'Transformer-P', 'Transformer-TP']
-bert_domain_compare = {
-    'Domain-Based': [23.7, 27.45, 23.87, 24.05, 40.01, 27.21, 28.78],
-    'BERT': [24.7, 28.37, 24.77, 25.59, 75.15, 27.71, 27.43]
+linestyle_colors_models = {
+    'SVM-P': ['solid', 'grey'],
+    'LSTM-T': ['dotted', 'darkgreen'],
+    'LSTM-P': ['dashed', 'darkblue'],
+    'LSTM-TP': ['dashdot', 'crimson'],
+    'Transformer-P': [(0, (5, 1)), 'violet'],
+    'Transformer-TP': [(0, (3, 5, 1, 5)), 'purple'],
+    'Transformer-T': [(0, (3, 10, 1, 10, 1, 10)), 'pink'],
+    'MVC': [(0, (3, 5, 1, 5)), 'black'],
+    'EWG': [(0, (1, 1)), 'lightgreen'],
+    'AVG': [(0, (3, 1, 1, 1, 1, 1)), 'orange'],
+    'MED': [(0, (3, 5, 1, 5, 1, 5)), 'deepskyblue']
+}
+
+models_index_rmse = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-P', 'Transformer-TP']
+bert_domain_compare_rmse = {
+    'HGA': [30.62, 27.87, 24.76, 25.57, 24.79, 24.88],
+    'BERT': [26.69, 33.21, 25.40, 28.09, 25.46, 25.57],
+    'BERT + HGA': [27.14, 31.25, 25.11, 26.36, 25.53, 25.57]
+}
+
+models_index_macro = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-P', 'Transformer-TP']
+bert_domain_compare_f_macro = {
+    'HGA': [33.72, 45.05, 27.69, 32.76, 27.81, 32.65],
+    'BERT': [31.91, 32.54, 20.01, 28.09, 12.97, 13.11],
+    'BERT + HGA': [32.02, 37.23, 24.04, 27.52, 12.34, 13.59]
+}
+
+models_index_accuracy = ['LSTM-T', 'LSTM-TP', 'Transformer-TP']  # 'Transformer-T',
+bert_domain_compare_per_trial_accuracy = {
+    'HGA': [75.30, 76.75, 76.67],
+    'BERT': [62.35, 61.89, 26.8],
+    'BERT + HGA': [69.97, 68.40, 26.8]
 }
 
 raisha_results_rmse = {
-    'SVM-P': [15.04, 17.20, 17.91, 18.45, 19.04, 19.9, 20.53, 24.08, 29.25, 42.41],
-    'CRF-T': [25.39, 26.92, 27.21, 28.86, 30.63, 31.6, 32.295, 36.73, 39.92, 54.825],
-    'LSTM-T': [17.1, 19.68, 19.41, 20.95, 22.15, 23.35, 24.68, 29.9, 34.525, 47.71],
-    'LSTM-P': [15, 16.76, 17.59, 18.99, 19.34, 20.45, 21.73, 24.80, 30.09, 41.49],
-    'LSTM-TP': [15.32, 17.67, 17.78, 19.19, 19.42, 20.78, 22.09, 25.35, 29.81, 41.305],
-    'Transformer-T': [None, 33.48, 33.63, 34.91, 35.53, 36.87, 37.59, 41.45, 45.26, 55.73],
-    'Transformer-P': [None, 18.34, 18.865, 19.8, 20.76, 22.18, 23.39, 27.63, 33.69, 46.74],
-    'Transformer-TP': [None, 21.46, 23.835, 23.46, 22.65, 23.51, 25.47, 27.91, 33.76, 46.41]
+    'SVM-P': [31.86, 32.11, 27.57, 25.43, 24.73, 26.01, 27.31, 29.02, 33.67, 43.5],
+    # 'CRF-T' : [],
+    'LSTM-T': [17.62, 20.19, 20.14, 19.51, 20.92, 23.13, 25.1, 30.23, 38.61, 47.26],
+    'LSTM-P': [16.83, 17.71, 17.26, 18.18, 20.57, 22.6, 24.66, 28.72, 32.96, 44.29],
+    'LSTM-TP': [16.04, 17.43, 17.68, 19.86, 27.07, 23.92, 21.44, 27.67, 31.5, 39.85],
+    # 'Transformer-T': [None, 65.52, 65.86, 66, 65.91, 67.42, 69.36, 70.56, 73.88, 78.46],
+    'Transformer-P': [None, 15.9, 16.42, 15.66, 17.75, 20.46, 22.28, 26.19, 32.31, 42.39],
+    'Transformer-TP': [None, 14.9, 15.82, 15.65, 17.78, 19.94, 22.39, 26.9, 32.73, 46.26],
+    # 'MVC': [29.6, 30.34, 30.69, 30.65, 32.41, 33.42, 34.2, 38.11, 42.51, 55.4],
+    # 'EWG': [29.6, 30.34, 30.69, 30.65, 32.41, 33.42, 34.2, 38.11, 42.51, 55.4],
+    'AVG': [14.16, 15.13, 15.58, 15.81, 17.52, 20.02, 22.58, 26.98, 32.76, 46.13],
+    'MED': [13.8, 14.86, 15.34, 15.54, 17.45, 19.87, 22.29, 26.9, 32.7, 46.37],
 }
 
 raisha_results_macro = {
-    'SVM-P': [42.36, 44.9, 45.02, 40.37, 42.335, 41.45, 48.03, 48.53, 48.38, 42.70],
-    'CRF-T': [30.7416666666667, 32.0433333333333, 35.2216666666667, 33.6833333333333, 34.6116666666667, 37.835, 38.3333333333333, 36.6216666666667, 44.8766666666667, 60.7783333333333],
-    'LSTM-T': [33.2416666666667, 32.6066666666667, 34.855, 29.6583333333333, 31.18, 27.2916666666667, 34.8283333333333, 34.9966666666667, 51.5666666666667, 68.73],
-    'LSTM-P': [29.3, 32.5583333333333, 29.0283333333333, 34.1883333333333, 30.5566666666667, 30.18, 28.1766666666667, 34.6883333333333, 21.7483333333333, 21.865],
-    'LSTM-TP': [27.88, 33.245, 31.74, 32.89, 29.6816666666667, 28.4633333333333, 26.0983333333333, 35.5283333333333, 24.2216666666667, 20.3683333333333],
-    'Transformer-T': [None, 18.6016666666667, 13.6066666666667, 15.2883333333333, 16.1833333333333, 17.3583333333333, 10.3933333333333, 12.4633333333333, 21.7683333333333, 40.6183333333333],
-    'Transformer-P': [None, 17.2483333333333, 17.355, 16.2683333333333, 12.7466666666667, 11.3616666666667, 13.2983333333333, 14.5233333333333, 2.98666666666667, 0],
-    'Transformer-TP': [None, 17.4716666666667, 15.3216666666667, 16.9366666666667, 13.84, 12.875, 11.5366666666667, 14.0433333333333, 2.98666666666667, 0]
+    # 'CRF-T' : [],
+    'SVM-P': [16.15, 27.2, 25.65, 24.06, 34.14, 28.8, 25.09, 38.0, 45.23, 29.3],
+    'LSTM-T': [31.56, 32.42, 30.89, 41.67, 40.7, 29.48, 34.57, 35.31, 46.21, 69.63],
+    'LSTM-P': [27.15, 27.56, 30.46, 31.55, 30.44, 25.08, 24.28, 24.43, 20.97, 21.68],
+    'LSTM-TP': [25.6, 38.45, 33.81, 36.97, 25.98, 23.53, 27.24, 29.25, 19.27, 24.57],
+    # 'Transformer-T': [None, 5.21, 4.65, 5.08, 4.26, 5.22, 7.35, 7.47, 11.97, 31.01],
+    'Transformer-P': [None, 30.52, 32.69, 35.45, 28.33, 25.81, 26.2, 28.74, 21.9, 19.2],
+    'Transformer-TP': [None, 28.52, 32.76, 35.1, 28.35, 24.52, 26.7, 29.55, 23.62, 24.4],
+    # 'MVC': [42.29, 36.48, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
+    # 'EWG': [42.29, 36.48, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
+    'AVG': [42.29, 36.08, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
+    'MED': [42.29, 36.08, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
 }
 
 raisha_results_micro = {
-    'SVM-P': [66.9116666666667, 58.33, 62.0116666666667, 63.4816666666667, 59.0666666666667, 62.9916666666667, 65.1966666666667, 62.7466666666667, 60.0483333333333, 70.345],
-    'CRF-T': [65.1966666666667, 53.675, 59.56, 62.255, 50.7366666666667, 55.145, 59.8016666666667, 52.9416666666667, 54.9, 69.855],
-    'LSTM-T': [45.59, 55.145, 47.5483333333333, 47.7933333333333, 45.0983333333333, 51.715, 40.9316666666667, 50, 63.725, 77.205],
-    'LSTM-P': [48.285, 53.6766666666667, 45.8333333333333, 52.94, 45.8333333333333, 50.0016666666667, 41.9116666666667, 51.96, 39.7083333333333, 52.94],
-    'LSTM-TP': [44.3633333333333, 53.43, 47.55, 50.49, 45.3433333333333, 49.265, 38.4816666666667, 48.775, 40.44, 45.3433333333333],
-    'Transformer-T': [None, 50.98, 33.5783333333333, 38.97, 44.6083333333333, 53.4316666666667, 26.715, 33.5783333333333, 48.7733333333333, 68.6283333333333],
-    'Transformer-P': [None, 45.0983333333333, 44.8566666666667, 41.9116666666667, 31.1266666666667, 29.1683333333333, 36.5183333333333, 41.175, 6.12666666666667, 0],
-    'Transformer-TP': [None, 47.0583333333333, 38.4816666666667, 42.8916666666667, 35.5383333333333, 36.03, 30.6366666666667, 39.4583333333333, 6.12666666666667, 0]
+    # 'CRF-T' : [],
+    'SVM-P': [24.26, 38.61, 40.1, 37.78, 50.5, 49.5, 37.62, 61.39, 51.98, 33.33],
+    'LSTM-T': [42.57, 48.02, 45.05, 51.98, 44.55, 49.34, 44.72, 48.68, 57.43, 77.56],
+    'LSTM-P': [46.28, 46.12, 46.2, 47.77, 44.47, 50.66, 39.35, 42.98, 39.02, 46.78],
+    'LSTM-TP': [45.71, 47.36, 44.72, 47.36, 30.69, 38.78, 41.42, 45.87, 34.65, 46.86],
+    # 'Transformer-T': [None, 8.91, 7.42, 8.42, 6.6, 8.25, 10.23, 9.4, 15.84, 37.29],
+    'Transformer-P': [None, 42.73, 48.51, 52.97, 37.62, 48.02, 41.25, 47.03, 43.23, 51.49],
+    'Transformer-TP': [None, 42.74, 50.83, 53.47, 37.29, 45.71, 41.08, 46.36, 42.08, 52.14],
+    'MVC': [73.27, 57.43, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
+    'EWG': [73.27, 57.43, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
+    'AVG': [73.27, 56.44, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
+    'MED': [73.27, 56.44, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
+}
+
+raisha_results_accuracy_per_trail = {
+    # 'CRF-T' : [],
+    'LSTM-T': [76.34, 73.73, 74.53, 75.93, 75.99, 75.74, 76.03, 75.58, 71.86, 77.56],
+    'LSTM-TP': [77.66, 75.12, 75.86, 77.35, 77.31, 77.43, 78.01, 77.51, 73.35, 78.05],
+    # 'Transformer-T': [None, 34.72, 35.05, 35.27, 35.67, 34.98, 33.99, 34.82, 34.24, 37.29],
+    'Transformer-TP': [None, 76.9, 76.71, 77.7, 76.87, 76.27, 76.82, 76.96, 73.27, 73.1],
+    'MVC': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
+    'EWG': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
+}
+
+round_results_accuracy_per_trail = {
+    # 'CRF-T' : [],
+    'LSTM-T': [80.04, 74.36, 71.37, 68.6, 78.13, 76.7, 72.08, 78.43, 77.87, 74.32],
+    'LSTM-TP': [81.85, 76.96, 72.94, 68.38, 80.86, 77.06, 72.99, 80.32, 79.76, 74.64],
+    # 'Transformer-T': [None, 34.72, 35.05, 35.27, 35.67, 34.98, 33.99, 34.82, 34.24, 37.29],
+    'Transformer-TP': [None, 75.95, 75.91, 70.46, 81.52, 78.14, 74.39, 75.39, 81.24, 74.96],
+    'MVC': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
+    'EWG': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
 }
 
 
@@ -327,7 +387,7 @@ def trust_graphs(study: int, data_1_p_enter_list_all_rounds: list=None, data_2_p
         the_table.auto_set_font_size(False)
         the_table.set_fontsize(10)
         # plt.yticks(range(4, 11))
-        plt.show()
+        # plt.show()
         fig100.savefig(os.path.join(
             graph_directory, f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_{in_title}'
                              f'_rounds_for_study_{study}.png'), bbox_inches='tight')
@@ -396,7 +456,7 @@ def trust_graphs(study: int, data_1_p_enter_list_all_rounds: list=None, data_2_p
         the_table.auto_set_font_size(False)
         the_table.set_fontsize(10)
         plt.yticks(np.arange(0.1, 1, 0.1))
-        plt.show()
+        # plt.show()
         fig1000.savefig(
             os.path.join(graph_directory, f'P_enter_as_a_function_of_the_experts_numerical_estimate_by_Condition_in_'
                                           f'{in_title}_rounds_est_8__for_study_{study}.png'), bbox_inches='tight')
@@ -413,7 +473,7 @@ def trust_graphs(study: int, data_1_p_enter_list_all_rounds: list=None, data_2_p
     # rects = ax2.patches
     # autolabel(rects, ax2, rotation='horizontal', max_height=data_df.max(), convert_to_int=False)
     ax2.legend(loc='upper left', shadow=True)
-    plt.show()
+    # plt.show()
     fig_to_save = ax2.get_figure()
     fig_to_save.savefig(
         os.path.join(graph_directory,
@@ -439,7 +499,7 @@ def honesty_graph(study: int):
     ax1.legend(loc='upper left', shadow=True, fontsize=8)
     plt.xticks(range(4, 11))
     plt.yticks(range(4, 11))
-    plt.show()
+    # plt.show()
     fig1.savefig(os.path.join(graph_directory,
                               f'The_Communication_Type_Effect_on_the_Experts_Cheating_Level_study_{study}.png'),
                  bbox_inches='tight')
@@ -478,11 +538,11 @@ def both_exp_laying_graph(role_dict: dict, ylabel: str, title: str, laying_dict:
     ax2.set(xlabel='Trial Number', ylabel=ylabel)
     ax2.legend(loc='upper right', shadow=True, fontsize=8)
     plt.xticks(index)
-    plt.show()
+    # plt.show()
     fig1.savefig(os.path.join(graph_directory, f'{title}.png'), bbox_inches='tight')
 
     plt.xticks(range(4, 11))
-    plt.show()
+    # plt.show()
     fig1.savefig(os.path.join(graph_directory, f'Laying_graph_both_exps.png'), bbox_inches='tight')
 
 
@@ -509,7 +569,7 @@ def payoff_graph(study: int, role_dict: dict, ylabel: str, title: str):
             ax1.legend(loc='upper left', shadow=True, fontsize=8)
 
     plt.xticks(index)
-    plt.show()
+    # plt.show()
     fig1.savefig(os.path.join(graph_directory, f'{title}.png'), bbox_inches='tight')
 
 
@@ -584,7 +644,7 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
                 axes[study - 1].set_ylabel(ylabel='Exaggeration', fontsize=12, )
 
         # plt.title(f"The Selected Score as a Function of the Hotels' Average Score\nby Condition for study {study}")
-        plt.show()
+        # plt.show()
         fig1.savefig(os.path.join(graph_directory, f'Laying_graph_2_exps_laying_per_{x_lable}.png'), bbox_inches='tight')
 
         # equilibrium graphs
@@ -896,58 +956,132 @@ class SignificanceTests:
         plt.savefig("computation_paper_graphs_enterance_rate_2_test_data.png", bbox_inches='tight')
 
         # enterance rate per manual features
-        enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
-                                                         'experiment/decision_prediction/data_analysis/analysis/'
-                                                         'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
-                                                         'for condition verbal_test_data and gender all genders for graph.csv',
-                                                         index_col=1)
-        axes = list()
-        fig = plt.figure(figsize=(12, 5))
-        axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
-        axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
-        axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
-        axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
-        axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
-
-        for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
-            high_level_data = \
-                enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
-            high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i],
-                                 fontsize=8)
-            axes[i].set_title(high_level, fontsize=8)
-            axes[i].get_legend().remove()
-            axes[i].set_xlabel('')
+        # enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+        #                                                  'experiment/decision_prediction/data_analysis/analysis/'
+        #                                                  'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
+        #                                                  'for condition verbal_test_data and gender all genders for graph.csv',
+        #                                                  index_col=1)
+        # axes = list()
+        # fig = plt.figure(figsize=(12, 5))
+        # axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
+        # axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
+        # axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
+        # axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
+        # axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
+        #
+        # for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
+        #     high_level_data = \
+        #         enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
+        #     high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i],
+        #                          fontsize=8)
+        #     axes[i].set_title(high_level, fontsize=8)
+        #     axes[i].get_legend().remove()
+        #     axes[i].set_xlabel('')
 
         # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
         # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
-        fig.text(0.5, 0.04, 'Attribute Number', ha='center')
-        fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
-        fig.legend(axes,  # The line objects
-                   labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
-                   loc="upper center",  # Position of legend
-                   shadow=True, prop={"size": 8})
-        plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
+        # fig.text(0.5, 0.04, 'Attribute Number', ha='center')
+        # fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
+        # fig.legend(axes,  # The line objects
+        #            labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
+        #            loc="upper center",  # Position of legend
+        #            shadow=True, prop={"size": 8})
+        # plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
 
         # compare bert-domain features
         fig, ax = plt.subplots()
-        results_data = pd.DataFrame(bert_domain_compare, index=models_index)
-        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson'], ax=ax, alpha=0.75)
+        results_data = pd.DataFrame(bert_domain_compare_rmse, index=models_index_rmse)
+        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson', 'purple'], ax=ax, alpha=0.75)
         plt.xticks(rotation=45)
-        ax.set(ylabel='RMSE')
-        ax.legend(loc='upper right', shadow=True)
-        plt.savefig("bert_domain_features_compare.png", bbox_inches='tight')
+        ax.set(ylabel='RMSE Score')
+        bars = ax.patches
+        hatches = ''.join(h * len(models_index_rmse) for h in ' +o')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+        ax.legend(loc='lower center', shadow=True)
+
+        plt.savefig("bert_domain_features_compare_rmse.png", bbox_inches='tight')
+
+        # compare bert-domain features f-beta macro
+        fig, ax = plt.subplots()
+        results_data = pd.DataFrame(bert_domain_compare_f_macro, index=models_index_macro)
+        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson', 'purple'], ax=ax, alpha=0.75)
+        plt.xticks(rotation=45)
+        ax.set(ylabel='Bin Macro F-score Score')
+        bars = ax.patches
+        hatches = ''.join(h * len(models_index_macro) for h in ' +o')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+        ax.legend(loc='lower center', shadow=True)
+        plt.savefig("bert_domain_features_compare_f_score_macro.png", bbox_inches='tight')
+
+        # compare bert-domain features per_trial
+        fig, ax = plt.subplots()
+        results_data = pd.DataFrame(bert_domain_compare_per_trial_accuracy, index=models_index_accuracy)
+        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson', 'purple'], ax=ax, alpha=0.75)
+        plt.xticks(rotation=45)
+        ax.set(ylabel='Per-Trial Accuracy')
+        bars = ax.patches
+        hatches = ''.join(h * len(models_index_accuracy) for h in ' +o')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+        ax.legend(loc='lower center', shadow=True)
+        plt.savefig("bert_domain_features_compare_per_trial_accuracy.png", bbox_inches='tight')
 
         # per raisha comapre only RMSE
         fig, ax = plt.subplots()
         data = pd.DataFrame(raisha_results_rmse, index=list(range(10)))
         for i, column in enumerate(data.columns):
-            ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
+                    color=linestyle_colors_models[column][1])
         # ax.set_title(f"{measure} As a Function of the Raisha Size")
-        ax.set(xlabel='Raisha Size', ylabel='RMSE')
+        ax.set(xlabel='Raisha Size', ylabel='RMSE Score')
         plt.xticks(list(range(10)))
-        ax.legend(loc='upper left', shadow=True)
+        ax.legend(loc='upper left', shadow=True, ncol=2)
 
         plt.savefig("raisha_compare_RMSE.png", bbox_inches='tight')
+
+        # per raisha comapre only Macro
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(raisha_results_macro, index=list(range(10)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
+                    color=linestyle_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+        ax.set(xlabel='Raisha Size', ylabel='Bin Macro F-score Score')
+        plt.xticks(list(range(10)))
+        ax.legend(loc='upper left', shadow=True, ncol=2)
+
+        plt.savefig("raisha_compare_macro_f1.png", bbox_inches='tight')
+
+        # per raisha comapre only per trial Accuracy
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(raisha_results_accuracy_per_trail, index=list(range(10)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
+                    color=linestyle_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+        ax.set(xlabel='Raisha Size', ylabel='Per-Trial Accuracy')
+        plt.xticks(list(range(10)))
+        ax.legend(loc='lower left', shadow=True)
+
+        plt.savefig("raisha_compare_per_trial_accuracy.png", bbox_inches='tight')
+
+        # per round comapre only per trial Accuracy
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(round_results_accuracy_per_trail, index=list(range(1, 11)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(1, 11)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
+                    color=linestyle_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+        ax.set(xlabel='Trial Number', ylabel='Per-Trial Accuracy')
+        plt.xticks(list(range(1, 11)))
+        ax.legend(loc='lower left', shadow=True)
+
+        plt.savefig("round_compare_per_trial_accuracy.png", bbox_inches='tight')
 
         # per raisha comapre
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -956,7 +1090,8 @@ class SignificanceTests:
                                           [raisha_results_macro, 'Bin F-score Macro', ax3]]:
             data = pd.DataFrame(results_dict, index=list(range(10)))
             for i, column in enumerate(data.columns):
-                ax.plot(list(range(10)), data[column], linestyle='-', label=column)
+                ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
+                        color=linestyle_colors_models[column][1])
             # ax.set_title(f"{measure} As a Function of the Raisha Size")
             ax.set(xlabel='Raisha Size', ylabel=measure)
 
@@ -1087,7 +1222,7 @@ class SignificanceTests:
             #     top=False,  # ticks along the top edge are off
             #     labelbottom=False)  # labels along the bottom edge are off
             axes[study - 1].set_yticks(np.arange(0.0, 1.05, 0.1))
-        plt.show()
+        # plt.show()
         if two_axes:
             title = f'understanding_level_2_axes_per_{x_lable}.png'
         else:
@@ -1207,7 +1342,7 @@ class SignificanceTests:
         # autolabel(rects, ax2, rotation='horizontal', max_height=data_df.max(), convert_to_int=False)
         ax2.legend(loc='lower center', shadow=True)
         # plt.yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
-        plt.show()
+        # plt.show()
         fig_to_save = ax2.get_figure()
         fig_to_save.savefig(os.path.join(
             graph_directory, f'average_trust_level_first_and_last_5_trials_study_{study}_split_half_{split_half}.png'),
@@ -1238,7 +1373,7 @@ class SignificanceTests:
         # autolabel(rects, ax2, rotation='horizontal', max_height=data_df.max(), convert_to_int=False)
         ax2.legend(loc='lower center', shadow=True)
         plt.yticks(np.arange(0, 1, 0.1))
-        plt.show()
+        # plt.show()
         fig_to_save = ax2.get_figure()
         fig_to_save.savefig(
             os.path.join(graph_directory, f'best_reply_first_and_last_5_trials_study{study}.png'), bbox_inches='tight')
@@ -1367,7 +1502,7 @@ class SignificanceTests:
             ax1.legend(loc='upper left', shadow=True, fontsize=8)
             plt.xticks(xticks)
             plt.yticks(np.arange(-0.1, 0.9, 0.1))
-            plt.show()
+            # plt.show()
             fig1.savefig(os.path.join(graph_directory, f'Laying_graph_{study}_by_{by}.png'), bbox_inches='tight')
 
     def score_5_4_analysis(self):
@@ -1585,7 +1720,7 @@ def main():
     #                                         'all_data_single_round_label_crf_raisha_non_nn_turn_model_prev_round_label_'
     #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
     #                                         'round_verbal_data.csv')
-    # tests_obj.computation_paper_graphs()
+    tests_obj.computation_paper_graphs()
     # expert_payoff_dict = {'verbal': [0.77, 0.66, 0.77, 0.71, 0.74, 0.70, 0.75, 0.67, 0.68, 0.68],
     #                       'numeric': [0.88, 0.79, 0.76, 0.78, 0.75, 0.72, 0.78, 0.73, 0.78, 0.71],
     #                       'num_only': [0.97, 0.90, 0.70, 0.71, 0.75, 0.70, 0.87, 0.78, 0.57, 0.85],

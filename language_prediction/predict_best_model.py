@@ -42,11 +42,13 @@ def predict_best_models(best_model_file_name: str):
             model_name = row['model_name']
             model_name_folder = row[f'model_name_folder_fold_{fold}']
             model_num = row['model_num']
-            # if model_num not in [36]:
+            # if model_num not in [879]:
             #     continue
 
             model_type = row['model_type']
             model_type_folder = row[f'model_type_folder_fold_{fold}']
+            if type(model_type_folder) == float and np.isnan(model_type_folder):
+                continue
             function_to_run = row['function_to_run']
             data_file_name = row['data_file_name']
             test_data_file_name = row['test_data_file_name']

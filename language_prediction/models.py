@@ -35,7 +35,8 @@ import copy
 
 
 def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, gold_labels: torch.Tensor,
-                                metadata, epoch: int, is_train: bool, mask: torch.Tensor) -> dict:
+                                metadata, epoch: int, is_train: bool, mask: torch.Tensor, use_raisha_lstm: bool=False) \
+        -> dict:
     """
     This function get the predictions class and save with the gold labels for sequence models where each sample had a
     list of predictions and labels
@@ -46,12 +47,16 @@ def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, 
     :param epoch: the number of epoch
     :param is_train: if this is train data or not
     :param mask: mask for each sample- which index is a padding
+    :param use_raisha_lstm: these models labels are upper Triangular matrix
     :return:
     """
 
     for i in range(predictions.shape[0]):  # go over each sample
         if epoch == 0:  # if this is the first epoch - keep the label
-            gold_labels_list = gold_labels[i][:mask[i].sum()].tolist()
+            if use_raisha_lstm:
+                gold_labels_list = gold_labels[i][(mask[i] != 0).nonzero().T[0]].tolist()
+            else:
+                gold_labels_list = gold_labels[i][:mask[i].sum()].tolist()
             # if hotel_label_0:
             #     gold_labels_list = [0 if label == 1 else 1 for label in gold_labels_list]
             prediction_df[metadata[i]['sample_id']] = \
@@ -59,7 +64,15 @@ def save_predictions_seq_models(prediction_df: dict, predictions: torch.Tensor, 
                  f'total_payoff_label': sum(gold_labels_list) / len(gold_labels_list)}
             if 'raisha' in metadata[i].keys():
                 prediction_df[metadata[i]['sample_id']]['raisha'] = metadata[i]['raisha']
-        predictions_list = predictions[i][:mask[i].sum()].argmax(1).tolist()
+        # most_frequent_mask will have 1 for every trial that the prediction is 0.5, 0.5 --> the model did not decide
+        temp_prediction_list = predictions[i][(mask[i] != 0).nonzero().T[0]]
+        most_frequent_tensor = torch.tensor([0.5, 0.5])
+        if torch.cuda.is_available():
+            most_frequent_tensor = most_frequent_tensor.cuda()
+        most_frequent_mask = torch.tensor(~((most_frequent_tensor == temp_prediction_list).sum(1) == 2),
+                                          dtype=int).tolist()
+        predictions_list = temp_prediction_list.argmax(1).tolist()
+        predictions_list = (np.array(predictions_list) * np.array(most_frequent_mask)).tolist()
         # if hotel_label_0:
         #     predictions_list = [0 if prediction == 1 else 1 for prediction in predictions_list]
         prediction_df[metadata[i]['sample_id']][f'predictions_{epoch}'] = predictions_list
@@ -760,6 +773,7 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
                  input_dim: int=0,
                  use_raisha_attention: bool=False,
                  raisha_num_features: int=0,
+                 linear_layers_activation='relu',
                  use_raisha_LSTM: bool=False) -> None:
         super(LSTMAttention2LossesFixTextFeaturesDecisionResultModel, self).__init__(vocab)
         self.encoder = encoder
@@ -776,7 +790,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             self.raisha_attention_vector = torch.randn((batch_size, raisha_num_features), requires_grad=True)
             # linear layer: raisha num features -> saifa num features (encoder.get_input_dim())
             self.linear_after_raisha_attention_layer = LinearLayer(input_size=raisha_num_features,
-                                                                   output_size=encoder.get_input_dim())
+                                                                   output_size=encoder.get_input_dim(),
+                                                                   activation=linear_layers_activation)
             if torch.cuda.is_available():
                 self.raisha_attention_vector = self.raisha_attention_vector.cuda()
         else:
@@ -785,18 +800,20 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
 
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=encoder_output_dim, output_size=linear_dim, dropout=dropout)
+                self.linear_layer = LinearLayer(input_size=encoder_output_dim, output_size=linear_dim, dropout=dropout,
+                                                activation=linear_layers_activation)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
                 hidden2tag_input_size = encoder_output_dim
             self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'),
-                                          dropout=dropout)
+                                          dropout=dropout, activation=linear_layers_activation)
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
-            self.linear_after_attention_layer = LinearLayer(input_size=encoder_output_dim, output_size=batch_size)
-            self.regressor = LinearLayer(input_size=batch_size, output_size=1)
+            self.linear_after_attention_layer = LinearLayer(input_size=encoder_output_dim, output_size=batch_size,
+                                                            activation=linear_layers_activation)
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1, activation=linear_layers_activation)
             # self.sigmoid = nn.Sigmoid()
             self.attention_vector = torch.randn((batch_size, encoder_output_dim), requires_grad=True)
             if torch.cuda.is_available():
@@ -885,6 +902,9 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             for seq_id in range(encoder_out.shape[0]):
                 seq_raisha = metadata[seq_id]['raisha']
                 mask[seq_id, :seq_raisha] = 0
+            # for use raisha_LSTM --> the labels should look the same as the mask and results
+            # TODO: change this to look better
+            seq_labels = seq_labels[0].repeat(10, 1) * mask
 
         if self.predict_seq:
             if self.linear_layer is not None:
@@ -896,7 +916,8 @@ class LSTMAttention2LossesFixTextFeaturesDecisionResultModel(Model):
             self.seq_predictions = save_predictions_seq_models(prediction_df=self.seq_predictions, mask=mask,
                                                                predictions=output['decision_logits'],
                                                                gold_labels=seq_labels, metadata=metadata,
-                                                               epoch=self._epoch, is_train=self.training,)
+                                                               epoch=self._epoch, is_train=self.training,
+                                                               use_raisha_lstm=self.use_raisha_LSTM)
                                                                # hotel_label_0=self.hotel_label_0)
 
         if self.predict_avg_total_payoff:
@@ -1053,14 +1074,19 @@ class AttentionFixTextFeaturesDecisionResultModel(Model):
 
 
 class LinearLayer(nn.Module):
-    def __init__(self, input_size, output_size, dropout=None, activation=F.relu):
+    def __init__(self, input_size, output_size, dropout=None, activation: str='relu'):
         super().__init__()
         self.linear = nn.Linear(input_size, output_size)
         if type(dropout) is float and dropout > 0.0:
             self.dropout = nn.Dropout(dropout)
         else:
             self.dropout = None
-        self.activation = activation
+        if activation == 'relu':
+            self.activation = F.relu
+        elif activation == 'leaky_relu':
+            self.activation = F.leaky_relu
+        else:
+            self.activation = False
 
     def forward(self, x):
         linear_out = x
@@ -1088,7 +1114,8 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
                  feedforward_hidden_dim=2048,
                  dropout=0.1,
                  transformer_dropout=0.1,
-                 activation="relu",
+                 activation='relu',
+                 linear_layers_activation='relu',
                  custom_encoder=None,
                  custom_decoder=None,
                  positional_encoding: Optional[str] = None,
@@ -1137,23 +1164,30 @@ class TransformerFixTextFeaturesDecisionResultModel(Model):
 
         if predict_avg_total_payoff:  # need attention and regression layer
             self.attention = attention
-            self.linear_after_attention_layer = LinearLayer(input_size=input_dim, output_size=batch_size)
-            self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout)
+            if linear_dim is not None and predict_seq:  # avg_turn_linear models
+                input_dim_attention = linear_dim
+            else:
+                input_dim_attention = input_dim
+            self.linear_after_attention_layer = LinearLayer(input_size=input_dim_attention, output_size=batch_size,
+                                                            activation=linear_layers_activation)
+            self.regressor = LinearLayer(input_size=batch_size, output_size=1, dropout=dropout,
+                                         activation=linear_layers_activation)
             # self.sigmoid = nn.Sigmoid()
-            self.attention_vector = torch.randn((batch_size, input_dim), requires_grad=True)
+            self.attention_vector = torch.randn((batch_size, input_dim_attention), requires_grad=True)
             if torch.cuda.is_available():
                 self.attention_vector = self.attention_vector.cuda()
             self.mse_loss = nn.MSELoss()
 
         if predict_seq:  # need hidden2tag layer
             if linear_dim is not None:  # add linear layer before hidden2tag
-                self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim, dropout=dropout)
+                self.linear_layer = LinearLayer(input_size=input_dim, output_size=linear_dim, dropout=dropout,
+                                                activation=linear_layers_activation)
                 hidden2tag_input_size = linear_dim
             else:
                 self.linear_layer = None
                 hidden2tag_input_size = input_dim
             self.hidden2tag = LinearLayer(input_size=hidden2tag_input_size, output_size=vocab.get_vocab_size('labels'),
-                                          dropout=dropout)
+                                          dropout=dropout, activation=linear_layers_activation)
 
         self.metrics_dict_seq = metrics_dict_seq
         self.metrics_dict_reg = metrics_dict_reg

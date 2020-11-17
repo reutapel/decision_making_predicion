@@ -335,7 +335,7 @@ class ExecuteEvalModel:
             join(flat_data_dict['metadata'])
         flat_data.reset_index(inplace=True, drop=True)
         # save flat data
-        self.save_model_prediction(data_to_save=flat_data, save_model=False, sheet_prefix_name='per_round')
+        self.save_model_prediction(data_to_save=flat_data, save_model=False, sheet_prefix_name='round')
 
         return flat_data
 
@@ -567,6 +567,10 @@ class ExecuteEvalSVM(ExecuteEvalModel):
                 return
 
         elif self.model_type == 'SVMTurn' or 'per_round' in self.model_name:
+            # change -1 to 1 in labels and predictions
+            self.prediction.labels = np.where(self.prediction.labels == 1, 1, 0)
+            self.prediction.predictions = np.where(self.prediction.predictions == 1, 1, 0)
+
             # measures per round
             results_dict = utils.per_round_analysis(
                 self.prediction, predictions_column='predictions', label_column='labels',
@@ -581,8 +585,6 @@ class ExecuteEvalSVM(ExecuteEvalModel):
             # create the total payoff label and calculate calculate_measures_for_continues_labels
             pairs = self.prediction.pair_id.unique()
             prediction_total_payoff = self.prediction.copy(deep=True)
-            prediction_total_payoff.predictions = np.where(prediction_total_payoff.predictions == 1, 1, 0)
-            prediction_total_payoff.labels = np.where(prediction_total_payoff.labels == 1, 1, 0)
             total_payoff_label_predictions = defaultdict(dict)
             for pair_id in pairs:
                 pair_data = prediction_total_payoff.loc[prediction_total_payoff.pair_id == pair_id]
@@ -675,6 +677,10 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 self.linear_dropout = None
         else:
             self.linear_dropout = None
+        if 'leaky' in model_name:
+            self.activation = 'leaky_relu'
+        else:
+            self.activation = 'relu'
 
         self.all_validation_accuracy = list()
         self.all_train_accuracy = list()
@@ -753,6 +759,11 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             else:
                 self.BiLSTM = False
 
+            if 'lr' in hyper_parameters_dict.keys():
+                self.lr = float(hyper_parameters_dict['lr'])
+            else:
+                self.lr = 1e-3
+
         except Exception:
             logging.exception(f'None of the optional types were given --> can not continue')
             return
@@ -829,7 +840,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 reg_weight_loss=self.avg_loss, dropout=self.linear_dropout, reg_seq_weight_loss=self.avg_turn_loss,
                 use_last_hidden_vec=self.use_last_hidden_vec, use_transformer_encode=self.use_transformer_encoder,
                 input_dim=train_reader.input_dim, use_raisha_attention=self.use_raisha_attention,
-                raisha_num_features=train_reader.raisha_num_features, use_raisha_LSTM=self.use_raisha_LSTM)
+                raisha_num_features=train_reader.raisha_num_features, use_raisha_LSTM=self.use_raisha_LSTM,
+                linear_layers_activation=self.activation)
         elif 'Transformer' in self.model_type:
             if 'turn_linear' in self.model_type:
                 self.linear_hidden_dim = int(0.5 * train_reader.input_dim)
@@ -841,6 +853,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
                 seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss, transformer_dropout=self.lstm_dropout,
                 positional_encoding=self.positional_encoding, dropout=self.linear_dropout, only_raisha=self.only_raisha,
+                linear_layers_activation=self.activation
             )
         elif 'Attention' in self.model_type:
             input_size = train_reader.num_features
@@ -866,7 +879,8 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
             self.cuda_device = -1
             print('Cuda is not available')
             logging.info('Cuda is not available')
-        optimizer = optim.Adam(self.model.parameters())  # , lr=0.1)
+
+        optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
         validation_metric = '+Accuracy' if self.predict_seq else '-loss'
 
