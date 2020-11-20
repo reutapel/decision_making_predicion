@@ -33,6 +33,7 @@ analysis_directory = os.path.join(base_directory, 'analysis', 'text_exp_2_tests'
 colors = {'verbal': 'purple', 'numeric': 'darkgreen', 'num_only': 'crimson', 'both': 'darkblue'}
 markers = {'verbal': 's', 'numeric': 'o', 'num_only': 'v', 'both': 'd'}
 graph_directory = os.path.join(base_directory, 'per_study_graphs')
+computation_paper_dir = os.path.join(base_directory, 'computation_paper_graphs')
 
 strategies_dict = {'none': 'None of the strategies', 'pct_always_exaggerate': 'Always exaggerate',
                    'pct_always_lower_exaggerate': 'Always Lower Than Average', 'pct_honest': 'Honest',
@@ -842,8 +843,13 @@ class SignificanceTests:
                                                   f'dm_pivot_table_{conditions_per_study[study][1]}.csv'))
 
     def computation_paper_graphs(self, corr_data_path=None):
+        parameters = {'axes.labelsize': 15,
+                      'axes.titlesize': 15,
+                      'xtick.labelsize': 12,
+                      'ytick.labelsize': 12}
 
         # previous round results
+        plt.rcParams.update(parameters)
         fig, ax = plt.subplots()
         decision_data = pd.DataFrame(self.all_data['verbal'][['previous_round_lottery_result', 'group_sender_payoff',
                                                               'previous_round_decision']])
@@ -859,8 +865,8 @@ class SignificanceTests:
         previous_round_analysis = previous_round_not_choose.merge(previous_round_choose, left_index=True,
                                                                   right_index=True, how='outer')
         previous_round_analysis.plot(kind="bar", stacked=False, rot=0, color=['lightgreen', 'deepskyblue'], ax=ax)
-        ax.set(xlabel='Previous Trial "true score"', ylabel='Hotel Choices Rate')
-        plt.title('Hotel Choices Rate Per Previous Trial "true score"')
+        ax.set(xlabel='Previous Trial random score', ylabel='Hotel Choices Rate')
+        # plt.title('Hotel Choice Rates Per Previous Trial random score')
         bars = ax.patches
         hatches = ''.join(h * len(previous_round_analysis) for h in ' x')
 
@@ -868,7 +874,9 @@ class SignificanceTests:
             bar.set_hatch(hatch)
 
         ax.legend(loc='lower center', shadow=True)
-        plt.savefig("computation_paper_graphs_previous_trial.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "computation_paper_graphs_previous_trial.png"),
+                    bbox_inches='tight')
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={'width_ratios': [2, 3]})
         # first graph - enterance per round per gender
@@ -900,7 +908,9 @@ class SignificanceTests:
             bar.set_hatch(hatch)
         ax2.legend(loc='upper left', shadow=True)
 
-        plt.savefig("computation_paper_graphs_enterance_rate_1.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "computation_paper_graphs_enterance_rate_1.png"),
+                    bbox_inches='tight')
 
         # third graph - chose-lose
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -939,54 +949,58 @@ class SignificanceTests:
             sns.heatmap(corr, cmap='coolwarm', annot=True, mask=mask, fmt='.2f', annot_kws={"size": 8}, ax=ax2)
             ax2.set(xlabel='Trial Number', ylabel='Trial Number')
             ax2.set_title('(b) Correlation Between Decisions in Different Trials')
-            corr.to_csv(os.path.join('rounds_correlation_analysis.csv'))
-            plt.savefig('correlation_heat_map.png')
+            plt.rcParams.update(parameters)
+            corr.to_csv(os.path.join(computation_paper_dir, 'rounds_correlation_analysis.csv'))
+            plt.savefig(os.path.join(computation_paper_dir, 'correlation_heat_map.png'))
 
         # forth graph- % decision makers enters each number
         fig, ax = plt.subplots()
-        decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict_test_data, index=list(range(2, 11)))
-        decision_data.plot(kind="bar", stacked=False, rot=0, color=['red'], ax=ax)
+        decision_data = pd.DataFrame(pct_dm_per_number_of_rounds_enter_dict, index=list(range(2, 11)))
+        decision_data.plot(kind="bar", stacked=False, rot=0, color=['deepskyblue'], ax=ax)
         # ax.set_title("% Decision-Makers Per Total Hotel Choices")
-        ax.set(xlabel='Number of Hotel Choices in Ten Trials',
-               ylabel='% Decision-Makers Chose the ’Hotel’ Option\nthis Number of Trials')
+        ax.set(xlabel='Number of Hotel Choices',
+               ylabel='% Decision-Makers Chose\nthe ’Hotel’ Option')
         ax.get_legend().remove()
         # rects = ax3.patches
         # autolabel(rects, ax3, rotation='horizontal', max_height=80, convert_to_int=True)
-
-        plt.savefig("computation_paper_graphs_enterance_rate_2_test_data.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "computation_paper_graphs_enterance_rate_2.png"),
+                    bbox_inches='tight')
 
         # enterance rate per manual features
-        # enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
-        #                                                  'experiment/decision_prediction/data_analysis/analysis/'
-        #                                                  'text_exp_2_tests/verbal_test_data/% DM entered based on review features '
-        #                                                  'for condition verbal_test_data and gender all genders for graph.csv',
-        #                                                  index_col=1)
-        # axes = list()
-        # fig = plt.figure(figsize=(12, 5))
-        # axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
-        # axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
-        # axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
-        # axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
-        # axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
-        #
-        # for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
-        #     high_level_data = \
-        #         enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
-        #     high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i],
-        #                          fontsize=8)
-        #     axes[i].set_title(high_level, fontsize=8)
-        #     axes[i].get_legend().remove()
-        #     axes[i].set_xlabel('')
+        enterance_rate_per_manual_features = pd.read_csv('/Users/reutapel/Documents/Documents/Technion/Msc/thesis/'
+                                                         'experiment/decision_prediction/data_analysis/analysis/'
+                                                         'text_exp_2_tests/verbal/% DM entered based on review '
+                                                         'features for condition verbal and gender all genders for '
+                                                         'graph.xlsx', index_col=1)
+        axes = list()
+        fig = plt.figure(figsize=(12, 5))
+        axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (0, 3), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid(shape=(2, 6), loc=(1, 0), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (1, 2), colspan=2, fig=fig))
+        axes.append(plt.subplot2grid((2, 6), (1, 4), colspan=2, fig=fig))
 
-        # ax.set_ylabel('% Decision-Makers',  fontdict={'size': 8})
-        # ax.set_xlabel("Attribute Number", fontdict={'size': 8})
-        # fig.text(0.5, 0.04, 'Attribute Number', ha='center')
-        # fig.text(0.08, 0.5, 'Fraction of Hotel Choices', va='center', rotation='vertical')
-        # fig.legend(axes,  # The line objects
-        #            labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
-        #            loc="upper center",  # Position of legend
-        #            shadow=True, prop={"size": 8})
-        # plt.savefig("enterance_rate_per_manual_features_test_data.png", bbox_inches='tight')
+        for i, high_level in enumerate(enterance_rate_per_manual_features.high_level.unique()):
+            high_level_data = \
+                enterance_rate_per_manual_features.loc[enterance_rate_per_manual_features.high_level == high_level]
+            high_level_data.plot(kind="bar", stacked=False, rot=0, color=['forestgreen', 'crimson'], ax=axes[i],
+                                 fontsize=8)
+            axes[i].set_title(high_level, fontsize=8)
+            axes[i].get_legend().remove()
+            axes[i].set_xlabel('')
+
+        ax.set_ylabel('% Decision-Makers',  fontdict={'size': 10})
+        ax.set_xlabel("Attribute Number", fontdict={'size': 10})
+        fig.text(0.5, 0.04, 'Attribute Number', ha='center')
+        fig.text(0.08, 0.5, 'Hotel Choices Rate', va='center', rotation='vertical')
+        fig.legend(axes,  # The line objects
+                   labels=["Review doesn't have attribute", "Review has attribute"],  # The labels for each line
+                   loc="upper center",  # Position of legend
+                   shadow=True, prop={"size": 8})
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "enterance_rate_per_manual_features_train_data.png"),
+                    bbox_inches='tight')
 
         # compare bert-domain features
         fig, ax = plt.subplots()
@@ -1000,8 +1014,9 @@ class SignificanceTests:
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
         ax.legend(loc='lower center', shadow=True)
-
-        plt.savefig("bert_domain_features_compare_rmse.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_rmse.png"),
+                    bbox_inches='tight')
 
         # compare bert-domain features f-beta macro
         fig, ax = plt.subplots()
@@ -1015,7 +1030,9 @@ class SignificanceTests:
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
         ax.legend(loc='lower center', shadow=True)
-        plt.savefig("bert_domain_features_compare_f_score_macro.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_f_score_macro.png"),
+                    bbox_inches='tight')
 
         # compare bert-domain features per_trial
         fig, ax = plt.subplots()
@@ -1029,7 +1046,9 @@ class SignificanceTests:
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
         ax.legend(loc='lower center', shadow=True)
-        plt.savefig("bert_domain_features_compare_per_trial_accuracy.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_per_trial_accuracy.png"),
+                    bbox_inches='tight')
 
         # per raisha comapre only RMSE
         fig, ax = plt.subplots()
@@ -1041,8 +1060,8 @@ class SignificanceTests:
         ax.set(xlabel='Raisha Size', ylabel='RMSE Score')
         plt.xticks(list(range(10)))
         ax.legend(loc='upper left', shadow=True, ncol=2)
-
-        plt.savefig("raisha_compare_RMSE.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_RMSE.png"), bbox_inches='tight')
 
         # per raisha comapre only Macro
         fig, ax = plt.subplots()
@@ -1054,8 +1073,8 @@ class SignificanceTests:
         ax.set(xlabel='Raisha Size', ylabel='Bin Macro F-score Score')
         plt.xticks(list(range(10)))
         ax.legend(loc='upper left', shadow=True, ncol=2)
-
-        plt.savefig("raisha_compare_macro_f1.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_macro_f1.png"), bbox_inches='tight')
 
         # per raisha comapre only per trial Accuracy
         fig, ax = plt.subplots()
@@ -1067,8 +1086,8 @@ class SignificanceTests:
         ax.set(xlabel='Raisha Size', ylabel='Per-Trial Accuracy')
         plt.xticks(list(range(10)))
         ax.legend(loc='lower left', shadow=True)
-
-        plt.savefig("raisha_compare_per_trial_accuracy.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_per_trial_accuracy.png"), bbox_inches='tight')
 
         # per round comapre only per trial Accuracy
         fig, ax = plt.subplots()
@@ -1080,8 +1099,8 @@ class SignificanceTests:
         ax.set(xlabel='Trial Number', ylabel='Per-Trial Accuracy')
         plt.xticks(list(range(1, 11)))
         ax.legend(loc='lower left', shadow=True)
-
-        plt.savefig("round_compare_per_trial_accuracy.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "round_compare_per_trial_accuracy.png"), bbox_inches='tight')
 
         # per raisha comapre
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -1099,7 +1118,8 @@ class SignificanceTests:
 
         fig.legend(lines, labels, loc='upper center', shadow=True, prop={"size": 10})
         plt.xticks(list(range(10)))
-        plt.savefig("raisha_compare.png", bbox_inches='tight')
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "raisha_compare.png"), bbox_inches='tight')
 
         # plt.show()
 
@@ -1721,6 +1741,7 @@ def main():
     #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
     #                                         'round_verbal_data.csv')
     tests_obj.computation_paper_graphs()
+    return
     # expert_payoff_dict = {'verbal': [0.77, 0.66, 0.77, 0.71, 0.74, 0.70, 0.75, 0.67, 0.68, 0.68],
     #                       'numeric': [0.88, 0.79, 0.76, 0.78, 0.75, 0.72, 0.78, 0.73, 0.78, 0.71],
     #                       'num_only': [0.97, 0.90, 0.70, 0.71, 0.75, 0.70, 0.87, 0.78, 0.57, 0.85],

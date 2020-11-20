@@ -853,7 +853,7 @@ class ExecuteEvalLSTM(ExecuteEvalModel):
                 num_decoder_layers=self.num_decoder_layers, num_encoder_layers=self.num_encoder_layers,
                 seq_weight_loss=self.turn_loss, reg_weight_loss=self.avg_loss, transformer_dropout=self.lstm_dropout,
                 positional_encoding=self.positional_encoding, dropout=self.linear_dropout, only_raisha=self.only_raisha,
-                linear_layers_activation=self.activation
+                linear_layers_activation=self.activation, predict_seq=self.predict_seq
             )
         elif 'Attention' in self.model_type:
             input_size = train_reader.num_features

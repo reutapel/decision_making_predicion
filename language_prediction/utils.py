@@ -257,8 +257,8 @@ def calculate_measures_for_continues_labels(all_predictions: pd.DataFrame, final
 
     # calculate bin measures
     if bin_label_column_name and bin_prediction_column_name in all_predictions.columns:
-        bin_label = all_predictions.bin_label
-        bin_predictions = all_predictions.bin_predictions
+        bin_label = all_predictions[bin_label_column_name]
+        bin_predictions = all_predictions[bin_prediction_column_name]
     elif bin_label is None and bin_predictions is None:
         print(f'No bin labels and bin predictions')
         logging.info(f'No bin labels and bin predictions')

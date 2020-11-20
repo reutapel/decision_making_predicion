@@ -19,7 +19,7 @@ base_directory = os.path.abspath(os.curdir)
 data_directory = os.path.join(base_directory, 'results')
 orig_data_analysis_directory = os.path.join(base_directory, 'analysis')
 date_directory = 'text_exp_2_tests'
-condition_directory = 'both'
+condition_directory = 'verbal'
 data_type = 'train_data'
 # what is the % of rounds the experts need to take the same strategy so we set this strategy for him
 pct_to_set_expert_status = 0.6
@@ -2281,7 +2281,7 @@ class DataAnalysis:
         os.path.join(base_directory, 'results', 'text_exp_2_tests', 'score evaluation task.xlsx'),
         manual_features = pd.read_excel(f'/Users/reutapel/Documents/Documents/Technion/Msc/thesis/experiment/'
                                         f'decision_prediction/language_prediction/data/verbal/'
-                                        f'manual_binary_features_{data_type}.xlsx')
+                                        f'manual_binary_features_{data_type}_for_paper_graph.xlsx')
         data_to_use = self.results_payments.loc[(self.results_payments['group_receiver_timeout'] == 0) &
                                                 (self.results_payments.player_id_in_group == 2) &
                                                 (self.results_payments.status == 'play')][
@@ -2393,9 +2393,9 @@ def main(main_gender='all genders', main_condition='all_condition'):
     data_analysis_obj.average_most_close_hotel_id()
     data_analysis_obj.sender_answer_analysis()
     data_analysis_obj.define_expert_strategy()
-    data_analysis_obj.print_pairs()
-    data_analysis_obj.enterance_per_number_of_enterences()
-    data_analysis_obj.calculate_linear_score()
+    # data_analysis_obj.print_pairs()
+    # data_analysis_obj.enterance_per_number_of_enterences()
+    # data_analysis_obj.calculate_linear_score()
     # data_analysis_obj.eval_real_score_analysis()
     data_analysis_obj.dm_entered_per_review_features()
     # data_analysis_obj.expert_answer_vs_average_score()

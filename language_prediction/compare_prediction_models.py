@@ -80,7 +80,7 @@ def execute_create_fit_predict_eval_model(
     return all_models_results, model_num_results
 
 
-@ray.remote
+# @ray.remote
 def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: str,
                           hyper_parameters_tune_mode: bool=False, three_losses: bool=False, leaky_relu: bool=False):
     """
@@ -136,7 +136,7 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
     all_model_nums = [78, 79, 80] + list(range(84, 87))
     # all_model_nums = [23, 24, 30, 31] + list(range(54, 63)) + list(range(69, 78)) + list(range(81, 84)) +\
     #                  list(range(163, 166)) + list(range(178, 181))
-    all_model_nums = [156, 74]
+    all_model_nums = [35]
 
     all_models_results = pd.DataFrame()
     all_models_prediction_results = pd.DataFrame()
@@ -185,6 +185,9 @@ def execute_fold_parallel(participants_fold: pd.Series, fold: int, cuda_device: 
             if hyper_parameters_dict is not None and 'features_max_size' in hyper_parameters_dict.keys():
                 if int(hyper_parameters_dict['features_max_size']) > 3000:
                     continue
+
+            if outer_is_debug:
+                hyper_parameters_dict['num_epochs'] = 2
 
             # each function need to get: model_num, fold, fold_dir, model_type, model_name, data_file_name,
             # fold_split_dict, table_writer, data_directory, hyper_parameters_dict.
@@ -402,9 +405,9 @@ def parallel_main(three_losses: bool=False, leaky_relu: bool=False):
     #                 2: 0, 3: 0,
     #                 4: 0, 5: 0}
 
-    cuda_devices = {0: 1, 1: 1,
-                    2: 1, 3: 1,
-                    4: 1, 5: 1}
+    # cuda_devices = {0: 1, 1: 1,
+    #                 2: 1, 3: 1,
+    #                 4: 1, 5: 1}
 
     ray.init()
 
@@ -448,8 +451,8 @@ def not_parallel_main(is_debug: bool=False, three_losses: bool=False, leaky_relu
     participants_fold_split.index = participants_fold_split.pair_id
 
     """For debug"""
-    if is_debug:
-        participants_fold_split = participants_fold_split.iloc[:50]
+    # if is_debug:
+    #     participants_fold_split = participants_fold_split.iloc[:50]
     for fold in range(6):
         execute_fold_parallel(participants_fold_split[f'fold_{fold}'], fold=fold, cuda_device='1',
                               hyper_parameters_tune_mode=True, three_losses=three_losses, leaky_relu=leaky_relu)
