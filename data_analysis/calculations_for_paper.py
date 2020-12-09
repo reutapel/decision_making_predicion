@@ -75,50 +75,57 @@ pre_round_dict = {
     "Previous Trial Didn't Choose And Could Earn": [64, 74, 65, 65, 67, 69, 62, 70, 56],
 }
 
-linestyle_colors_models = {
-    'SVM-P': ['solid', 'grey'],
-    'LSTM-T': ['dotted', 'darkgreen'],
-    'LSTM-P': ['dashed', 'darkblue'],
-    'LSTM-TP': ['dashdot', 'crimson'],
-    'Transformer-P': [(0, (5, 1)), 'violet'],
-    'Transformer-TP': [(0, (3, 5, 1, 5)), 'purple'],
-    'Transformer-T': [(0, (3, 10, 1, 10, 1, 10)), 'pink'],
-    'MVC': [(0, (3, 5, 1, 5)), 'black'],
-    'EWG': [(0, (1, 1)), 'lightgreen'],
-    'AVG': [(0, (3, 1, 1, 1, 1, 1)), 'orange'],
-    'MED': [(0, (3, 5, 1, 5, 1, 5)), 'deepskyblue']
+markers_colors_models = {
+    'SVM-CR': ['o', 'grey'],
+    'LSTM-TR': ['v', 'darkgreen'],
+    'LSTM-CR': ['D', 'darkblue'],
+    'LSTM-TRCR': ['s', 'crimson'],
+    'Transformer-CR': ['p', 'violet'],
+    'Transformer-TRCR': ['*', 'purple'],
+    'Transformer-TR': ['h', 'pink'],
+    'MVC': ['d', 'black'],
+    'EWG': ['X', 'lightgreen'],
+    'AVG': ['^', 'orange'],
+    'MED': ['<', 'deepskyblue']
 }
 
-models_index_rmse = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-P', 'Transformer-TP']
+models_index_rmse = ['SVM-CR', 'LSTM-TR', 'LSTM-CR', 'LSTM-TRCR', 'Transformer-TR', 'Transformer-CR', 'Transformer-TRCR']
 bert_domain_compare_rmse = {
-    'HGA': [30.62, 27.87, 24.76, 25.57, 24.79, 24.88],
-    'BERT': [26.69, 33.21, 25.40, 28.09, 25.46, 25.57],
-    'BERT + HGA': [27.14, 31.25, 25.11, 26.36, 25.53, 25.57]
+    'HCF': [29.8, 26.6, 24.7, 29.7, 33.1, 25.2, 25.2],
+    'BERT': [27.2, 34, 28.4, 33.8, 37.2, 25.5, 25.3],
+    'BERT + HCF': [27.4, 30.4, 25.6, 28.3, 37.2, 25.46, 25.4]
 }
 
-models_index_macro = ['SVM-P', 'LSTM-T', 'LSTM-P', 'LSTM-TP', 'Transformer-P', 'Transformer-TP']
+models_index_macro = ['SVM-CR', 'LSTM-TR', 'LSTM-CR', 'LSTM-TRCR', 'Transformer-TR', 'Transformer-CR', 'Transformer-TRCR']
 bert_domain_compare_f_macro = {
-    'HGA': [33.72, 45.05, 27.69, 32.76, 27.81, 32.65],
-    'BERT': [31.91, 32.54, 20.01, 28.09, 12.97, 13.11],
-    'BERT + HGA': [32.02, 37.23, 24.04, 27.52, 12.34, 13.59]
+    'HCF': [29.8, 48.3, 34.5, 31.7, 33.9, 16.7, 31.6],
+    'BERT': [20.8, 32.8, 27.7, 23.9, 16.3, 12.3, 12.1],
+    'BERT + HCF': [21.9, 39.2, 27.5, 26.2, 16.3, 12.8, 12.3]
 }
 
-models_index_accuracy = ['LSTM-T', 'LSTM-TP', 'Transformer-TP']  # 'Transformer-T',
+models_index_accuracy = ['LSTM-TR', 'LSTM-TRCR', 'Transformer-TR', 'Transformer-TRCR']
 bert_domain_compare_per_trial_accuracy = {
-    'HGA': [75.30, 76.75, 76.67],
-    'BERT': [62.35, 61.89, 26.8],
-    'BERT + HGA': [69.97, 68.40, 26.8]
+    'HCF': [76.5, 76.9, 75.3, 76.2],
+    'BERT': [61.3, 62.6, 73.2, 73.2],
+    'BERT + HCF': [70.2, 71.8, 73.2, 73.2]
+}
+
+models_index_trial_macro = ['LSTM-TR', 'LSTM-TRCR', 'Transformer-TR', 'Transformer-TRCR']
+bert_domain_compare_per_trial_macro = {
+    'HCF': [70, 70.5, 60.1, 55.5],
+    'BERT': [51.8, 51.5, 42.3, 42.3],
+    'BERT + HCF': [60, 61.2, 42.3, 42.3]
 }
 
 raisha_results_rmse = {
-    'SVM-P': [31.86, 32.11, 27.57, 25.43, 24.73, 26.01, 27.31, 29.02, 33.67, 43.5],
-    # 'CRF-T' : [],
-    'LSTM-T': [17.62, 20.19, 20.14, 19.51, 20.92, 23.13, 25.1, 30.23, 38.61, 47.26],
-    'LSTM-P': [16.83, 17.71, 17.26, 18.18, 20.57, 22.6, 24.66, 28.72, 32.96, 44.29],
-    'LSTM-TP': [16.04, 17.43, 17.68, 19.86, 27.07, 23.92, 21.44, 27.67, 31.5, 39.85],
-    # 'Transformer-T': [None, 65.52, 65.86, 66, 65.91, 67.42, 69.36, 70.56, 73.88, 78.46],
-    'Transformer-P': [None, 15.9, 16.42, 15.66, 17.75, 20.46, 22.28, 26.19, 32.31, 42.39],
-    'Transformer-TP': [None, 14.9, 15.82, 15.65, 17.78, 19.94, 22.39, 26.9, 32.73, 46.26],
+    'SVM-CR': [18.85, 27.4, 27.14, 26.34, 26.4, 27.56, 28.95, 30.82, 34.8, 42.86],
+    # 'CRF-TR' : [],
+    'LSTM-TR': [16.5, 17.3, 19.06, 19.12, 22.0, 23.89, 24.93, 29.74, 34.82, 44.89],
+    'LSTM-CR': [20.05, 17.12, 17.23, 16.03, 19.0, 21.12, 24.87, 27.77, 31.01, 40.08],
+    'LSTM-TRCR': [20.93, 26.14, 24.15, 22.53, 26.92, 29.53, 28.12, 31.28, 33.93, 40.4],
+    'Transformer-TR': [None, 25.18, 26.0, 25.9, 28.08, 29.21, 29.96, 33.16, 40.53, 50.73],
+    'Transformer-CR': [None, 14.9, 15.46, 15.65, 17.54, 20.09, 22.53, 26.57, 32.24, 45.31],
+    'Transformer-TRCR': [None, 16.07, 16.61, 16.82, 19.16, 21.09, 23.03, 26.8, 32.71, 42.65],
     # 'MVC': [29.6, 30.34, 30.69, 30.65, 32.41, 33.42, 34.2, 38.11, 42.51, 55.4],
     # 'EWG': [29.6, 30.34, 30.69, 30.65, 32.41, 33.42, 34.2, 38.11, 42.51, 55.4],
     'AVG': [14.16, 15.13, 15.58, 15.81, 17.52, 20.02, 22.58, 26.98, 32.76, 46.13],
@@ -126,29 +133,29 @@ raisha_results_rmse = {
 }
 
 raisha_results_macro = {
-    # 'CRF-T' : [],
-    'SVM-P': [16.15, 27.2, 25.65, 24.06, 34.14, 28.8, 25.09, 38.0, 45.23, 29.3],
-    'LSTM-T': [31.56, 32.42, 30.89, 41.67, 40.7, 29.48, 34.57, 35.31, 46.21, 69.63],
-    'LSTM-P': [27.15, 27.56, 30.46, 31.55, 30.44, 25.08, 24.28, 24.43, 20.97, 21.68],
-    'LSTM-TP': [25.6, 38.45, 33.81, 36.97, 25.98, 23.53, 27.24, 29.25, 19.27, 24.57],
-    # 'Transformer-T': [None, 5.21, 4.65, 5.08, 4.26, 5.22, 7.35, 7.47, 11.97, 31.01],
-    'Transformer-P': [None, 30.52, 32.69, 35.45, 28.33, 25.81, 26.2, 28.74, 21.9, 19.2],
-    'Transformer-TP': [None, 28.52, 32.76, 35.1, 28.35, 24.52, 26.7, 29.55, 23.62, 24.4],
-    # 'MVC': [42.29, 36.48, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
-    # 'EWG': [42.29, 36.48, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
-    'AVG': [42.29, 36.08, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
-    'MED': [42.29, 36.08, 38.79, 40.59, 32.67, 23.5, 27.06, 19.58, 23.5, 40.94],
+    # 'CRF-TR' : [],
+    'SVM-CR': [22.36, 27.0, 19.52, 28.37, 17.83, 19.31, 19.13, 29.63, 30.82, 18.44],
+    'LSTM-TR': [31.7, 34.5, 34.2, 41.08, 37.13, 30.45, 37.3, 35.46, 50.34, 75.73],
+    'LSTM-CR': [23.34, 26.08, 31.15, 34.29, 28.98, 25.32, 29.62, 26.65, 27.78, 26.51],
+    'LSTM-TRCR': [26.33, 24.17, 22.71, 26.32, 24.77, 22.24, 27.02, 26.95, 27.72, 30.62],
+    'Transformer-TR': [None, 31.96, 25.44, 30.95, 25.13, 22.12, 27.01, 31.47, 40.25, 59.02],
+    'Transformer-CR': [None, 24.14, 24.78, 26.13, 19.77, 17.4, 17.82, 19.09, 7.65, 8.74],
+    'Transformer-TRCR': [None, 33.41, 32.02, 31.58, 30.45, 23.82, 26.47, 28.59, 25.18, 24.62],
+    # 'MVC': [21.48, 24.32, 25.86, 20.23, 21.78, 17.63, 27.06, 14.69, 23.5, 40.94],
+    # 'EWG': [21.48, 24.32, 25.86, 20.23, 21.78, 17.63, 27.06, 14.69, 23.5, 40.94],
+    'AVG': [22.66, 17.87, 17.16, 22.66, 22.08, 12.59, 14.06, 13.67, 17.87, 0.0],
+    'MED': [21.67, 21.99, 22.96, 20.83, 21.88, 15.95, 22.73, 14.35, 21.62, 27.29],
 }
 
 raisha_results_micro = {
-    # 'CRF-T' : [],
-    'SVM-P': [24.26, 38.61, 40.1, 37.78, 50.5, 49.5, 37.62, 61.39, 51.98, 33.33],
-    'LSTM-T': [42.57, 48.02, 45.05, 51.98, 44.55, 49.34, 44.72, 48.68, 57.43, 77.56],
-    'LSTM-P': [46.28, 46.12, 46.2, 47.77, 44.47, 50.66, 39.35, 42.98, 39.02, 46.78],
-    'LSTM-TP': [45.71, 47.36, 44.72, 47.36, 30.69, 38.78, 41.42, 45.87, 34.65, 46.86],
-    # 'Transformer-T': [None, 8.91, 7.42, 8.42, 6.6, 8.25, 10.23, 9.4, 15.84, 37.29],
-    'Transformer-P': [None, 42.73, 48.51, 52.97, 37.62, 48.02, 41.25, 47.03, 43.23, 51.49],
-    'Transformer-TP': [None, 42.74, 50.83, 53.47, 37.29, 45.71, 41.08, 46.36, 42.08, 52.14],
+    # 'CRF-TR' : [],
+    'SVM-CR': [24.26, 38.61, 40.1, 37.78, 50.5, 49.5, 37.62, 61.39, 51.98, 33.33],
+    'LSTM-TR': [42.57, 48.02, 45.05, 51.98, 44.55, 49.34, 44.72, 48.68, 57.43, 77.56],
+    'LSTM-CR': [46.28, 46.12, 46.2, 47.77, 44.47, 50.66, 39.35, 42.98, 39.02, 46.78],
+    'LSTM-TRCR': [45.71, 47.36, 44.72, 47.36, 30.69, 38.78, 41.42, 45.87, 34.65, 46.86],
+    # 'Transformer-TR': [None, 8.91, 7.42, 8.42, 6.6, 8.25, 10.23, 9.4, 15.84, 37.29],
+    'Transformer-CR': [None, 42.73, 48.51, 52.97, 37.62, 48.02, 41.25, 47.03, 43.23, 51.49],
+    'Transformer-TRCR': [None, 42.74, 50.83, 53.47, 37.29, 45.71, 41.08, 46.36, 42.08, 52.14],
     'MVC': [73.27, 57.43, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
     'EWG': [73.27, 57.43, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
     'AVG': [73.27, 56.44, 63.37, 68.32, 48.51, 54.46, 68.32, 41.58, 54.46, 69.31],
@@ -156,23 +163,43 @@ raisha_results_micro = {
 }
 
 raisha_results_accuracy_per_trail = {
-    # 'CRF-T' : [],
-    'LSTM-T': [76.34, 73.73, 74.53, 75.93, 75.99, 75.74, 76.03, 75.58, 71.86, 77.56],
-    'LSTM-TP': [77.66, 75.12, 75.86, 77.35, 77.31, 77.43, 78.01, 77.51, 73.35, 78.05],
-    # 'Transformer-T': [None, 34.72, 35.05, 35.27, 35.67, 34.98, 33.99, 34.82, 34.24, 37.29],
-    'Transformer-TP': [None, 76.9, 76.71, 77.7, 76.87, 76.27, 76.82, 76.96, 73.27, 73.1],
+    # 'CRF-TR' : [],
+    'LSTM-TR': [76.47, 75.84, 76.01, 76.76, 76.07, 76.34, 77.23, 77.34, 77.31, 79.7],
+    'LSTM-TRCR': [77.49, 77.16, 76.94, 76.94, 76.15, 76.3, 76.65, 76.02, 76.48, 77.72],
+    'Transformer-TR': [None, 75.34, 75.14, 75.25, 74.48, 74.98, 76.16, 77.06, 75.0, 74.1],
+    'Transformer-TRCR': [None, 76.28, 76.88, 77.02, 75.88, 75.21, 75.74, 76.57, 74.01, 74.92],
     'MVC': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
     'EWG': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
 }
 
 round_results_accuracy_per_trail = {
-    # 'CRF-T' : [],
-    'LSTM-T': [80.04, 74.36, 71.37, 68.6, 78.13, 76.7, 72.08, 78.43, 77.87, 74.32],
-    'LSTM-TP': [81.85, 76.96, 72.94, 68.38, 80.86, 77.06, 72.99, 80.32, 79.76, 74.64],
-    # 'Transformer-T': [None, 34.72, 35.05, 35.27, 35.67, 34.98, 33.99, 34.82, 34.24, 37.29],
-    'Transformer-TP': [None, 75.95, 75.91, 70.46, 81.52, 78.14, 74.39, 75.39, 81.24, 74.96],
-    'MVC': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
-    'EWG': [73.76, 73.49, 73.39, 73.55, 72.61, 73.07, 74.01, 72.94, 72.77, 69.31],
+    # 'CRF-TR' : [],
+    'LSTM-TR': [80.2, 77.84, 73.27, 69.31, 78.3, 75.28, 73.07, 77.39, 79.95, 75.95],
+    'LSTM-TRCR': [78.22, 77.92, 72.69, 71.4, 81.1, 76.54, 71.81, 79.28, 79.39, 75.8],
+    'Transformer-TR': [None, 73.47, 77.56, 72.36, 80.2, 73.39, 70.79, 75.33, 80.36, 75.19],
+    'Transformer-TRCR': [None, 74.65, 76.08, 72.03, 80.64, 77.6, 72.84, 74.81, 81.99, 74.55],
+    'MVC': [76.24, 69.31, 74.26, 72.28, 79.21, 70.3, 69.31, 77.23, 73.27, 76.24],
+    'EWG': [76.24, 69.31, 74.26, 72.28, 79.21, 70.3, 69.31, 77.23, 73.27, 76.24],
+}
+
+raisha_results_macro_per_trail = {
+    # 'CRF-TR' : [],
+    'LSTM-TR': [69.74, 69.19, 69.48, 70.1, 69.79, 69.9, 70.79, 70.95, 70.88, 75.73],
+    'LSTM-TRCR': [70.73, 70.62, 70.4, 70.29, 69.83, 70.02, 70.48, 69.86, 70.66, 74.3],
+    'Transformer-TR': [None, 59.16, 59.05, 59.41, 59.78, 60.65, 61.91, 62.98, 58.49, 59.02],
+    'Transformer-TRCR': [None, 64.76, 65.81, 66.28, 65.52, 64.78, 65.28, 66.46, 63.56, 68.46],
+    'MVC': [42.45, 42.36, 42.32, 42.38, 42.06, 42.22, 42.53, 42.18, 42.12, 40.94],
+    'EWG': [42.45, 42.36, 42.32, 42.38, 42.06, 42.22, 42.53, 42.18, 42.12, 40.94],
+}
+
+round_results_macro_per_trail = {
+    # 'CRF-TR' : [],
+    'LSTM-TR': [71.17, 73.88, 65.67, 63.37, 68.66, 70.38, 66.68, 71.01, 73.28, 66.07],
+    'LSTM-TRCR': [70.01, 74.16, 65.73, 65.01, 71.39, 71.87, 64.98, 73.43, 72.62, 66.12],
+    'Transformer-TR': [None, 61.21, 61.67, 53.32, 59.96, 58.79, 55.24, 58.14, 68.14, 56.67],
+    'Transformer-TRCR': [None, 67.2, 63.26, 57.26, 65.45, 69.08, 62.03, 62.68, 73.59, 59.51],
+    'MVC': [43.26, 40.94, 42.62, 41.95, 44.2, 41.28, 40.94, 43.58, 42.28, 43.26],
+    'EWG': [43.26, 40.94, 42.62, 41.95, 44.2, 41.28, 40.94, 43.58, 42.28, 43.26],
 }
 
 
@@ -664,7 +691,7 @@ def both_studies_graphs(role_dict: dict, ylabel: str, title: str, expert_payoff:
                                          color=colors[conditions_per_study[study][1]],
                                          label=condition_names_per_study[study][1],
                                          marker=markers[conditions_per_study[study][1]])
-                    axes[study - 1].legend(loc='lower left', shadow=True, fontsize=8)
+                    axes[study - 1].legend(loc='lower left', shadow=True, fontsize=10)
                     axes[study - 1].set_title(f'Experiment {study}', fontsize=15, )
                     axes[study - 1].set_xticks(x_ticks)
                     y_ticks = np.arange(data_dict['min']-0.1, data_dict['max']+0.15, 0.1)
@@ -972,7 +999,7 @@ class SignificanceTests:
                                                          'experiment/decision_prediction/data_analysis/analysis/'
                                                          'text_exp_2_tests/verbal/% DM entered based on review '
                                                          'features for condition verbal and gender all genders for '
-                                                         'graph.xlsx', index_col=1)
+                                                         'graph.csv', index_col=1)
         axes = list()
         fig = plt.figure(figsize=(12, 5))
         axes.append(plt.subplot2grid((2, 6), (0, 1), colspan=2, fig=fig))
@@ -1013,7 +1040,7 @@ class SignificanceTests:
 
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
-        ax.legend(loc='lower center', shadow=True)
+        ax.legend(loc='lower center', shadow=True, fontsize=16)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_rmse.png"),
                     bbox_inches='tight')
@@ -1029,12 +1056,12 @@ class SignificanceTests:
 
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
-        ax.legend(loc='lower center', shadow=True)
+        ax.legend(loc='lower left', shadow=True, fontsize=16)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_f_score_macro.png"),
                     bbox_inches='tight')
 
-        # compare bert-domain features per_trial
+        # compare bert-domain features per_trial accuracy
         fig, ax = plt.subplots()
         results_data = pd.DataFrame(bert_domain_compare_per_trial_accuracy, index=models_index_accuracy)
         results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson', 'purple'], ax=ax, alpha=0.75)
@@ -1045,21 +1072,37 @@ class SignificanceTests:
 
         for bar, hatch in zip(bars, hatches):
             bar.set_hatch(hatch)
-        ax.legend(loc='lower center', shadow=True)
+        ax.legend(loc='lower center', shadow=True, fontsize=16)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_per_trial_accuracy.png"),
+                    bbox_inches='tight')
+
+        # compare bert-domain features per_trial macro f-score
+        fig, ax = plt.subplots()
+        results_data = pd.DataFrame(bert_domain_compare_per_trial_macro, index=models_index_trial_macro)
+        results_data.plot(kind="bar", stacked=False, color=['forestgreen', 'crimson', 'purple'], ax=ax, alpha=0.75)
+        plt.xticks(rotation=45)
+        ax.set(ylabel='Per-Trial Macro Average F-score')
+        bars = ax.patches
+        hatches = ''.join(h * len(models_index_trial_macro) for h in ' +o')
+
+        for bar, hatch in zip(bars, hatches):
+            bar.set_hatch(hatch)
+        ax.legend(loc='lower center', shadow=True, fontsize=16)
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "bert_domain_features_compare_per_trial_macro_f_score.png"),
                     bbox_inches='tight')
 
         # per raisha comapre only RMSE
         fig, ax = plt.subplots()
         data = pd.DataFrame(raisha_results_rmse, index=list(range(10)))
         for i, column in enumerate(data.columns):
-            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
-                    color=linestyle_colors_models[column][1])
-        # ax.set_title(f"{measure} As a Function of the Raisha Size")
-        ax.set(xlabel='Raisha Size', ylabel='RMSE Score')
+            ax.plot(list(range(10)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
+        ax.set(xlabel='Prefix Size', ylabel='RMSE Score')
         plt.xticks(list(range(10)))
-        ax.legend(loc='upper left', shadow=True, ncol=2)
+        ax.legend(loc='upper left', shadow=True, ncol=2, fontsize=12)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_RMSE.png"), bbox_inches='tight')
 
@@ -1067,12 +1110,12 @@ class SignificanceTests:
         fig, ax = plt.subplots()
         data = pd.DataFrame(raisha_results_macro, index=list(range(10)))
         for i, column in enumerate(data.columns):
-            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
-                    color=linestyle_colors_models[column][1])
-        # ax.set_title(f"{measure} As a Function of the Raisha Size")
-        ax.set(xlabel='Raisha Size', ylabel='Bin Macro F-score Score')
+            ax.plot(list(range(10)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
+        ax.set(xlabel='Prefix Size', ylabel='Bin Macro Average F-score Score')
         plt.xticks(list(range(10)))
-        ax.legend(loc='upper left', shadow=True, ncol=2)
+        ax.legend(loc='upper left', shadow=True, ncol=2, fontsize=12)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_macro_f1.png"), bbox_inches='tight')
 
@@ -1080,12 +1123,12 @@ class SignificanceTests:
         fig, ax = plt.subplots()
         data = pd.DataFrame(raisha_results_accuracy_per_trail, index=list(range(10)))
         for i, column in enumerate(data.columns):
-            ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
-                    color=linestyle_colors_models[column][1])
-        # ax.set_title(f"{measure} As a Function of the Raisha Size")
-        ax.set(xlabel='Raisha Size', ylabel='Per-Trial Accuracy')
+            ax.plot(list(range(10)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
+        ax.set(xlabel='Prefix Size', ylabel='Per-Trial Accuracy')
         plt.xticks(list(range(10)))
-        ax.legend(loc='lower left', shadow=True)
+        ax.legend(loc='lower left', shadow=True, ncol=2, fontsize=12)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_per_trial_accuracy.png"), bbox_inches='tight')
 
@@ -1093,14 +1136,42 @@ class SignificanceTests:
         fig, ax = plt.subplots()
         data = pd.DataFrame(round_results_accuracy_per_trail, index=list(range(1, 11)))
         for i, column in enumerate(data.columns):
-            ax.plot(list(range(1, 11)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
-                    color=linestyle_colors_models[column][1])
-        # ax.set_title(f"{measure} As a Function of the Raisha Size")
+            ax.plot(list(range(1, 11)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
         ax.set(xlabel='Trial Number', ylabel='Per-Trial Accuracy')
         plt.xticks(list(range(1, 11)))
-        ax.legend(loc='lower left', shadow=True)
+        ax.legend(loc='upper left', shadow=True, ncol=3, fontsize=12)
         plt.rcParams.update(parameters)
         plt.savefig(os.path.join(computation_paper_dir, "round_compare_per_trial_accuracy.png"), bbox_inches='tight')
+
+        # per raisha comapre only per trial macro
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(raisha_results_macro_per_trail, index=list(range(10)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(10)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
+        ax.set(xlabel='Prefix Size', ylabel='Per-Trial Macro Average F-Score')
+        plt.xticks(list(range(10)))
+        # ax.legend(loc='lower left', shadow=True)
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "raisha_compare_per_trial_macro_f_score.png"),
+                    bbox_inches='tight')
+
+        # per round comapre only per trial macro
+        fig, ax = plt.subplots()
+        data = pd.DataFrame(round_results_macro_per_trail, index=list(range(1, 11)))
+        for i, column in enumerate(data.columns):
+            ax.plot(list(range(1, 11)), data[column], marker=markers_colors_models[column][0], label=column,
+                    color=markers_colors_models[column][1])
+        # ax.set_title(f"{measure} As a Function of the Prefix Size")
+        ax.set(xlabel='Trial Number', ylabel='Per-Trial Macro Average F-Score')
+        plt.xticks(list(range(1, 11)))
+        # ax.legend(loc='lower left', shadow=True)
+        plt.rcParams.update(parameters)
+        plt.savefig(os.path.join(computation_paper_dir, "round_compare_per_trial_macro_f_score.png"),
+                    bbox_inches='tight')
 
         # per raisha comapre
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -1109,10 +1180,10 @@ class SignificanceTests:
                                           [raisha_results_macro, 'Bin F-score Macro', ax3]]:
             data = pd.DataFrame(results_dict, index=list(range(10)))
             for i, column in enumerate(data.columns):
-                ax.plot(list(range(10)), data[column], linestyle=linestyle_colors_models[column][0], label=column,
-                        color=linestyle_colors_models[column][1])
-            # ax.set_title(f"{measure} As a Function of the Raisha Size")
-            ax.set(xlabel='Raisha Size', ylabel=measure)
+                ax.plot(list(range(10)), data[column], marker=markers_colors_models[column][0], label=column,
+                        color=markers_colors_models[column][1])
+            # ax.set_title(f"{measure} As a Function of the Prefix Size")
+            ax.set(xlabel='Prefix Size', ylabel=measure)
 
         lines, labels = fig.axes[-1].get_legend_handles_labels()
 
@@ -1741,7 +1812,6 @@ def main():
     #                                         'all_history_features_all_history_text_manual_binary_features_predict_first_'
     #                                         'round_verbal_data.csv')
     tests_obj.computation_paper_graphs()
-    return
     # expert_payoff_dict = {'verbal': [0.77, 0.66, 0.77, 0.71, 0.74, 0.70, 0.75, 0.67, 0.68, 0.68],
     #                       'numeric': [0.88, 0.79, 0.76, 0.78, 0.75, 0.72, 0.78, 0.73, 0.78, 0.71],
     #                       'num_only': [0.97, 0.90, 0.70, 0.71, 0.75, 0.70, 0.87, 0.78, 0.57, 0.85],
@@ -1770,6 +1840,8 @@ def main():
     both_studies_graphs(role_dict=tests_obj.expert_payoff_dict_persuasion,
                         ylabel="Fraction of Hotel choices given a persuasion intent",
                         title=f'Average acceptance rate a persuasion intent as a function of trial', expert_payoff=True)
+
+    return
 
     for study in [1, 2]:
         print(f'Significant tests for study {study}')

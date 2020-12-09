@@ -187,7 +187,7 @@ class SVMTurn:
                 return
         elif 'stratified' in str.lower(self.model_name) or 'most_frequent' in str.lower(self.model_name):
             data = validation_x[validation_x.columns[1]].copy(deep=True)
-            if 'stratified' in str.lower(self.model_name):
+            if False and 'stratified' in str.lower(self.model_name):
                 num_runs = 5000
                 predictions = self.model.predict(data)
                 for i in range(num_runs):

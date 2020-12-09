@@ -227,6 +227,7 @@ class ExecuteEvalModel:
                     bin_label=raisha_four_bin_label, bin_predictions=raisha_four_bin_predictions,
                     label_options=['total future payoff < 1/4', '1/4 < total future payoff < 1/2',
                                    '1/2 < total future payoff < 3/4', 'total future payoff > 3/4'],
+                    bin_label_column_name='four_bin_label', bin_prediction_column_name='four_bin_predictions',
                     raisha=f'raisha_{str(int(raisha))}', already_calculated=True, prediction_type=prediction_type)
                 all_raisha_dict.update(results_dict_raisha)
                 all_raisha_dict = utils.update_default_dict(all_raisha_dict, four_results_dict_raisha)
